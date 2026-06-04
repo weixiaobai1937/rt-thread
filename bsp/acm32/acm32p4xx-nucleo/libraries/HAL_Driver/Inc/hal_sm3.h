@@ -1,0 +1,134 @@
+/**************************************************************************
+Filename	: sm3.h
+Language	: head file
+Description	: define some function and variable in sm3.c;
+Author(s)	: lhm 
+Company		: AisinoChip Ltd.
+version 	: 1.0
+Change Log	: 2010-12-29 10:08, first edition
+***************************************************************************/
+
+#ifndef _SM3_H_
+#define _SM3_H_
+
+#include <arm_cde.h>
+
+/**********************************************************
+*	definitions
+**********************************************************/
+
+#define SM3_T1  0x79CC4519										// Rounds  0-15 
+#define SM3_T2  0x7A879D8A										// Rounds  16-63 
+
+#define SM3_FF1(x,y,z)      x^y^z								// Rounds  0-15  x,y,z is word length;      
+
+//#define SM3_FF2(x,y,z)      (x&y)|(x&z)|(y&z)						// Rounds  16-63  x,y,z is word length;
+#define SM3_FF2(x,y,z)      __HAL_CDE_SM3_FF2(x, y, z)
+
+#define SM3_GG1(x,y,z)      x^y^z									// Rounds  0-15 x,y,z is word length;
+
+//#define SM3_GG2(x,y,z)      (x&y)|(~x&z)					// Rounds  16-63 x,y,z is word length;
+#define SM3_GG2(x,y,z)      __HAL_CDE_SM3_GG2(x, y, z)
+
+//#define ROTATE_LEFT(n,x)    ( ( ( x ) << n ) | ( ( x ) >> ( 32 - n ) ) )
+
+//#define SM3_P0(x)           x^ ROTATE_LEFT(9,x) ^  ROTATE_LEFT(17,x)   
+#define SM3_P0(x)           __HAL_CDE_SM3_P0(x)
+//#define SM3_P1(x)           x^ ROTATE_LEFT(15,x) ^  ROTATE_LEFT(23,x)                        
+#define SM3_P1(x)           __HAL_CDE_SM3_P1(x)          
+
+#define SM3_EXPAND(data,i)  SM3_P1(data[i-16] ^data[i-9] ^ ROTATE_LEFT(15,data[i-3])) ^ ROTATE_LEFT(7,data[i-13]) ^ data[i-6]
+//#define SM3_EXPAND(data,i)  __HAL_CDE_SM3_P1(data[i-16] ^data[i-9] ^ ROTATE_LEFT(15,data[i-3])) ^ ROTATE_LEFT(7,data[i-13]) ^ data[i-6]
+
+//#define SM3_SWAP32(a)       ((a<<24)|((a&0x0000ff00)<<8)|((a&0x00ff0000)>>8)|(a>>24))
+#define SM3_SWAP32(a)        __REV(a);
+/**********************************************************
+*	include files
+**********************************************************/
+
+/**********************************************************
+*	structure
+**********************************************************/
+//SM3 context
+typedef struct {
+  uint32_t state[8];           //state (ABCDEFGH)
+  uint32_t count[2];           // number of bits, modulo 2^64 (msb first) 
+  uint8_t  buffer[64];         // input buffer
+} SM3_CTX;
+/**********************************************************
+*	extern variable
+***********************************************************/
+
+/**********************************************************
+*	extern functions
+***********************************************************/
+
+
+/**************************************************************************
+* Function Name  : sm3_memcpy
+* Description    : copy a array data to other array
+* Input          : - *pSrc : input array data;
+				 : - cnt   : the word length of input data;
+* Output         : - *pDst : input array data;
+* Return         : None
+**************************************************************************/
+void sm3_memcpy(uint32_t *pDst,const uint32_t *pSrc, uint32_t cnt);
+/**************************************************************************
+* Function Name  : SM3_transform
+* Description    : transform a block of message to digest in sm3 algorithm
+* Input          : - *pBlock  : input a block data to be tranformed;
+* Output		 : - *pDigest : output the tranformed data;
+* Return         : None
+**************************************************************************/
+void SM3_transform (uint32_t *pBlock,uint32_t *pDigest);
+
+/* Encodes input (uint32_t) into output (unsigned char). Assumes len is
+  a multiple of 4.
+ */
+void SM3_encode (uint8_t *output, uint32_t *input, uint32_t len);
+/* Decodes input (unsigned char) into output (uint32_t). Assumes len is
+  a multiple of 4.
+ */
+void SM3_Decode (uint32_t *output, uint8_t *input, uint32_t len);
+
+/**************************************************************************
+* Function Name  : SM3_initial
+* Description    : SM3 initialization. Begins an SM3 operation, writing a new context.
+* Input          : None
+* Output         : - *context : the point of SM3 context
+* Return         : None
+**************************************************************************/
+void SM3_initial (SM3_CTX *context);
+/**************************************************************************
+* Function Name  : SM3_update
+* Description    : SM3 block update operation. Continues an SM3 message-digest
+*				 : operation, processing another message block, and updating the
+*				 : context.
+* Input          : - *context : context before transform
+*				 : - *input   : input message
+*                : - inputlen : the byte length of input message
+* Output		 : - *context : context after transform
+* Return         : None
+**************************************************************************/
+void SM3_update (SM3_CTX *context, uint8_t *input,uint32_t inputLen);
+/**************************************************************************
+* Function Name  : SHA256_final
+* Description    : SHA256 finalization. Ends an SHA256 message-digest operation, writing the
+*                : the message digest and zeroizing the context.
+* Input          : - *context : context before transform
+* Output		 : - *digest  : message digest
+* Return         : None
+**************************************************************************/
+void SM3_final (uint8_t *digest, SM3_CTX *context);
+/**************************************************************************
+* Function Name  : sm3_hash
+* Description    : transform message to digest in SM3 algorithm
+* Input          : - *pDataIn : input message to be tranformed;
+				 : - DataLen  : the byte length of message;
+* Output		 : - *pDigest : output the digest;
+* Return         : None
+**************************************************************************/
+void sm3_hash(uint8_t *pDataIn,uint32_t DataLen,uint8_t *pDigest);
+
+
+#endif
