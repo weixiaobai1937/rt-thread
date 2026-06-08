@@ -64,7 +64,7 @@
 /* Device Drivers */
 
 #define RT_USING_DEVICE_IPC
-#define RT_USING_SERIAL_V1
+#define RT_USING_SERIAL_V2
 #define RT_USING_SERIAL
 #define RT_SERIAL_USING_DMA
 #define RT_USING_PIN

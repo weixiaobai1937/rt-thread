@@ -17,45 +17,50 @@
 
 /*-------------------------- UART CONFIG BEGIN --------------------------*/
 
-/** After configuring corresponding UART or UART DMA, you can use it.
-  *
-  * STEP 1, define macro define related to the serial port opening based on the serial port number
-  *                 such as     #define BSP_USING_UART1
-  *
-  * STEP 2, according to the corresponding pin of serial port, modify the related serial port information
-  *                 such as     #define UART1_TX_PORT            GPIOA
-  *                             #define UART1_RX_PORT            GPIOA
-  *                             #define UART1_TX_PIN        GPIO_PIN_9
-  *                             #define UART1_RX_PIN        GPIO_PIN_10
-  *
-  * STEP 3, if you want using SERIAL DMA, you must open it in the RT-Thread Settings.
-  *                 RT-Thread Setting -> Components -> Device Drivers -> Serial Device Drivers -> Enable Serial DMA Mode
-  *
-  * STEP 4, according to serial port number to define serial port tx/rx DMA function in the board.h file
-  *                 such as     #define BSP_UART1_RX_USING_DMA
-  *
-  */
+/* ACM32P4xx Nucleo Board default UART pin mappings */
 
-/* ACM32P4xx Nucleo Board: UART1 TX=PA9, RX=PA10 */
 #if defined(BSP_USING_UART1)
     #define UART1_TX_PORT           GPIOA
     #define UART1_RX_PORT           GPIOA
     #define UART1_TX_PIN            GPIO_PIN_9
     #define UART1_RX_PIN            GPIO_PIN_10
+#endif
 
-    #if defined(BSP_UART1_RX_USING_DMA)
-        #define UART1_RX_DMA_INSTANCE   DMA1_Channel0
-        #define UART1_RX_DMA_IRQ        DMA1_CH0_IRQn
-        #define UART1_RX_DMA_REQUEST    DMA_REQUEST_USART1_RX
-    #endif /* BSP_UART1_RX_USING_DMA */
+/* UART2-4 + LPUART1-2 MspInit reference macros */
+#if defined(BSP_USING_UART2)
+    #define BSP_UART2_PORT          GPIOD
+    #define BSP_UART2_PIN_TX        GPIO_PIN_5
+    #define BSP_UART2_PIN_RX        GPIO_PIN_6
+    #define BSP_UART2_AF            GPIO_FUNCTION_1
+#endif
 
-    #if defined(BSP_UART1_TX_USING_DMA)
-        #define UART1_TX_DMA_INSTANCE   DMA1_Channel1
-        #define UART1_TX_DMA_IRQ        DMA1_CH1_IRQn
-        #define UART1_TX_DMA_REQUEST    DMA_REQUEST_USART1_TX
-    #endif /* BSP_UART1_TX_USING_DMA */
+#if defined(BSP_USING_UART3)
+    #define BSP_UART3_PORT          GPIOB
+    #define BSP_UART3_PIN_TX        GPIO_PIN_10
+    #define BSP_UART3_PIN_RX        GPIO_PIN_11
+    #define BSP_UART3_AF            GPIO_FUNCTION_1
+#endif
 
-#endif /* BSP_USING_UART1 */
+#if defined(BSP_USING_UART4)
+    #define BSP_UART4_PORT          GPIOC
+    #define BSP_UART4_PIN_TX        GPIO_PIN_10
+    #define BSP_UART4_PIN_RX        GPIO_PIN_11
+    #define BSP_UART4_AF            GPIO_FUNCTION_1
+#endif
+
+#if defined(BSP_USING_LPUART1)
+    #define BSP_LPUART1_PORT        GPIOA
+    #define BSP_LPUART1_PIN_TX      GPIO_PIN_2
+    #define BSP_LPUART1_PIN_RX      GPIO_PIN_3
+    #define BSP_LPUART1_AF          GPIO_FUNCTION_3
+#endif
+
+#if defined(BSP_USING_LPUART2)
+    #define BSP_LPUART2_PORT        GPIOB
+    #define BSP_LPUART2_PIN_TX      GPIO_PIN_10
+    #define BSP_LPUART2_PIN_RX      GPIO_PIN_11
+    #define BSP_LPUART2_AF          GPIO_FUNCTION_3
+#endif
 
 /*-------------------------- UART CONFIG END --------------------------*/
 

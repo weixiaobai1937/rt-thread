@@ -81,6 +81,7 @@
 #define HAL_IWDT_MODULE_ENABLED
 #define HAL_PMU_MODULE_ENABLED
 #define HAL_UART_MODULE_ENABLED
+#define HAL_LPUART_MODULE_ENABLED
 //#define HAL_SPI_MODULE_ENABLED
 //#define HAL_TIMER_MODULE_ENABLED
 //#define HAL_LPTIM_MODULE_ENABLED    
@@ -152,6 +153,10 @@
     #include "hal_usart.h"
     #include "hal_uart.h"
     #include "hal_uart_ex.h"
+#endif
+
+#ifdef HAL_LPUART_MODULE_ENABLED
+    #include "hal_lpuart.h"
 #endif
 
 #ifdef HAL_SPI_MODULE_ENABLED
