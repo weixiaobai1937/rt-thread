@@ -1,0 +1,42 @@
+menu "Hardware Drivers Config"
+
+choice
+    prompt "select chip type"
+    default SOC_ACM32P40N128CCT
+
+    config SOC_ACM32P40N128CCT
+    bool "SOC_ACM32P40N128CCT"
+    select RT_USING_COMPONENTS_INIT
+    select RT_USING_USER_MAIN
+    help
+        ACM32P40N128CCT, Star-MC1 core, 128KB SRAM, 1MB Flash
+endchoice
+
+menu "ACM32P4xx Chip Configuration"
+    depends on SOC_ACM32P40N128CCT
+    config SOC_SRAM_START_ADDR
+        hex "sram start address"
+        default 0x20000000
+    config SOC_SRAM_SIZE
+        hex "sram size(KBytes)"
+        default 0x80
+    config SOC_FLASH_START_ADDR
+        hex "Flash Start Address"
+        default 0x08002000
+    config SOC_FLASH_SIZE
+        hex "Flash Size(KBytes)"
+        default 0xFE0
+endmenu
+
+menu "On-chip Peripheral Drivers"
+    config BSP_USING_UART1
+        bool "Enable UART1 (PA9/PA10)"
+        select RT_USING_SERIAL_V2
+        default y
+    config BSP_USING_GPIO1
+        bool "Enable GPIO (PA-PB)"
+        select RT_USING_PIN
+        default y
+endmenu
+
+endmenu
