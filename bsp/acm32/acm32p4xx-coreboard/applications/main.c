@@ -1,5 +1,7 @@
 #include <rthw.h>
 #include <rtthread.h>
+#include <rtdevice.h>
+#include <drivers/dev_pin.h>
 #include "board.h"
 
 #define LED_PIN  PA0

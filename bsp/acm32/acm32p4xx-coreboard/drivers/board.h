@@ -14,8 +14,10 @@
 /* Coreboard LED: PA0 */
 #define LED_PIN                  PA0
 
-/* SOC memory config */
+/* SOC memory config (overrides rtconfig.h defaults) */
+#undef  SOC_SRAM_START_ADDR
 #define SOC_SRAM_START_ADDR      (0x20000000)
+#undef  SOC_SRAM_SIZE
 #define SOC_SRAM_SIZE            (128)   /* KB */
 
 void rt_hw_board_init(void);

@@ -1,6 +1,7 @@
 #include <rthw.h>
 #include <rtthread.h>
 #include <rtdevice.h>
+#include <drivers/serial_v2.h>
 #include "board.h"
 #include "uart_config.h"
 
@@ -52,7 +53,7 @@ static int _uart_putc(struct rt_serial_device *serial, char c)
 static int _uart_getc(struct rt_serial_device *serial)
 {
     struct acm32_uart *uart = raw_to_uart(serial);
-    if (uart_is_readable(uart->config->uart_num))
+    if (!uart_is_rx_fifo_empty(uart->config->uart_num))
         return (int)uart_getc(uart->config->uart_num);
     return -1;
 }
@@ -78,7 +79,7 @@ static const struct rt_uart_ops acm32_uart_ops =
 static void uart_isr(struct rt_serial_device *serial)
 {
     struct acm32_uart *uart = raw_to_uart(serial);
-    if (uart_is_readable(uart->config->uart_num))
+    if (!uart_is_rx_fifo_empty(uart->config->uart_num))
         rt_hw_serial_isr(serial, RT_SERIAL_EVENT_RX_IND);
 }
 
@@ -116,7 +117,7 @@ rt_err_t rt_hw_uart_init(void)
 }
 
 #ifdef BSP_USING_UART1
-void USART1_IRQHandler(void)
+void UART1_IRQHandler(void)
 {
     rt_interrupt_enter();
     uart_irq_handler(UART_1);

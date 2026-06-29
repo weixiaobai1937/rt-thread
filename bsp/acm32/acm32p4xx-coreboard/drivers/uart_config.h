@@ -17,7 +17,7 @@ struct acm32_uart_config
 
 #ifdef BSP_USING_UART1
 #define UART1_CONFIG \
-    { .name = "uart1", .uart_num = UART_1, .irq_type = USART1_IRQn, \
+    { .name = "uart1", .uart_num = UART_1, .irq_type = UART1_IRQn, \
       .tx_pin = PA9, .rx_pin = PA10, .af = GPIO_AF_1 }
 #endif
 
