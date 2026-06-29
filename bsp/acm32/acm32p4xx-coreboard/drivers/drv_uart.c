@@ -184,10 +184,10 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial, struct serial_c
     };
     uart_init_custom(c->uart_num, &uart_init_cfg);
 
-    /* 配置 FIFO：TX 变空时触发中断，RX 4 字节阈值（平衡中断频率与延迟） */
+    /* 配置 FIFO：TX 变空时触发中断，RX 1 字节阈值（Finsh 交互需要即时响应） */
     uart_fifo_config_t fifo_cfg = {
         .enable = true,
-        .rx_threshold = UART_RX_FIFO_THRESHOLD_4_BYTES,
+        .rx_threshold = UART_RX_FIFO_THRESHOLD_1_BYTE,
         .tx_threshold = UART_TX_FIFO_THRESHOLD_EMPTY
     };
     uart_config_fifo(c->uart_num, &fifo_cfg);
