@@ -120,6 +120,14 @@ typedef enum {
     SDMMC_CARD_SPEED_HS200     = 7,  ///< HS200
 } sdmmc_card_speed_t;
 
+/** @brief MMC CMD6 SWITCH 访问模式（对应 CMD6 ARG bit[25:24]） */
+typedef enum {
+    SDMMC_MMC_ACCESS_CMD_SET      = 0,  ///< 命令集切换
+    SDMMC_MMC_ACCESS_SET_BITS     = 1,  ///< 置位（Set Bits）
+    SDMMC_MMC_ACCESS_CLEAR_BITS   = 2,  ///< 清零（Clear Bits）
+    SDMMC_MMC_ACCESS_WRITE_BYTE   = 3,  ///< 写字节（Write Byte）
+} sdmmc_mmc_access_mode_t;
+
 //===========================================
 // 回调函数类型
 //===========================================

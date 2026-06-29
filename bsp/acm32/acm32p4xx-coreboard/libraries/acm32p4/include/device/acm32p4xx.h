@@ -2207,32 +2207,32 @@ typedef struct {
  */
 typedef struct {
     union {
-        __IOM uint32_t TXDR                ; /*!< Offset: 0x00 (read-write) Transmit data register - I2C data to transmit */
+        __IOM uint32_t TXDR                ; /*!< Offset: 0x00 (read-write) Transmit data register - I2S data to transmit */
         struct {
             __IOM uint32_t TXDR                : 32; /*!< [31..0] Transmit data register - I2C data to transmit */
         } TXDR_f;
     };
     union {
-        __IOM uint32_t RXDR                ; /*!< Offset: 0x04 (read-write) Receive data register - I2C received data */
+        __IOM uint32_t RXDR                ; /*!< Offset: 0x04 (read-write) Receive data register - I2S received data */
         struct {
             __IOM uint32_t RXDR                : 32; /*!< [31..0] Receive data register - I2C received data */
         } RXDR_f;
     };
     union {
-        __IOM uint32_t CR                  ; /*!< Offset: 0x08 (read-write) Control register - CRC calculation control */
+        __IOM uint32_t CR                  ; /*!< Offset: 0x08 (read-write) Control register - I2S configuration and control */
         struct {
             __IOM uint32_t CHLEN               : 1; /*!< [0..0] Channel length - I2S audio channel length (16/32-bit) */
             __IOM uint32_t DLEN                : 2; /*!< [2..1] Data length - Data transfer length in bytes */
             __IOM uint32_t CKPL                : 1; /*!< [3..3] Clock polarity - Clock signal polarity */
-            __IOM uint32_t STD                 : 2; /*!< [5..4] STD - STD value */
-            __IM  uint32_t          : 1;
+            __IOM uint32_t STD                 : 2; /*!< [5..4] I2S standard selection - 00=I2S Philips, 01=MSB aligned, 10=LSB aligned, 11=PCM */
+            __IOM uint32_t RSV                 : 1; /*!< [6..6] Reserved */
             __IOM uint32_t PCMMODE             : 1; /*!< [7..7] PCM mode - PCM audio mode selection */
             __IOM uint32_t MODE                : 1; /*!< [8..8] Mode - Operating mode select */
             __IOM uint32_t TEN                 : 1; /*!< [9..9] TEN - TEN value */
             __IOM uint32_t REN                 : 1; /*!< [10..10] REN - REN value */
             __IOM uint32_t EN                  : 1; /*!< [11..11] Enable - Enables the module or function */
             __IOM uint32_t IOSWP               : 1; /*!< [12..12] I/O swap - Swaps I/O pin functions */
-            __IOM uint32_t START               : 1; /*!< [13..13] Start condition - Generates start condition */
+            __IOM uint32_t START               : 1; /*!< [13..13] Start transfer - Set by software, cleared by hardware */
             __IOM uint32_t STOP                : 1; /*!< [14..14] Stop condition - Generates stop condition */
             __IOM uint32_t RXDMAEN             : 1; /*!< [15..15] Receive DMA enable - Enables receive DMA channel */
             __IOM uint32_t TXDMAEN             : 1; /*!< [16..16] TX DMA enable - Enables transmit DMA channel */
@@ -2240,7 +2240,7 @@ typedef struct {
         } CR_f;
     };
     union {
-        __IOM uint32_t PR                  ; /*!< Offset: 0x0C (read-write) Prescaler register - UART clock prescaler */
+        __IOM uint32_t PR                  ; /*!< Offset: 0x0C (read-write) Prescaler register - I2S clock prescaler */
         struct {
             __IOM uint32_t DIV                 : 9; /*!< [8..0] Divider - Clock divider factor */
             __IOM uint32_t OF                  : 1; /*!< [9..9] Overflow - Overflow flag */
@@ -2249,7 +2249,7 @@ typedef struct {
         } PR_f;
     };
     union {
-        __IOM uint32_t DIER                ; /*!< Offset: 0x10 (read-write) DMA/interrupt enable register - Enables timer DMA requests and interrupts */
+        __IOM uint32_t IER                 ; /*!< Offset: 0x10 (read-write) Interrupt enable register - Enables I2S interrupts */
         struct {
             __IOM uint32_t RXNEIE              : 1; /*!< [0..0] Receive data register not empty interrupt enable - Enables RXNE interrupt */
             __IOM uint32_t TXEIE               : 1; /*!< [1..1] Transmit data register empty interrupt enable - Enables TXE interrupt */
@@ -2259,15 +2259,15 @@ typedef struct {
             __IOM uint32_t MSUSPIE             : 1; /*!< [9..9] MS suspend interrupt enable - Enables suspend interrupt */
             __IOM uint32_t SVTCIE              : 1; /*!< [10..10] SVTCIE - SVTCIE value */
             __IM  uint32_t          : 21;
-        } DIER_f;
+        } IER_f;
     };
     union {
-        __IOM uint32_t SR                  ; /*!< Offset: 0x14 (read-write) Status register - Power management status flags */
+        __IOM uint32_t SR                  ; /*!< Offset: 0x14 (read-write) Status register - I2S status flags */
         struct {
             __IOM uint32_t RXNE                : 1; /*!< [0..0] Receive buffer not empty - Indicates RX buffer contains data */
             __IOM uint32_t TXE                 : 1; /*!< [1..1] Transmit buffer empty - Indicates TX buffer is empty */
             __IOM uint32_t CH                  : 1; /*!< [2..2] Channel - Channel selection field */
-            __IOM uint32_t UDR                 : 1; /*!< [3..3] UDR - UDR value */
+            __IOM uint32_t UDR                 : 1; /*!< [3..3] Underrun flag - Indicates transmit underrun error */
             __IOM uint32_t OVR                 : 1; /*!< [4..4] Overrun flag - Indicates receive overrun error */
             __IOM uint32_t FE                  : 1; /*!< [5..5] Framing error - Indicates framing error detected */
             __IM  uint32_t          : 3;
@@ -7465,7 +7465,7 @@ typedef struct {
 #define OSPI2_DLYB_BASE                     (0x520D2400UL)
 #define SDMMC_DLYBS_BASE                    (0x520CA000UL)
 #define SDMMC_DLYBD_BASE                    (0x520CA800UL)
-#define USB_BASE                            (0x40040000UL)
+#define USB1_BASE                           (0x40040000UL)
 #define SDMMC_BASE                          (0x520C8000UL)
 #define HRNG_BASE                           (0x50060800UL)
 
@@ -7536,7 +7536,7 @@ typedef struct {
 #define OSPI2_DLYB                     ((DLYB_TypeDef *) OSPI2_DLYB_BASE)
 #define SDMMC_DLYBS                    ((DLYB_TypeDef *) SDMMC_DLYBS_BASE)
 #define SDMMC_DLYBD                    ((DLYB_TypeDef *) SDMMC_DLYBD_BASE)
-#define USB                            ((USB_TypeDef *) USB_BASE)
+#define USB1                           ((USB_TypeDef *) USB1_BASE)
 #define SDMMC                          ((SDMMC_TypeDef *) SDMMC_BASE)
 #define HRNG                           ((HRNG_TypeDef *) HRNG_BASE)
 

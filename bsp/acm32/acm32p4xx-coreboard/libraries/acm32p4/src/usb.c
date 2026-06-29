@@ -19,7 +19,7 @@
 //===========================================
 
 /** 指向 USB 寄存器基址 */
-#define USBx    ((USB_TypeDef *)USB_BASE)
+#define USBx    ((USB_TypeDef *)USB1_BASE)
 
 /** 端点 CSR 寄存器数组（EP0~EP6），步长 1 个 uint32 */
 #define EP_CSR(ep)  (*((volatile uint32_t *)((uint32_t)USBx + 0x40U + (uint32_t)(ep) * 4U)))

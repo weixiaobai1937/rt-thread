@@ -35,6 +35,7 @@
 #include "hardware/iwdt.h"
 #include "hardware/spi.h"
 #include "hardware/ospi.h"
+#include "hardware/i2s.h"
 #include "hardware/system.h"
 
 #endif // _ACM32P4_H

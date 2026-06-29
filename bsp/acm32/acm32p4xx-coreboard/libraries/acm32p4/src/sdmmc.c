@@ -599,6 +599,11 @@ bool sdmmc_dma_config(uint32_t desc_base_addr, uint8_t pbl)
         return false;
     }
 
+    /* PBL 编码检查：0=1, 1=4, 2=8, 3=16, 4=32, 5=64, 6=128, 7=256 */
+    if (pbl > 7U) {
+        return false;
+    }
+
     /* 设置描述符基地址 */
     SDMMC->DBADDR = desc_base_addr;
 
@@ -1580,10 +1585,14 @@ bool sdmmc_sdio_read_extended(uint8_t func, uint32_t addr,
     sdmmc_transfer_t transfer;
     assert(buffer != NULL);
 
+    if (count == 0U) {
+        return false;
+    }
+
     if (block_mode) {
         arg |= (1UL << 27);
-        transfer.block_size = (count > 0U) ? count : 512U;
-        transfer.block_count = (count > 0U) ? 1U : count;
+        transfer.block_size = count;
+        transfer.block_count = 1U;
     } else {
         transfer.block_size = count;
         transfer.block_count = 1U;
@@ -1610,10 +1619,14 @@ bool sdmmc_sdio_write_extended(uint8_t func, uint32_t addr,
     sdmmc_transfer_t transfer;
     assert(buffer != NULL);
 
+    if (count == 0U) {
+        return false;
+    }
+
     if (block_mode) {
         arg |= (1UL << 27);
-        transfer.block_size = (count > 0U) ? count : 512U;
-        transfer.block_count = (count > 0U) ? 1U : count;
+        transfer.block_size = count;
+        transfer.block_count = 1U;
     } else {
         transfer.block_size = count;
         transfer.block_count = 1U;
@@ -1758,7 +1771,9 @@ bool sdmmc_cmd1_send_op_cond(uint32_t *ocr)
 
 bool sdmmc_cmd6_switch(uint8_t index, uint8_t value, uint32_t *status)
 {
-    uint32_t arg = (3UL << 24) | ((uint32_t)index << 16) | ((uint32_t)value << 8);
+    uint32_t arg = ((uint32_t)SDMMC_MMC_ACCESS_WRITE_BYTE << 24U)
+                 | ((uint32_t)index << 16U)
+                 | ((uint32_t)value << 8U);
     assert(status != NULL);
     if (!sdmmc_send_cmd(6U, arg, SDMMC_RESPONSE_SHORT_BUSY, NULL, SDMMC_DEFAULT_TIMEOUT_MS)) {
         return false;
