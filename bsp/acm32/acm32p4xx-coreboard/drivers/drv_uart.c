@@ -165,12 +165,12 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial, struct serial_c
     /* DMA 接收初始化 */
     if (c->rx_dma_channel != DMA_CHANNEL_NONE)
     {
-        /* 分配 DMA 接收缓冲区 */
+        /* 分配 DMA 接收缓冲区（使用静态分配的全局缓冲区避免依赖 heap） */
         if (uart->rx_dma_buf == NULL)
         {
-            uart->rx_dma_bufsz = cfg->bufsz > 0 ? cfg->bufsz : RT_SERIAL_RB_BUFSZ;
-            uart->rx_dma_buf = rt_malloc(uart->rx_dma_bufsz);
-            RT_ASSERT(uart->rx_dma_buf != NULL);
+            static rt_uint8_t uart1_rx_dma_buf[RT_SERIAL_RB_BUFSZ] __attribute__((aligned(4)));
+            uart->rx_dma_buf = uart1_rx_dma_buf;
+            uart->rx_dma_bufsz = sizeof(uart1_rx_dma_buf);
         }
 
         /* 使能 DMA 控制器 */
@@ -307,11 +307,6 @@ static rt_err_t _uart_control(struct rt_serial_device *serial, int cmd, void *ar
             uart_config_dma(c->uart_num,
                 &(uart_dma_config_t){.tx_dma_enable = false, .rx_dma_enable = false});
         }
-        if (uart->rx_dma_buf != NULL)
-        {
-            rt_free(uart->rx_dma_buf);
-            uart->rx_dma_buf = NULL;
-        }
         break;
     }
 
@@ -333,7 +328,7 @@ static int _uart_getc(struct rt_serial_device *serial)
     return -1;
 }
 
-/* 中断非阻塞发送 */
+/* 发送（中断模式或 DMA 模式，根据 open_flag 判断） */
 static rt_ssize_t _uart_transmit(struct rt_serial_device *serial, rt_uint8_t *buf, rt_size_t size, rt_uint32_t tx_flag)
 {
     struct acm32_uart *uart = raw_to_uart(serial);
@@ -342,7 +337,58 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial, rt_uint8_t *bu
     if (size == 0)
         return 0;
 
-    /* 保存发送状态 */
+#ifdef RT_SERIAL_USING_DMA
+    /* DMA 发送模式 */
+    if (serial->parent.open_flag & RT_DEVICE_FLAG_DMA_TX)
+    {
+        if (c->tx_dma_channel == DMA_CHANNEL_NONE)
+            return 0;
+
+        /* 使能 DMA 控制器 */
+        dma_enable(c->dma_instance);
+
+        /* 使能 UART TX DMA */
+        uart_dma_config_t uart_dma_cfg = {
+            .tx_dma_enable = true,
+            .rx_dma_enable = false,
+            .dma_disable_on_error = false
+        };
+        uart_config_dma(c->uart_num, &uart_dma_cfg);
+
+        /* 配置 DMA 通道 */
+        dma_channel_config_t dma_cfg = {
+            .direction          = DMA_MEM_TO_PERIPH,
+            .src_address        = (rt_uint32_t)buf,
+            .dest_address       = uart_get_base_address(c->uart_num),
+            .src_addr_mode      = DMA_ADDR_INCREMENT,
+            .dest_addr_mode     = DMA_ADDR_FIXED,
+            .src_width          = DMA_WIDTH_BYTE,
+            .dest_width         = DMA_WIDTH_BYTE,
+            .src_burst          = DMA_BURST_1,
+            .dest_burst         = DMA_BURST_1,
+            .transfer_size      = (rt_uint16_t)size,
+            .src_periph_id      = 0,
+            .dest_periph_id     = c->tx_periph_id,
+            .src_master         = DMA_MASTER_1,
+            .dest_master        = DMA_MASTER_1,
+            .bus_lock           = false,
+            .tc_interrupt_enable = true,
+            .ht_interrupt_enable = false,
+            .error_interrupt_enable = false
+        };
+        dma_config_channel(c->dma_instance, c->tx_dma_channel, &dma_cfg);
+
+        /* 注册 DMA TC 回调 */
+        dma_register_tc_callback(c->dma_instance, c->tx_dma_channel, dma_tx_tc_cb);
+
+        /* 启动 DMA */
+        dma_start_channel(c->dma_instance, c->tx_dma_channel);
+
+        return size;
+    }
+#endif /* RT_SERIAL_USING_DMA */
+
+    /* 中断发送模式 */
     uart->tx_buf  = buf;
     uart->tx_size = size;
     uart->tx_pos  = 0;
@@ -366,60 +412,6 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial, rt_uint8_t *bu
     return size;
 }
 
-/* DMA 非阻塞发送 */
-static rt_ssize_t _uart_dma_transmit(struct rt_serial_device *serial, rt_uint8_t *buf, rt_size_t size, rt_uint32_t tx_flag)
-{
-    struct acm32_uart *uart = raw_to_uart(serial);
-    struct acm32_uart_config *c = uart->config;
-
-    if (size == 0)
-        return 0;
-    if (c->tx_dma_channel == DMA_CHANNEL_NONE)
-        return 0;
-
-    /* 使能 DMA 控制器 */
-    dma_enable(c->dma_instance);
-
-    /* 使能 UART TX DMA */
-    uart_dma_config_t uart_dma_cfg = {
-        .tx_dma_enable = true,
-        .rx_dma_enable = false,
-        .dma_disable_on_error = false
-    };
-    uart_config_dma(c->uart_num, &uart_dma_cfg);
-
-    /* 配置 DMA 通道 */
-    dma_channel_config_t dma_cfg = {
-        .direction          = DMA_MEM_TO_PERIPH,
-        .src_address        = (rt_uint32_t)buf,
-        .dest_address       = uart_get_base_address(c->uart_num),
-        .src_addr_mode      = DMA_ADDR_INCREMENT,
-        .dest_addr_mode     = DMA_ADDR_FIXED,
-        .src_width          = DMA_WIDTH_BYTE,
-        .dest_width         = DMA_WIDTH_BYTE,
-        .src_burst          = DMA_BURST_1,
-        .dest_burst         = DMA_BURST_1,
-        .transfer_size      = (rt_uint16_t)size,
-        .src_periph_id      = 0,
-        .dest_periph_id     = c->tx_periph_id,
-        .src_master         = DMA_MASTER_1,
-        .dest_master        = DMA_MASTER_1,
-        .bus_lock           = false,
-        .tc_interrupt_enable = true,
-        .ht_interrupt_enable = false,
-        .error_interrupt_enable = false
-    };
-    dma_config_channel(c->dma_instance, c->tx_dma_channel, &dma_cfg);
-
-    /* 注册 DMA TC 回调 */
-    dma_register_tc_callback(c->dma_instance, c->tx_dma_channel, dma_tx_tc_cb);
-
-    /* 启动 DMA */
-    dma_start_channel(c->dma_instance, c->tx_dma_channel);
-
-    return size;
-}
-
 /* ==================== OPS 表 ==================== */
 
 static const struct rt_uart_ops acm32_uart_ops =
@@ -429,7 +421,6 @@ static const struct rt_uart_ops acm32_uart_ops =
     .putc         = _uart_putc,
     .getc         = _uart_getc,
     .transmit     = _uart_transmit,
-    .dma_transmit = _uart_dma_transmit,
 };
 
 /* ==================== 设备索引枚举 ==================== */

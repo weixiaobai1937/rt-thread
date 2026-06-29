@@ -56,12 +56,11 @@ struct acm32_uart {
 
 | op | 函数 | 说明 |
 |----|------|------|
-| `.configure` | `_uart_configure` | 初始化 GPIO + UART，注册 rx/tx/tc/idle 回调 |
+| `.configure` | `_uart_configure` | 初始化 GPIO + UART，注册 rx/tx/tc/idle 回调，DMA RX 配置 |
 | `.control` | `_uart_control` | CONFIG/GET_CONFIG/SET_INT/CLR_INT/CLOSE |
 | `.putc` | `_uart_putc` | 单字节轮询发送（控制台用） |
 | `.getc` | `_uart_getc` | 单字节轮询接收（控制台用） |
-| `.transmit` | `_uart_transmit` | 中断非阻塞发送 |
-| `.dma_transmit` | `_uart_dma_transmit` | DMA 非阻塞发送 |
+| `.transmit` | `_uart_transmit` | 统一发送入口：根据 `RT_DEVICE_FLAG_DMA_TX` 分支到中断或 DMA |
 
 ### SDK 回调 → RT-Thread 事件映射
 
