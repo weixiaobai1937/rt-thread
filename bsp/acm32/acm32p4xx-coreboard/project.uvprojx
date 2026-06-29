@@ -338,9 +338,9 @@
             <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls></MiscControls>
-              <Define>SOC_ACM32P40N128CCT, RT_USING_SERIAL_V2, RT_USING_PIN, __MICROLIB, ARMCM33_DSP_FP</Define>
+              <Define>__MICROLIB, ARMCM33_DSP_FP</Define>
               <Undefine></Undefine>
-              <IncludePath>.\;.\applications;.\drivers;.\libraries\acm32p4\include;.\libraries\acm32p4\include\device;.\libraries\acm32p4\include\hardware;..\..\..\include;..\..\..\libcpu\arm\cortex-m33;..\..\..\libcpu\arm\common;..\..\..\components\finsh;..\..\..\components\drivers\include</IncludePath>
+              <IncludePath>.\;.\applications;.\drivers;.\libraries\acm32p4\include;.\libraries\acm32p4\include\device;.\libraries\acm32p4\include\hardware;..\..\..\include;..\..\..\libcpu\arm\cortex-m33;..\..\..\libcpu\arm\common;..\..\..\components\finsh;..\..\..\components\drivers\include;..\..\..\components\libc\compilers\common\include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -356,9 +356,9 @@
             <ClangAsOpt>4</ClangAsOpt>
             <VariousControls>
               <MiscControls></MiscControls>
-              <Define>SOC_ACM32P40N128CCT, RT_USING_SERIAL_V2, RT_USING_PIN, __MICROLIB, ARMCM33_DSP_FP</Define>
+              <Define>__MICROLIB, ARMCM33_DSP_FP</Define>
               <Undefine></Undefine>
-              <IncludePath>.\;.\applications;.\drivers;.\libraries\acm32p4\include;.\libraries\acm32p4\include\device;.\libraries\acm32p4\include\hardware;..\..\..\include;..\..\..\libcpu\arm\cortex-m33;..\..\..\libcpu\arm\common;..\..\..\components\finsh;..\..\..\components\drivers\include</IncludePath>
+              <IncludePath>.\;.\applications;.\drivers;.\libraries\acm32p4\include;.\libraries\acm32p4\include\device;.\libraries\acm32p4\include\hardware;..\..\..\include;..\..\..\libcpu\arm\cortex-m33;..\..\..\libcpu\arm\common;..\..\..\components\finsh;..\..\..\components\drivers\include;..\..\..\components\libc\compilers\common\include</IncludePath>
             </VariousControls>
           </Aads>
           <LDads>
