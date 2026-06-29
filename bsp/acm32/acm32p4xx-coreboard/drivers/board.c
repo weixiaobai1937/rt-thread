@@ -5,7 +5,7 @@
 
 #define SOC_SRAM_END_ADDR   (SOC_SRAM_START_ADDR + SOC_SRAM_SIZE * 1024)
 
-extern int __bss_end;
+extern int __bss_end__;
 extern void rt_hw_uart_init(void);
 
 void SysTick_Handler(void)
@@ -31,7 +31,7 @@ void rt_hw_board_init(void)
 
     /* 4. Heap memory */
 #ifdef RT_USING_HEAP
-    rt_system_heap_init((void *)&__bss_end, (void *)SOC_SRAM_END_ADDR);
+    rt_system_heap_init((void *)&__bss_end__, (void *)SOC_SRAM_END_ADDR);
 #endif
 
     /* 5. Component init */
