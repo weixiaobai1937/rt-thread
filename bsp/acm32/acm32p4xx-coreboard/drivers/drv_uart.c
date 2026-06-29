@@ -153,8 +153,24 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial, struct serial_c
     gpio_set_function(c->rx_pin, c->af);
     gpio_pull_up(c->rx_pin);
 
-    /* UART 初始化 */
-    uart_init_default(c->uart_num, cfg->baud_rate);
+    /* UART 初始化（自定义配置，使能 FIFO） */
+    uart_config_t uart_init_cfg = {
+        .baudrate = cfg->baud_rate,
+        .word_length = UART_WORD_LENGTH_8BIT,
+        .stop_bits = UART_STOP_BITS_1,
+        .parity = UART_PARITY_NONE,
+        .endian = UART_ENDIAN_LSB_FIRST,
+        .fifo_enable = false  /* 先禁用，下面手动配置 */
+    };
+    uart_init_custom(c->uart_num, &uart_init_cfg);
+
+    /* 配置 FIFO：TX 变空时触发中断，RX 每 1 字节触发中断 */
+    uart_fifo_config_t fifo_cfg = {
+        .enable = true,
+        .rx_threshold = UART_RX_FIFO_THRESHOLD_1_BYTE,
+        .tx_threshold = UART_TX_FIFO_THRESHOLD_EMPTY
+    };
+    uart_config_fifo(c->uart_num, &fifo_cfg);
 
     /* 保存配置镜像 */
     uart->shadow_config = *cfg;
