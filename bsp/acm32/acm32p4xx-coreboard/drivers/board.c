@@ -5,7 +5,16 @@
 
 #define SOC_SRAM_END_ADDR   (SOC_SRAM_START_ADDR + SOC_SRAM_SIZE * 1024)
 
-extern int __bss_end__;
+extern int  rt_application_init(void);
+
+#if defined(__ARMCC_VERSION)
+    extern int Image$$RW_IRAM1$$ZI$$Limit;
+#elif __ICCARM__
+    #pragma section="HEAP"
+#else
+    extern int __bss_end__;
+#endif
+
 extern void rt_hw_uart_init(void);
 
 void SysTick_Handler(void)
@@ -17,24 +26,25 @@ void SysTick_Handler(void)
 
 void rt_hw_board_init(void)
 {
-    /* 1. ACM32P4 SDK system init (clock/NVIC/TIM64B/PSRAM) */
     system_init();
 
-    /* 2. Configure SysTick */
     sys_info_t info;
     system_get_info(&info);
     SysTick_Config(info.sysclk_hz / RT_TICK_PER_SECOND);
 
-    /* 3. UART + console */
+#ifdef RT_USING_HEAP
+#if defined(__ARMCC_VERSION)
+    rt_system_heap_init((void *)&Image$$RW_IRAM1$$ZI$$Limit, (void *)SOC_SRAM_END_ADDR);
+#elif __ICCARM__
+    rt_system_heap_init(__segment_end("HEAP"), (void *)SOC_SRAM_END_ADDR);
+#else
+    rt_system_heap_init((void *)&__bss_end__, (void *)SOC_SRAM_END_ADDR);
+#endif
+#endif
+
     rt_hw_uart_init();
     rt_console_set_device(RT_CONSOLE_DEVICE_NAME);
 
-    /* 4. Heap memory */
-#ifdef RT_USING_HEAP
-    rt_system_heap_init((void *)&__bss_end__, (void *)SOC_SRAM_END_ADDR);
-#endif
-
-    /* 5. Component init */
 #ifdef RT_USING_COMPONENTS_INIT
     rt_components_board_init();
 #endif
