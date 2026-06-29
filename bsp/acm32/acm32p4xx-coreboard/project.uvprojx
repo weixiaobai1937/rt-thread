@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>__MICROLIB, ARMCM33_DSP_FP</Define>
               <Undefine></Undefine>
-              <IncludePath>.\;.\applications;.\drivers;.\libraries\acm32p4\include;.\libraries\acm32p4\include\device;.\libraries\acm32p4\include\hardware;..\..\..\include;..\..\..\libcpu\arm\cortex-m33;..\..\..\libcpu\arm\common;..\..\..\components\finsh;..\..\..\components\drivers\include;..\..\..\components\libc\compilers\common\include</IncludePath>
+              <IncludePath>.\;.\applications;.\drivers;.\libraries\acm32p4\include;.\libraries\acm32p4\include\device;.\libraries\acm32p4\include\hardware;..\..\..\include;..\..\..\libcpu\arm\cortex-m33;..\..\..\libcpu\arm\common;..\..\..\components\finsh;..\..\..\components\drivers\include;..\..\..\components\libc\compilers\common\include;..\..\..\components\libc\compilers\common\extension</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -358,7 +358,7 @@
               <MiscControls></MiscControls>
               <Define>__MICROLIB, ARMCM33_DSP_FP</Define>
               <Undefine></Undefine>
-              <IncludePath>.\;.\applications;.\drivers;.\libraries\acm32p4\include;.\libraries\acm32p4\include\device;.\libraries\acm32p4\include\hardware;..\..\..\include;..\..\..\libcpu\arm\cortex-m33;..\..\..\libcpu\arm\common;..\..\..\components\finsh;..\..\..\components\drivers\include;..\..\..\components\libc\compilers\common\include</IncludePath>
+              <IncludePath>.\;.\applications;.\drivers;.\libraries\acm32p4\include;.\libraries\acm32p4\include\device;.\libraries\acm32p4\include\hardware;..\..\..\include;..\..\..\libcpu\arm\cortex-m33;..\..\..\libcpu\arm\common;..\..\..\components\finsh;..\..\..\components\drivers\include;..\..\..\components\libc\compilers\common\include;..\..\..\components\libc\compilers\common\extension</IncludePath>
             </VariousControls>
           </Aads>
           <LDads>
