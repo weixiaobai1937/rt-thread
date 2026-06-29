@@ -1,7 +1,7 @@
 #include <rthw.h>
 #include <rtthread.h>
 #include <rtdevice.h>
-#include <drivers/serial_v2.h>
+#include <drivers/dev_serial_v2.h>
 #include "board.h"
 #include "uart_config.h"
 
