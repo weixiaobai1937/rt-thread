@@ -6,6 +6,9 @@
 
 #define ACM32_PIN_MAX   128
 
+/* ==================== 前置声明 ==================== */
+static rt_err_t _pin_irq_enable(struct rt_device *device, rt_base_t pin, rt_uint8_t enabled);
+
 /* ==================== 引脚编号 → EXTI 线号 ==================== */
 #define PIN2EXTILINE(pin)   ((pin) % 16)
 
