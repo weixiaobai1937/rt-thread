@@ -632,7 +632,7 @@ typedef struct {
  */
 typedef struct {
     union {
-        __IOM uint32_t CR1                 ; /*!< Offset: 0x00 (read-write) Control register 1 - UART control and configuration */
+        __IOM uint32_t CR1                 ; /*!< Offset: 0x00 (read-write) Control register 1 - Timer control and configuration */
         struct {
             __IOM uint32_t CEN                 : 1; /*!< [0..0] Counter enable - Enables or disables the timer counter */
             __IOM uint32_t UDIS                : 1; /*!< [1..1] Update disable - Disables update event generation */
@@ -710,7 +710,7 @@ typedef struct {
         } DIER_f;
     };
     union {
-        __IOM uint32_t SR                  ; /*!< Offset: 0x10 (read-write) Status register - Power management status flags */
+        __IOM uint32_t SR                  ; /*!< Offset: 0x10 (read-write) Status register - Timer status flags */
         struct {
             __IOM uint32_t UIF                 : 1; /*!< [0..0] Update interrupt flag - Set when update event occurs */
             __IOM uint32_t CC1IF               : 1; /*!< [1..1] Capture/compare 1 interrupt flag - Set when channel 1 capture/compare occurs */
@@ -968,7 +968,7 @@ typedef struct {
         } AF1_f;
     };
     union {
-        __IOM uint32_t AF2                 ; /*!< Offset: 0x64 (read-write) Alternate function register 2 - Configures output compare and input sources */
+        __IOM uint32_t AF2                 ; /*!< Offset: 0x64 (read-write) Alternate function register 2 - Configures OCREF clear source selection */
         struct {
             __IM  uint32_t          : 16;
             __IOM uint32_t OCRSEL              : 3; /*!< [18..16] Output compare reference selection - Selects reference signal for OC */
@@ -1008,7 +1008,7 @@ typedef struct {
  */
 typedef struct {
     union {
-        __IOM uint32_t CR1                 ; /*!< Offset: 0x00 (read-write) Control register 1 - UART control and configuration */
+        __IOM uint32_t CR1                 ; /*!< Offset: 0x00 (read-write) Control register 1 - Timer control and configuration */
         struct {
             __IOM uint32_t CEN                 : 1; /*!< [0..0] Counter enable - Enables or disables the timer counter */
             __IOM uint32_t UDIS                : 1; /*!< [1..1] Update disable - Disables update event generation */
@@ -1022,9 +1022,11 @@ typedef struct {
         } CR1_f;
     };
     union {
-        __IOM uint32_t CR2                 ; /*!< Offset: 0x04 (read-write) Control register 2 - UART additional control */
+        __IOM uint32_t CR2                 ; /*!< Offset: 0x04 (read-write) Control register 2 - Timer additional control */
         struct {
-            __IM  uint32_t          : 3;
+            __IOM uint32_t CCPC                : 1; /*!< [0..0] Capture/compare preloaded control - Controls preload mode for CCxE/CCxNE/OCxM */
+            __IM  uint32_t          : 1;
+            __IOM uint32_t CCUS                : 1; /*!< [2..2] Capture/compare control update selection - Selects update source for capture/compare control bits */
             __IOM uint32_t CCDS                : 1; /*!< [3..3] Capture/compare DMA selection - Selects DMA request source */
             __IOM uint32_t MMS                 : 3; /*!< [6..4] Master mode selection - Selects the trigger output (TRGO) source */
             __IOM uint32_t TI1S                : 1; /*!< [7..7] TIMx input 1 selection - Selects input 1 source for timer */
@@ -1035,14 +1037,16 @@ typedef struct {
         __IOM uint32_t SMCR                ; /*!< Offset: 0x08 (read-write) Slave mode control register - Configures timer synchronization and slave mode */
         struct {
             __IOM uint32_t SMS                 : 3; /*!< [2..0] Slave mode selection - Selects timer slave mode */
-            __IM  uint32_t          : 1;
-            __IOM uint32_t TS                  : 3; /*!< [6..4] Trigger selection - Selects trigger input for slave mode */
+            __IOM uint32_t OCCS                : 1; /*!< [3..3] OCREF clear selection - Selects OCREF clear source (0:COMPx, 1:ETRF) */
+            __IOM uint32_t TS                  : 3; /*!< [6..4] Trigger selection (bits 2:0) - Selects trigger input for slave mode, combined with TS_4_3 for 5-bit selection */
             __IOM uint32_t MSM                 : 1; /*!< [7..7] Master-slave mode - Enables master-slave synchronization mode */
             __IOM uint32_t ETF                 : 4; /*!< [11..8] External trigger filter - Configures filter for external trigger */
             __IOM uint32_t ETPS                : 2; /*!< [13..12] External trigger prescaler - Configures prescaler for external trigger */
             __IOM uint32_t ECE                 : 1; /*!< [14..14] External clock enable - Enables external clock mode */
             __IOM uint32_t ETP                 : 1; /*!< [15..15] External trigger polarity - Selects external trigger polarity */
-            __IM  uint32_t          : 16;
+            __IM  uint32_t          : 4;
+            __IOM uint32_t TS_4_3              : 2; /*!< [21..20] Trigger selection (bits 4:3) - Upper bits of 5-bit trigger selection, combined with TS bits 2:0 */
+            __IM  uint32_t          : 10;
         } SMCR_f;
     };
     union {
@@ -1053,7 +1057,7 @@ typedef struct {
             __IOM uint32_t CC2IE               : 1; /*!< [2..2] Capture/compare 2 interrupt enable - Enables channel 2 capture/compare interrupt */
             __IOM uint32_t CC3IE               : 1; /*!< [3..3] Capture/compare 3 interrupt enable - Enables channel 3 capture/compare interrupt */
             __IOM uint32_t CC4IE               : 1; /*!< [4..4] Capture/compare 4 interrupt enable - Enables channel 4 capture/compare interrupt */
-            __IM  uint32_t          : 1;
+            __IOM uint32_t COMIE               : 1; /*!< [5..5] COM interrupt enable - Enables COM interrupt */
             __IOM uint32_t TIE                 : 1; /*!< [6..6] Trigger interrupt enable - Enables trigger event interrupt */
             __IM  uint32_t          : 1;
             __IOM uint32_t UDE                 : 1; /*!< [8..8] Update DMA request enable - Enables DMA request on update event */
@@ -1061,20 +1065,20 @@ typedef struct {
             __IOM uint32_t CC2DE               : 1; /*!< [10..10] Capture/compare 2 DMA request enable - Enables DMA request on channel 2 */
             __IOM uint32_t CC3DE               : 1; /*!< [11..11] Capture/compare 3 DMA request enable - Enables DMA request on channel 3 */
             __IOM uint32_t CC4DE               : 1; /*!< [12..12] Capture/compare 4 DMA request enable - Enables DMA request on channel 4 */
-            __IM  uint32_t          : 1;
+            __IOM uint32_t COMDE               : 1; /*!< [13..13] COM DMA request enable - Enables DMA request on COM event */
             __IOM uint32_t TDE                 : 1; /*!< [14..14] Trigger DMA request enable - Enables DMA request on trigger event */
             __IM  uint32_t          : 17;
         } DIER_f;
     };
     union {
-        __IOM uint32_t SR                  ; /*!< Offset: 0x10 (read-write) Status register - Power management status flags */
+        __IOM uint32_t SR                  ; /*!< Offset: 0x10 (read-write) Status register - Timer status flags */
         struct {
             __IOM uint32_t UIF                 : 1; /*!< [0..0] Update interrupt flag - Set when update event occurs */
             __IOM uint32_t CC1IF               : 1; /*!< [1..1] Capture/compare 1 interrupt flag - Set when channel 1 capture/compare occurs */
             __IOM uint32_t CC2IF               : 1; /*!< [2..2] Capture/compare 2 interrupt flag - Set when channel 2 capture/compare occurs */
             __IOM uint32_t CC3IF               : 1; /*!< [3..3] Capture/compare 3 interrupt flag - Set when channel 3 capture/compare occurs */
             __IOM uint32_t CC4IF               : 1; /*!< [4..4] Capture/compare 4 interrupt flag - Set when channel 4 capture/compare occurs */
-            __IM  uint32_t          : 1;
+            __IOM uint32_t COMIF               : 1; /*!< [5..5] COM interrupt flag - Set when COM event occurs */
             __IOM uint32_t TIF                 : 1; /*!< [6..6] Trigger interrupt flag - Set when trigger event occurs */
             __IM  uint32_t          : 2;
             __IOM uint32_t CC1OF               : 1; /*!< [9..9] Capture/compare 1 overcapture flag - Set when channel 1 capture overrun occurs */
@@ -1092,7 +1096,7 @@ typedef struct {
             __IOM uint32_t CC2G                : 1; /*!< [2..2] Capture/compare 2 generation - Software generates channel 2 event */
             __IOM uint32_t CC3G                : 1; /*!< [3..3] Capture/compare 3 generation - Software generates channel 3 event */
             __IOM uint32_t CC4G                : 1; /*!< [4..4] Capture/compare 4 generation - Software generates channel 4 event */
-            __IM  uint32_t          : 1;
+            __IOM uint32_t COMG                : 1; /*!< [5..5] Capture/compare control update generation - Software generates COM event for updating CCxE/CCxNE/OCxM */
             __IOM uint32_t TG                  : 1; /*!< [6..6] Trigger generation - Software generates trigger event */
             __IM  uint32_t          : 25;
         } EGR_f;
@@ -1162,15 +1166,15 @@ typedef struct {
         struct {
             __IOM uint32_t CC1E                : 1; /*!< [0..0] Capture/compare 1 enable - Enables channel 1 capture/compare output */
             __IOM uint32_t CC1P                : 1; /*!< [1..1] Capture/compare 1 polarity - Selects channel 1 output polarity */
-            __IM  uint32_t          : 1;
+            __IOM uint32_t CC1NE               : 1; /*!< [2..2] Capture/compare 1 complementary output enable - Enables channel 1 complementary output */
             __IOM uint32_t CC1NP               : 1; /*!< [3..3] Capture/compare 1 complementary polarity - Selects channel 1 complementary polarity */
             __IOM uint32_t CC2E                : 1; /*!< [4..4] Capture/compare 2 enable - Enables channel 2 capture/compare output */
             __IOM uint32_t CC2P                : 1; /*!< [5..5] Capture/compare 2 polarity - Selects channel 2 output polarity */
-            __IM  uint32_t          : 1;
+            __IOM uint32_t CC2NE               : 1; /*!< [6..6] Capture/compare 2 complementary output enable - Enables channel 2 complementary output */
             __IOM uint32_t CC2NP               : 1; /*!< [7..7] Capture/compare 2 complementary polarity - Selects channel 2 complementary polarity */
             __IOM uint32_t CC3E                : 1; /*!< [8..8] Capture/compare 3 enable - Enables channel 3 capture/compare output */
             __IOM uint32_t CC3P                : 1; /*!< [9..9] Capture/compare 3 polarity - Selects channel 3 output polarity */
-            __IM  uint32_t          : 1;
+            __IOM uint32_t CC3NE               : 1; /*!< [10..10] Capture/compare 3 complementary output enable - Enables channel 3 complementary output */
             __IOM uint32_t CC3NP               : 1; /*!< [11..11] Capture/compare 3 complementary polarity - Selects channel 3 complementary polarity */
             __IOM uint32_t CC4E                : 1; /*!< [12..12] Capture/compare 4 enable - Enables channel 4 capture/compare output */
             __IOM uint32_t CC4P                : 1; /*!< [13..13] Capture/compare 4 polarity - Selects channel 4 output polarity */
@@ -1248,25 +1252,36 @@ typedef struct {
     };
     __IO uint32_t RESERVED2[4];
     union {
-        __IOM uint32_t AF1                 ; /*!< Offset: 0x60 (read-write) Alternate function register 1 - Configures break input sources */
+        __IOM uint32_t AF1                 ; /*!< Offset: 0x60 (read-write) Alternate function register 1 - Configures ETR input source selection */
         struct {
             __IM  uint32_t          : 14;
-            __IOM uint32_t ETRSEL              : 2; /*!< [15..14] External trigger selection - Selects external trigger source */
-            __IM  uint32_t          : 16;
+            __IOM uint32_t ETRSEL              : 4; /*!< [17..14] External trigger selection - Selects external trigger source (4-bit, 16 sources) */
+            __IM  uint32_t          : 14;
         } AF1_f;
     };
-    __IO uint32_t RESERVED3;
+    union {
+        __IOM uint32_t AF2                 ; /*!< Offset: 0x64 (read-write) Alternate function register 2 - Configures OCREF clear source selection */
+        struct {
+            __IM  uint32_t          : 16;
+            __IOM uint32_t OCRSEL              : 3; /*!< [18..16] OCREF clear source selection - Selects OCREF clear input source (3-bit, 8 sources) */
+            __IM  uint32_t          : 13;
+        } AF2_f;
+    };
     union {
         __IOM uint32_t TISEL               ; /*!< Offset: 0x68 (read-write) Timer input selection - Selects timer input sources */
         struct {
-            __IOM uint32_t T1SEL               : 1; /*!< [0..0] T1 selection - Timer 1 source selection */
-            __IM  uint32_t          : 7;
-            __IOM uint32_t T2SEL               : 1; /*!< [8..8] T2 selection - Timer 2 source selection */
-            __IM  uint32_t          : 23;
+            __IOM uint32_t TI1SEL              : 4; /*!< [3..0] TI1 input selection - Selects input source for TI1 (4-bit, 16 sources) */
+            __IM  uint32_t          : 4;
+            __IOM uint32_t TI2SEL              : 4; /*!< [11..8] TI2 input selection - Selects input source for TI2 (4-bit, 16 sources) */
+            __IM  uint32_t          : 4;
+            __IOM uint32_t TI3SEL              : 4; /*!< [19..16] TI3 input selection - Selects input source for TI3 (4-bit, 16 sources) */
+            __IM  uint32_t          : 4;
+            __IOM uint32_t TI4SEL              : 4; /*!< [27..24] TI4 input selection - Selects input source for TI4 (4-bit, 16 sources) */
+            __IM  uint32_t          : 4;
         } TISEL_f;
     };
     union {
-        __IOM uint32_t DBER                ; /*!< Offset: 0x6C (read-write) Debug enable register - Enables debug features during breakpoint */
+        __IOM uint32_t DBER                ; /*!< Offset: 0x6C (read-write) DMA burst enable register - Selects DMA request type (single/burst) for timer events */
         struct {
             __IOM uint32_t UBE                 : 1; /*!< [0..0] Update break enable - Enables break on update event */
             __IOM uint32_t CC1BE               : 1; /*!< [1..1] CC1 break enable - Enables break on channel 1 event */

@@ -42,6 +42,10 @@ typedef struct {
     uart_tx_callback_t      tx_callback;     ///< 发送回调
     uart_error_callback_t   error_callback;  ///< 错误回调
     uart_idle_callback_t    idle_callback;   ///< 空闲回调
+    uart_tc_callback_t      tc_callback;     ///< 发送完成回调
+    uart_lbd_callback_t     lbd_callback;    ///< LIN Break检测回调
+    uart_bcnt_callback_t    bcnt_callback;   ///< 比特计数超时回调
+    uart_abr_callback_t     abr_callback;    ///< 波特率自适应完成回调
 } uart_callbacks_t;
 
 //===========================================
@@ -51,12 +55,12 @@ typedef struct {
 /**
  * @brief UART回调函数表
  */
-static uart_callbacks_t uart_callbacks[8] = {0};
+static uart_callbacks_t uart_callbacks[UART_INSTANCE_COUNT] = {0};
 
 /**
  * @brief UART寄存器基地址表
  */
-static UART_TypeDef * const uart_instances[8] = {
+static UART_TypeDef * const uart_instances[UART_INSTANCE_COUNT] = {
     (UART_TypeDef *)UART1_BASE,
     (UART_TypeDef *)UART2_BASE,
     (UART_TypeDef *)UART3_BASE,
@@ -70,7 +74,7 @@ static UART_TypeDef * const uart_instances[8] = {
 /**
  * @brief UART时钟使能位表（外设编号）
  */
-static const clock_periph_t uart_clock_periph[8] = {
+static const clock_periph_t uart_clock_periph[UART_INSTANCE_COUNT] = {
     CLK_UART1,   // UART1 on APB2
     CLK_UART2,   // UART2 on APB1
     CLK_UART3,   // UART3 on APB1
@@ -92,7 +96,7 @@ static const clock_periph_t uart_clock_periph[8] = {
  */
 static inline UART_TypeDef* uart_get_instance(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     return uart_instances[uart];
 }
 
@@ -156,7 +160,7 @@ static bool uart_calc_baudrate(uart_num_t uart, uint32_t baudrate,
 
 bool uart_init_default(uart_num_t uart, uint32_t baudrate)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     uart_config_t config = {
         .baudrate = baudrate,
@@ -172,7 +176,7 @@ bool uart_init_default(uart_num_t uart, uint32_t baudrate)
 
 bool uart_init_custom(uart_num_t uart, const uart_config_t *config)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     assert(config != NULL);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
@@ -192,9 +196,9 @@ bool uart_init_custom(uart_num_t uart, const uart_config_t *config)
     
     /* 根据配置使能或禁用 FIFO */
     if (config->fifo_enable) {
-        uart_base->CR3 |= (1 << 5);   /* FEN = 1，使能 FIFO */
+        uart_base->CR3_f.FEN = 1;   /* 使能 FIFO */
     } else {
-        uart_base->CR3 &= ~(1 << 5);  /* FEN = 0，禁用 FIFO */
+        uart_base->CR3_f.FEN = 0;   /* 禁用 FIFO */
     }
     
     uart_enable(uart);
@@ -206,7 +210,7 @@ bool uart_init_custom(uart_num_t uart, const uart_config_t *config)
 
 void uart_deinit(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     uart_disable(uart);
     
@@ -214,6 +218,10 @@ void uart_deinit(uart_num_t uart)
     uart_callbacks[uart].tx_callback = NULL;
     uart_callbacks[uart].error_callback = NULL;
     uart_callbacks[uart].idle_callback = NULL;
+    uart_callbacks[uart].tc_callback = NULL;
+    uart_callbacks[uart].lbd_callback = NULL;
+    uart_callbacks[uart].bcnt_callback = NULL;
+    uart_callbacks[uart].abr_callback = NULL;
     
     clock_periph_disable(uart_clock_periph[uart]);
 }
@@ -224,7 +232,7 @@ void uart_deinit(uart_num_t uart)
 
 bool uart_config_baudrate(uart_num_t uart, uint32_t baudrate)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     uint16_t ibaud;
     uint8_t fbaud;
@@ -243,7 +251,7 @@ bool uart_config_baudrate(uart_num_t uart, uint32_t baudrate)
 
 void uart_config_word_length(uart_num_t uart, uart_word_length_t word_length)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -253,7 +261,7 @@ void uart_config_word_length(uart_num_t uart, uart_word_length_t word_length)
 
 void uart_config_stop_bits(uart_num_t uart, uart_stop_bits_t stop_bits)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -266,7 +274,7 @@ void uart_config_stop_bits(uart_num_t uart, uart_stop_bits_t stop_bits)
 
 void uart_config_parity(uart_num_t uart, uart_parity_t parity)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -303,7 +311,7 @@ void uart_config_parity(uart_num_t uart, uart_parity_t parity)
 
 void uart_config_endian(uart_num_t uart, uart_endian_t endian)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -316,7 +324,7 @@ void uart_config_endian(uart_num_t uart, uart_endian_t endian)
 
 void uart_config_fifo(uart_num_t uart, const uart_fifo_config_t *config)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     assert(config != NULL);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
@@ -350,7 +358,7 @@ void uart_config_fifo(uart_num_t uart, const uart_fifo_config_t *config)
 
 void uart_config_flow_control(uart_num_t uart, const uart_flow_control_config_t *config)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     assert(config != NULL);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
@@ -370,25 +378,25 @@ void uart_config_flow_control(uart_num_t uart, const uart_flow_control_config_t 
 
 void uart_config_lin(uart_num_t uart, const uart_lin_config_t *config)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     assert(config != NULL);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
     if (config->enable) {
-        /* 只清除 BCNT_VALUE(bit[23:0]) 和 LBD_CNT(bit[31:28])，保留 RS485 的 DEM/DEP/AUTO_START_EN */
-        uart_base->BCNT &= ~(0xFU << 28);         /* 清除 LBD_CNT */
-        uart_base->BCNT &= ~0x00FFFFFFU;           /* 清除 BCNT_VALUE */
+        /* 清除 BCNT_VALUE(bit[23:0]) 和 LBD_CNT(bit[31:28])，保留 RS485 的 DEM/DEP/AUTO_START_EN */
+        uart_base->BCNT &= ~(0xFF000000U | 0x00FFFFFFU);   /* 清除 LBD_CNT + BCNT_VALUE */
         uart_base->BCNT |= (config->break_length & 0x00FFFFFFU);
         uart_base->BCNT |= ((config->lbd_cnt & 0xFU) << 28);
     } else {
-        uart_base->BCNT &= ~0x00FFFFFFU;           /* 清除 BCNT_VALUE */
+        /* 禁用时清除 LIN 相关配置，保留 RS485 的 DEM/DEP/AUTO_START_EN */
+        uart_base->BCNT &= ~(0xFF000000U | 0x00FFFFFFU);   /* 清除 LBD_CNT + BCNT_VALUE */
     }
 }
 
 void uart_config_irda(uart_num_t uart, const uart_irda_config_t *config)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     assert(config != NULL);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
@@ -412,7 +420,7 @@ void uart_config_irda(uart_num_t uart, const uart_irda_config_t *config)
 
 void uart_config_smartcard(uart_num_t uart, const uart_smartcard_config_t *config)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     assert(config != NULL);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
@@ -456,7 +464,7 @@ void uart_config_smartcard(uart_num_t uart, const uart_smartcard_config_t *confi
 
 void uart_config_half_duplex(uart_num_t uart, bool enable)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -469,7 +477,7 @@ void uart_config_half_duplex(uart_num_t uart, bool enable)
 
 void uart_config_multiprocessor(uart_num_t uart, const uart_multiprocessor_config_t *config)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     assert(config != NULL);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
@@ -496,7 +504,7 @@ void uart_config_multiprocessor(uart_num_t uart, const uart_multiprocessor_confi
 
 void uart_config_sync(uart_num_t uart, const uart_sync_config_t *config)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     assert(config != NULL);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
@@ -532,7 +540,7 @@ void uart_config_sync(uart_num_t uart, const uart_sync_config_t *config)
 
 void uart_config_rs485(uart_num_t uart, const uart_rs485_config_t *config)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     assert(config != NULL);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
@@ -561,7 +569,7 @@ void uart_config_rs485(uart_num_t uart, const uart_rs485_config_t *config)
 
 void uart_config_dma(uart_num_t uart, const uart_dma_config_t *config)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     assert(config != NULL);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
@@ -587,7 +595,7 @@ void uart_config_dma(uart_num_t uart, const uart_dma_config_t *config)
 
 void uart_interrupt_enable(uart_num_t uart, uint32_t interrupt_mask)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -596,7 +604,7 @@ void uart_interrupt_enable(uart_num_t uart, uint32_t interrupt_mask)
 
 void uart_interrupt_disable(uart_num_t uart, uint32_t interrupt_mask)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -605,30 +613,58 @@ void uart_interrupt_disable(uart_num_t uart, uint32_t interrupt_mask)
 
 void uart_register_rx_callback(uart_num_t uart, uart_rx_callback_t callback)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     uart_callbacks[uart].rx_callback = callback;
 }
 
 void uart_register_tx_callback(uart_num_t uart, uart_tx_callback_t callback)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     uart_callbacks[uart].tx_callback = callback;
 }
 
 void uart_register_error_callback(uart_num_t uart, uart_error_callback_t callback)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     uart_callbacks[uart].error_callback = callback;
 }
 
 void uart_register_idle_callback(uart_num_t uart, uart_idle_callback_t callback)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     uart_callbacks[uart].idle_callback = callback;
+}
+
+void uart_register_tc_callback(uart_num_t uart, uart_tc_callback_t callback)
+{
+    assert(uart < UART_INSTANCE_COUNT);
+    
+    uart_callbacks[uart].tc_callback = callback;
+}
+
+void uart_register_lbd_callback(uart_num_t uart, uart_lbd_callback_t callback)
+{
+    assert(uart < UART_INSTANCE_COUNT);
+    
+    uart_callbacks[uart].lbd_callback = callback;
+}
+
+void uart_register_bcnt_callback(uart_num_t uart, uart_bcnt_callback_t callback)
+{
+    assert(uart < UART_INSTANCE_COUNT);
+    
+    uart_callbacks[uart].bcnt_callback = callback;
+}
+
+void uart_register_abr_callback(uart_num_t uart, uart_abr_callback_t callback)
+{
+    assert(uart < UART_INSTANCE_COUNT);
+    
+    uart_callbacks[uart].abr_callback = callback;
 }
 
 //===========================================
@@ -638,21 +674,21 @@ void uart_register_idle_callback(uart_num_t uart, uart_idle_callback_t callback)
 
 void uart_enable_clock(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     clock_periph_enable(uart_clock_periph[uart]);
 }
 
 void uart_disable_clock(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     clock_periph_disable(uart_clock_periph[uart]);
 }
 
 void uart_enable(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -661,7 +697,7 @@ void uart_enable(uart_num_t uart)
 
 void uart_disable(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -670,7 +706,7 @@ void uart_disable(uart_num_t uart)
 
 void uart_tx_enable(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -679,7 +715,7 @@ void uart_tx_enable(uart_num_t uart)
 
 void uart_tx_disable(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -688,7 +724,7 @@ void uart_tx_disable(uart_num_t uart)
 
 void uart_rx_enable(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -697,7 +733,7 @@ void uart_rx_enable(uart_num_t uart)
 
 void uart_rx_disable(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -706,7 +742,7 @@ void uart_rx_disable(uart_num_t uart)
 
 void uart_set_rts(uart_num_t uart, bool state)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -719,7 +755,7 @@ void uart_set_rts(uart_num_t uart, bool state)
 
 bool uart_get_cts(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -728,7 +764,7 @@ bool uart_get_cts(uart_num_t uart)
 
 bool uart_putc(uart_num_t uart, uint8_t data)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -746,7 +782,7 @@ bool uart_putc(uart_num_t uart, uint8_t data)
 
 uint8_t uart_getc(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
 
@@ -763,7 +799,7 @@ uint8_t uart_getc(uart_num_t uart)
 
 void uart_puts(uart_num_t uart, const char *str)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     assert(str != NULL);
     
     while (*str) {
@@ -774,7 +810,7 @@ void uart_puts(uart_num_t uart, const char *str)
 
 uint32_t uart_write(uart_num_t uart, const uint8_t *data, uint32_t length)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     assert(data != NULL);
     
     uint32_t count = 0;
@@ -789,7 +825,7 @@ uint32_t uart_write(uart_num_t uart, const uint8_t *data, uint32_t length)
 
 uint32_t uart_read(uart_num_t uart, uint8_t *buffer, uint32_t length)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     assert(buffer != NULL);
     
     uint32_t count = 0;
@@ -808,7 +844,7 @@ uint32_t uart_read(uart_num_t uart, uint8_t *buffer, uint32_t length)
 
 bool uart_putc_try(uart_num_t uart, uint8_t data)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -822,7 +858,7 @@ bool uart_putc_try(uart_num_t uart, uint8_t data)
 
 bool uart_getc_try(uart_num_t uart, uint8_t *data)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     assert(data != NULL);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
@@ -837,7 +873,7 @@ bool uart_getc_try(uart_num_t uart, uint8_t *data)
 
 bool uart_is_tx_fifo_empty(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -846,7 +882,7 @@ bool uart_is_tx_fifo_empty(uart_num_t uart)
 
 bool uart_is_tx_fifo_full(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -855,7 +891,7 @@ bool uart_is_tx_fifo_full(uart_num_t uart)
 
 bool uart_is_rx_fifo_empty(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -864,7 +900,7 @@ bool uart_is_rx_fifo_empty(uart_num_t uart)
 
 bool uart_is_rx_fifo_full(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -873,7 +909,7 @@ bool uart_is_rx_fifo_full(uart_num_t uart)
 
 bool uart_is_busy(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -882,7 +918,7 @@ bool uart_is_busy(uart_num_t uart)
 
 uint32_t uart_get_interrupt_status(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -891,7 +927,7 @@ uint32_t uart_get_interrupt_status(uart_num_t uart)
 
 void uart_clear_interrupt(uart_num_t uart, uint32_t interrupt_mask)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -901,7 +937,7 @@ void uart_clear_interrupt(uart_num_t uart, uint32_t interrupt_mask)
 
 uart_error_t uart_get_error(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -925,7 +961,7 @@ uart_error_t uart_get_error(uart_num_t uart)
 
 void uart_clear_error(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -937,7 +973,7 @@ void uart_clear_error(uart_num_t uart)
 
 void uart_autobaud_start(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -946,7 +982,7 @@ void uart_autobaud_start(uart_num_t uart)
 
 void uart_autobaud_stop(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -955,7 +991,7 @@ void uart_autobaud_stop(uart_num_t uart)
 
 bool uart_is_autobaud_complete(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -964,7 +1000,7 @@ bool uart_is_autobaud_complete(uart_num_t uart)
 
 void uart_enter_mute_mode(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -973,7 +1009,7 @@ void uart_enter_mute_mode(uart_num_t uart)
 
 void uart_exit_mute_mode(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -982,7 +1018,7 @@ void uart_exit_mute_mode(uart_num_t uart)
 
 void uart_send_lin_break(uart_num_t uart, uint32_t length)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -1003,7 +1039,7 @@ void uart_send_lin_break(uart_num_t uart, uint32_t length)
 
 void uart_bcnt_auto_start_enable(uart_num_t uart, bool enable)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     
@@ -1016,7 +1052,7 @@ void uart_bcnt_auto_start_enable(uart_num_t uart, bool enable)
 
 uint32_t uart_get_base_address(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     return (uint32_t)uart_instances[uart];
 }
@@ -1027,14 +1063,16 @@ uint32_t uart_get_base_address(uart_num_t uart)
 
 /**
  * @brief UART中断处理函数
- * 
+ *
  * @param uart UART外设编号
- * 
+ *
  * @note 用户需要在对应的UART中断服务函数中调用此函数
+ * @note 覆盖寄存器：UART_ISR（中断状态），UART_IE（中断使能），
+ *       UART_DR（接收数据读取），UART_FR（FIFO 状态）
  */
 void uart_irq_handler(uart_num_t uart)
 {
-    assert(uart < 8);
+    assert(uart < UART_INSTANCE_COUNT);
     
     UART_TypeDef *uart_base = uart_get_instance(uart);
     uint32_t isr = uart_base->ISR;
@@ -1054,6 +1092,7 @@ void uart_irq_handler(uart_num_t uart)
     
     if ((isr & UART_INT_TX) && (ie & UART_INT_TX)) {
         if (uart_callbacks[uart].tx_callback != NULL) {
+            /* TX 中断每次只触发一次（由 FIFO 阈值决定），无需循环保护 */
             uart_callbacks[uart].tx_callback(uart);
         }
         uart_base->ISR = UART_INT_TX;
@@ -1076,18 +1115,76 @@ void uart_irq_handler(uart_num_t uart)
     }
     
     if ((isr & UART_INT_TC) && (ie & UART_INT_TC)) {
+        if (uart_callbacks[uart].tc_callback != NULL) {
+            uart_callbacks[uart].tc_callback(uart);
+        }
         uart_base->ISR = UART_INT_TC;
     }
     
     if ((isr & UART_INT_LBD) && (ie & UART_INT_LBD)) {
+        if (uart_callbacks[uart].lbd_callback != NULL) {
+            uart_callbacks[uart].lbd_callback(uart);
+        }
         uart_base->ISR = UART_INT_LBD;
     }
     
     if ((isr & UART_INT_BCNT) && (ie & UART_INT_BCNT)) {
+        if (uart_callbacks[uart].bcnt_callback != NULL) {
+            uart_callbacks[uart].bcnt_callback(uart);
+        }
         uart_base->ISR = UART_INT_BCNT;
     }
     
     if ((isr & UART_INT_ABR) && (ie & UART_INT_ABR)) {
+        if (uart_callbacks[uart].abr_callback != NULL) {
+            uart_callbacks[uart].abr_callback(uart);
+        }
         uart_base->ISR = UART_INT_ABR;
     }
 }
+
+//===========================================
+// UART中断服务函数
+//===========================================
+
+/**
+ * @brief USART1中断服务函数
+ *
+ * @note 覆盖寄存器：无（委托给 uart_irq_handler）
+ */
+void USART1_IRQHandler(void) { uart_irq_handler(UART_1); }
+
+/**
+ * @brief USART2中断服务函数
+ */
+void USART2_IRQHandler(void) { uart_irq_handler(UART_2); }
+
+/**
+ * @brief USART3中断服务函数
+ */
+void USART3_IRQHandler(void) { uart_irq_handler(UART_3); }
+
+/**
+ * @brief USART4中断服务函数
+ */
+void USART4_IRQHandler(void) { uart_irq_handler(UART_4); }
+
+/**
+ * @brief USART5中断服务函数
+ */
+void USART5_IRQHandler(void) { uart_irq_handler(UART_5); }
+
+/**
+ * @brief USART6中断服务函数
+ */
+void USART6_IRQHandler(void) { uart_irq_handler(UART_6); }
+
+/**
+ * @brief USART7中断服务函数
+ */
+void USART7_IRQHandler(void) { uart_irq_handler(UART_7); }
+
+/**
+ * @brief USART8中断服务函数
+ */
+void USART8_IRQHandler(void) { uart_irq_handler(UART_8); }

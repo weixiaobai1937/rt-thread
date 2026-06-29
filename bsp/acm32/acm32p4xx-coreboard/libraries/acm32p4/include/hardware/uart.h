@@ -36,6 +36,13 @@ extern "C" {
 #include <stdbool.h>
 
 //===========================================
+// 宏定义
+//===========================================
+
+/** @brief UART外设实例总数 */
+#define UART_INSTANCE_COUNT 8U
+
+//===========================================
 // 类型定义
 //===========================================
 
@@ -293,12 +300,18 @@ typedef struct {
  * @brief UART接收回调函数类型
  * @param uart UART外设编号
  * @param data 接收的数据
+ *
+ * @note 对应中断：UART_INT_RX
  */
 typedef void (*uart_rx_callback_t)(uart_num_t uart, uint8_t data);
 
 /**
- * @brief UART发送完成回调函数类型
+ * @brief UART发送缓冲区空中断回调函数类型
  * @param uart UART外设编号
+ *
+ * @note TX 在数据从发送缓冲区移入移位寄存器时触发（FIFO 模式下按阈值触发），
+ *       与 TC 不同：TX 触发时移位寄存器可能仍在发送
+ * @note 对应中断：UART_INT_TX
  */
 typedef void (*uart_tx_callback_t)(uart_num_t uart);
 
@@ -306,14 +319,53 @@ typedef void (*uart_tx_callback_t)(uart_num_t uart);
  * @brief UART错误回调函数类型
  * @param uart UART外设编号
  * @param error 错误标志
+ *
+ * @note 对应中断：UART_INT_FE | UART_INT_PE | UART_INT_BE | UART_INT_OE
  */
 typedef void (*uart_error_callback_t)(uart_num_t uart, uart_error_t error);
 
 /**
  * @brief UART空闲回调函数类型
  * @param uart UART外设编号
+ *
+ * @note 对应中断：UART_INT_IDLE
  */
 typedef void (*uart_idle_callback_t)(uart_num_t uart);
+
+/**
+ * @brief UART发送完成（TC）回调函数类型
+ * @param uart UART外设编号
+ *
+ * @note TC（Transmit Complete）在移位寄存器发送完最后一帧数据后触发，
+ *       与 TX（发送缓冲区空）不同：TX 在数据从缓冲区移入移位寄存器时触发，
+ *       TC 在移位寄存器完全空闲时触发
+ * @note 对应中断：UART_INT_TC
+ */
+typedef void (*uart_tc_callback_t)(uart_num_t uart);
+
+/**
+ * @brief UART LIN Break检测回调函数类型
+ * @param uart UART外设编号
+ *
+ * @note 对应中断：UART_INT_LBD
+ */
+typedef void (*uart_lbd_callback_t)(uart_num_t uart);
+
+/**
+ * @brief UART比特计数超时回调函数类型
+ * @param uart UART外设编号
+ *
+ * @note 对应中断：UART_INT_BCNT
+ */
+typedef void (*uart_bcnt_callback_t)(uart_num_t uart);
+
+/**
+ * @brief UART波特率自适应完成回调函数类型
+ * @param uart UART外设编号
+ *
+ * @note 对应中断：UART_INT_ABR
+ */
+typedef void (*uart_abr_callback_t)(uart_num_t uart);
 
 //===========================================
 // 第1层：快速初始化API
@@ -727,6 +779,70 @@ void uart_register_error_callback(uart_num_t uart, uart_error_callback_t callbac
  * @note 覆盖寄存器：无（仅软件回调）
  */
 void uart_register_idle_callback(uart_num_t uart, uart_idle_callback_t callback);
+
+/**
+ * @brief 注册UART发送完成回调函数
+ * 
+ * @param uart UART外设编号
+ * @param callback 回调函数指针
+ * 
+ * @code
+ * void my_tc_handler(uart_num_t uart) {
+ *     // 处理发送完成事件
+ * }
+ * uart_register_tc_callback(UART1, my_tc_handler);
+ * @endcode
+ * @note 覆盖寄存器：无（仅软件回调）
+ */
+void uart_register_tc_callback(uart_num_t uart, uart_tc_callback_t callback);
+
+/**
+ * @brief 注册UART LIN Break检测回调函数
+ * 
+ * @param uart UART外设编号
+ * @param callback 回调函数指针
+ * 
+ * @code
+ * void my_lbd_handler(uart_num_t uart) {
+ *     // 处理LIN Break检测事件
+ * }
+ * uart_register_lbd_callback(UART1, my_lbd_handler);
+ * @endcode
+ * @note 覆盖寄存器：无（仅软件回调）
+ */
+void uart_register_lbd_callback(uart_num_t uart, uart_lbd_callback_t callback);
+
+/**
+ * @brief 注册UART比特计数超时回调函数
+ * 
+ * @param uart UART外设编号
+ * @param callback 回调函数指针
+ * 
+ * @code
+ * void my_bcnt_handler(uart_num_t uart) {
+ *     // 处理比特计数超时事件
+ * }
+ * uart_register_bcnt_callback(UART1, my_bcnt_handler);
+ * @endcode
+ * @note 覆盖寄存器：无（仅软件回调）
+ */
+void uart_register_bcnt_callback(uart_num_t uart, uart_bcnt_callback_t callback);
+
+/**
+ * @brief 注册UART波特率自适应完成回调函数
+ * 
+ * @param uart UART外设编号
+ * @param callback 回调函数指针
+ * 
+ * @code
+ * void my_abr_handler(uart_num_t uart) {
+ *     // 处理波特率自适应完成事件
+ * }
+ * uart_register_abr_callback(UART1, my_abr_handler);
+ * @endcode
+ * @note 覆盖寄存器：无（仅软件回调）
+ */
+void uart_register_abr_callback(uart_num_t uart, uart_abr_callback_t callback);
 
 //===========================================
 // 第4层：控制与查询API
@@ -1230,11 +1346,11 @@ uint32_t uart_get_base_address(uart_num_t uart);
  * @note 覆盖寄存器：ISR, DR, FR
  * 
  * @code
- * void UART1_IRQHandler(void)
- * {
- *     uart_irq_handler(UART_1);
- * }
- * // 还需：NVIC_EnableIRQ(UART1_IRQn);
+ * // ISR 已在驱动中定义，用户只需注册回调 + 使能 NVIC：
+ * uart_register_rx_callback(UART_1, my_rx_handler);
+ * uart_interrupt_enable(UART_1, UART_INT_RX);
+ * NVIC_SetPriority(USART1_IRQn, 2U);
+ * NVIC_EnableIRQ(USART1_IRQn);
  * @endcode
  */
 void uart_irq_handler(uart_num_t uart);
