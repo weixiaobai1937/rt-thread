@@ -112,14 +112,31 @@ static void uart_idle_cb(uart_num_t uart_num)
     if (uart == NULL)
         return;
 
-    /* 读取 IDLE 中断时残留在 FIFO 中的数据 */
-    while (!uart_is_rx_fifo_empty(uart->config->uart_num))
+    struct acm32_uart_config *c = uart->config;
+    uint32_t received = 0;
+
+    /* 计算 DMA 已接收的字节数（循环缓冲区：总大小 - 剩余传输次数） */
+    if (c->rx_dma_channel != DMA_CHANNEL_NONE)
+        received = uart->rx_dma_bufsz - dma_get_transfer_progress(c->dma_instance, c->rx_dma_channel);
+
+    /* 读取 IDLE 中断时残留在 FIFO 中的数据，补充到 DMA 缓冲区尾部 */
+    while (!uart_is_rx_fifo_empty(c->uart_num))
     {
-        /* 数据由 DMA 和 FIFO 共同处理，这里仅清空残留 */
-        uart_getc(uart->config->uart_num);
+        if (received < uart->rx_dma_bufsz)
+            uart->rx_dma_buf[received++] = uart_getc(c->uart_num);
+        else
+            (void)uart_getc(c->uart_num);  /* 缓冲区满，丢弃 */
     }
 
-    rt_hw_serial_isr(&uart->serial, RT_SERIAL_EVENT_RX_DMADONE);
+    /* 重新配置 DMA 接收（循环模式下需要重新启动） */
+    if (c->rx_dma_channel != DMA_CHANNEL_NONE)
+    {
+        dma_stop_channel(c->dma_instance, c->rx_dma_channel);
+        dma_start_channel(c->dma_instance, c->rx_dma_channel);
+    }
+
+    /* V2 框架通过事件高 8 位获取 rx_length，必须编码实际接收字节数 */
+    rt_hw_serial_isr(&uart->serial, RT_SERIAL_EVENT_RX_DMADONE | ((int)received << 8));
 }
 
 /* DMA TC 回调：DMA 传输完成 */
@@ -179,11 +196,13 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial, struct serial_c
     /* 保存配置镜像 */
     uart->shadow_config = *cfg;
 
-    /* 注册 SDK 回调 */
+    /* 注册 SDK 回调（一次性注册，transmit 时不再重复注册） */
     uart_register_rx_callback(c->uart_num, uart_rx_cb);
+    uart_register_tx_callback(c->uart_num, uart_tx_cb);
+    uart_register_tc_callback(c->uart_num, uart_tc_cb);
     uart_register_error_callback(c->uart_num, NULL);
 
-    /* 使能接收中断（RX 总是使能，TX 在 transmit 时按需使能） */
+    /* 使能接收中断（RX 总是使能，TX/TC 在 transmit 时按需使能） */
     uart->int_mask = UART_INT_RX;
     uart_interrupt_enable(c->uart_num, UART_INT_RX);
 
@@ -413,7 +432,7 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial, rt_uint8_t *bu
     }
 #endif /* RT_SERIAL_USING_DMA */
 
-    /* 中断发送模式 */
+    /* 中断发送模式（回调已在 _uart_configure 中注册） */
     uart->tx_buf  = buf;
     uart->tx_size = size;
     uart->tx_pos  = 0;
@@ -427,11 +446,7 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial, rt_uint8_t *bu
         uart->tx_pos++;
     }
 
-    /* 注册发送回调 */
-    uart_register_tx_callback(c->uart_num, uart_tx_cb);
-    uart_register_tc_callback(c->uart_num, uart_tc_cb);
-
-    /* 使能 TX 和 TC 中断 */
+    /* 使能 TX 和 TC 中断（回调已注册，直接使能中断即可） */
     uart_interrupt_enable(c->uart_num, UART_INT_TX | UART_INT_TC);
 
     return size;
