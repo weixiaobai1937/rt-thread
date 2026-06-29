@@ -8,6 +8,11 @@
 #ifdef RT_USING_SERIAL_V2
 
 #define UART_FIFO_DEPTH     16      /* ACM32P4 UART FIFO 深度 */
+#define UART_MAX_COUNT      8       /* UART1~UART8 = 8 个 UART */
+
+/* 自定义控制命令 */
+#define RT_DEVICE_CTRL_GET_UART_CONFIG  0x10
+#define UART_DMA_RX_BUF_SIZE            256     /* DMA 接收循环缓冲区大小 */
 
 /* ==================== 运行时结构体 ==================== */
 
@@ -168,7 +173,7 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial, struct serial_c
         /* 分配 DMA 接收缓冲区（使用静态分配的全局缓冲区避免依赖 heap） */
         if (uart->rx_dma_buf == NULL)
         {
-            static rt_uint8_t uart1_rx_dma_buf[RT_SERIAL_RB_BUFSZ] __attribute__((aligned(4)));
+            static rt_uint8_t uart1_rx_dma_buf[UART_DMA_RX_BUF_SIZE] __attribute__((aligned(4)));
             uart->rx_dma_buf = uart1_rx_dma_buf;
             uart->rx_dma_bufsz = sizeof(uart1_rx_dma_buf);
         }
