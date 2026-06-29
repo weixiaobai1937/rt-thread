@@ -62,7 +62,11 @@ static void uart_rx_cb(uart_num_t uart_num, uint8_t data)
     struct acm32_uart *uart = uart_num_to_obj(uart_num);
     if (uart == NULL)
         return;
-    (void)data;  /* 框架通过 _uart_getc 自己读 */
+
+    /* 将数据放入 V2 框架的 ringbuffer */
+    rt_hw_serial_control_isr(&uart->serial, RT_HW_SERIAL_CTRL_PUTC, &data);
+
+    /* 通知框架有新数据 */
     rt_hw_serial_isr(&uart->serial, RT_SERIAL_EVENT_RX_IND);
 }
 
