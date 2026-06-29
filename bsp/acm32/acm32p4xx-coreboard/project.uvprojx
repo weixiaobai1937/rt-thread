@@ -10,20 +10,20 @@
       <TargetName>ACM32P4XX</TargetName>
       <ToolsetNumber>0x4</ToolsetNumber>
       <ToolsetName>ARM-ADS</ToolsetName>
-      <pCCUsed>6140000::V6.14::ARMCLANG</pCCUsed>
+      <pCCUsed>6210000::V6.21::ARMCLANG</pCCUsed>
       <uAC6>1</uAC6>
       <TargetOption>
         <TargetCommonOption>
-          <Device>ARMCM33_DSP_FP</Device>
-          <Vendor>ARM</Vendor>
-          <PackID>ARM.CMSIS.5.7.0</PackID>
-          <PackURL>http://www.keil.com/pack/</PackURL>
-          <Cpu>IRAM(0x20000000,0x00020000) IROM(0x08002000,0x000FE000) CPUTYPE("Cortex-M33") FPU3(SFPU) DSP CLOCK(12000000) ESEL ELITTLE</Cpu>
+          <Device>ACM32P4XX</Device>
+          <Vendor>Aisinochip</Vendor>
+          <PackID>Aisinochip.ACM32P4XX.1.0.1</PackID>
+          <PackURL>https://www.Aisinochip.com/</PackURL>
+          <Cpu>IRAM(0x20000000,0x00020000) IROM(0x08002000,0x000FE000) CPUTYPE("Cortex-M33") FPU3(SFPU) DSP CDECP(0xFF) CLOCK(12000000) ELITTLE</Cpu>
           <FlashUtilSpec></FlashUtilSpec>
           <StartupFile></StartupFile>
-          <FlashDriverDll>UL2V8M(-S0 -C0 -P0 -FD20000000 -FC1000)</FlashDriverDll>
+          <FlashDriverDll>UL2V8M(-S0 -C0 -P0 -FD20010000 -FC10000 -FN1 -FF0ACM32P4_SPI_FLASH -FS08002000 -FL0FE000 -FP0($$Device:ACM32P4XX$Flash\ACM32P4_SPI_FLASH.FLM))</FlashDriverDll>
           <DeviceId>0</DeviceId>
-          <RegisterFile>$$Device:ARMCM33_DSP_FP$Device\ARM\ARMCM33\Include\ARMCM33_DSP_FP.h</RegisterFile>
+          <RegisterFile></RegisterFile>
           <MemoryEnv></MemoryEnv>
           <Cmp></Cmp>
           <Asm></Asm>
@@ -33,7 +33,7 @@
           <SLE66CMisc></SLE66CMisc>
           <SLE66AMisc></SLE66AMisc>
           <SLE66LinkerMisc></SLE66LinkerMisc>
-          <SFDFile></SFDFile>
+          <SFDFile>$$Device:ACM32P4XX$ACM32P4XX.svd</SFDFile>
           <bCustSvd>0</bCustSvd>
           <UseEnv>0</UseEnv>
           <BinPath></BinPath>
@@ -114,7 +114,7 @@
           <SimDlgDll></SimDlgDll>
           <SimDlgDllArguments></SimDlgDllArguments>
           <TargetDllName>SARMV8M.DLL</TargetDllName>
-          <TargetDllArguments> -MPU</TargetDllArguments>
+          <TargetDllArguments></TargetDllArguments>
           <TargetDlgDll>TCM.DLL</TargetDlgDll>
           <TargetDlgDllArguments>-pCM33</TargetDlgDllArguments>
         </DllOption>
@@ -138,7 +138,7 @@
           </Flash1>
           <bUseTDR>1</bUseTDR>
           <Flash2>BIN\UL2V8M.DLL</Flash2>
-          <Flash3>"" ()</Flash3>
+          <Flash3></Flash3>
           <Flash4></Flash4>
           <pFcarmOut></pFcarmOut>
           <pFcarmGrp></pFcarmGrp>
@@ -185,16 +185,17 @@
             <uocXRam>0</uocXRam>
             <RvdsVP>2</RvdsVP>
             <RvdsMve>0</RvdsMve>
-            <RvdsCdeCp>0</RvdsCdeCp>
+            <RvdsCdeCp>255</RvdsCdeCp>
+            <nBranchProt>0</nBranchProt>
             <hadIRAM2>0</hadIRAM2>
             <hadIROM2>0</hadIROM2>
             <StupSel>8</StupSel>
             <useUlib>1</useUlib>
-            <EndSel>1</EndSel>
+            <EndSel>0</EndSel>
             <uLtcg>0</uLtcg>
             <nSecure>0</nSecure>
             <RoSelD>3</RoSelD>
-            <RwSelD>4</RwSelD>
+            <RwSelD>3</RwSelD>
             <CodeSel>0</CodeSel>
             <OptFeed>0</OptFeed>
             <NoZi1>0</NoZi1>
@@ -250,8 +251,8 @@
               </IRAM>
               <IROM>
                 <Type>1</Type>
-                <StartAddress>0x08002000</StartAddress>
-                <Size>0xFE000</Size>
+                <StartAddress>0x8002000</StartAddress>
+                <Size>0xfe000</Size>
               </IROM>
               <XRAM>
                 <Type>0</Type>
@@ -275,8 +276,8 @@
               </OCR_RVCT3>
               <OCR_RVCT4>
                 <Type>1</Type>
-                <StartAddress>0x08002000</StartAddress>
-                <Size>0xFE000</Size>
+                <StartAddress>0x8002000</StartAddress>
+                <Size>0xfe000</Size>
               </OCR_RVCT4>
               <OCR_RVCT5>
                 <Type>1</Type>
@@ -322,7 +323,7 @@
             <PlainCh>0</PlainCh>
             <Ropi>0</Ropi>
             <Rwpi>0</Rwpi>
-            <wLevel>0</wLevel>
+            <wLevel>3</wLevel>
             <uThumb>0</uThumb>
             <uSurpInc>0</uSurpInc>
             <uC99>0</uC99>
@@ -339,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>SOC_ACM32P40N128CCT, RT_USING_SERIAL_V2, RT_USING_PIN, __MICROLIB, ARMCM33_DSP_FP</Define>
               <Undefine></Undefine>
-              <IncludePath>.\applications;.\drivers;.\libraries\acm32p4\include;.\libraries\acm32p4\include\device;.\libraries\acm32p4\include\hardware;..\..\..\include;..\..\..\libcpu\arm\cortex-m33</IncludePath>
+              <IncludePath>.\;.\applications;.\drivers;.\libraries\acm32p4\include;.\libraries\acm32p4\include\device;.\libraries\acm32p4\include\hardware;..\..\..\include;..\..\..\libcpu\arm\cortex-m33;..\..\..\libcpu\arm\common;..\..\..\components\finsh;..\..\..\components\drivers\include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -357,7 +358,7 @@
               <MiscControls></MiscControls>
               <Define>SOC_ACM32P40N128CCT, RT_USING_SERIAL_V2, RT_USING_PIN, __MICROLIB, ARMCM33_DSP_FP</Define>
               <Undefine></Undefine>
-              <IncludePath>.\applications;.\drivers;.\libraries\acm32p4\include;.\libraries\acm32p4\include\device;.\libraries\acm32p4\include\hardware;..\..\..\include;..\..\..\libcpu\arm\cortex-m33</IncludePath>
+              <IncludePath>.\;.\applications;.\drivers;.\libraries\acm32p4\include;.\libraries\acm32p4\include\device;.\libraries\acm32p4\include\hardware;..\..\..\include;..\..\..\libcpu\arm\cortex-m33;..\..\..\libcpu\arm\common;..\..\..\components\finsh;..\..\..\components\drivers\include</IncludePath>
             </VariousControls>
           </Aads>
           <LDads>
@@ -489,11 +490,6 @@
               <FilePath>.\libraries\acm32p4\src\i2c.c</FilePath>
             </File>
             <File>
-              <FileName>i2s.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\libraries\acm32p4\src\i2s.c</FilePath>
-            </File>
-            <File>
               <FileName>iwdt.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\libraries\acm32p4\src\iwdt.c</FilePath>
@@ -570,13 +566,23 @@
             </File>
           </Files>
         </Group>
+        <Group>
+          <GroupName>::CMSIS</GroupName>
+        </Group>
       </Groups>
     </Target>
   </Targets>
 
   <RTE>
     <apis/>
-    <components/>
+    <components>
+      <component Cclass="CMSIS" Cgroup="CORE" Cvendor="ARM" Cversion="6.2.0" condition="ARMv6_7_8-M Device">
+        <package name="CMSIS" schemaVersion="1.7.53" url="https://www.keil.com/pack/" vendor="ARM" version="6.3.0"/>
+        <targetInfos>
+          <targetInfo name="ACM32P4XX"/>
+        </targetInfos>
+      </component>
+    </components>
     <files/>
   </RTE>
 
