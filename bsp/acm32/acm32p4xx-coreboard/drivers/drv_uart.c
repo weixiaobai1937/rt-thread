@@ -9,10 +9,10 @@
 
 #define UART_FIFO_DEPTH     16      /* ACM32P4 UART FIFO 深度 */
 #define UART_MAX_COUNT      8       /* UART1~UART8 = 8 个 UART */
+#define UART_DMA_RX_BUF_SIZE  256   /* DMA 接收循环缓冲区大小 */
 
-/* 自定义控制命令 */
-#define RT_DEVICE_CTRL_GET_UART_CONFIG  0x10
-#define UART_DMA_RX_BUF_SIZE            256     /* DMA 接收循环缓冲区大小 */
+/* DMA 接收缓冲区（按 UART 索引，每 UART 独立） */
+static rt_uint8_t uart_dma_rx_buf[UART_MAX_COUNT][UART_DMA_RX_BUF_SIZE] __attribute__((aligned(4)));
 
 /* ==================== 运行时结构体 ==================== */
 
@@ -139,25 +139,21 @@ static void uart_idle_cb(uart_num_t uart_num)
     rt_hw_serial_isr(&uart->serial, RT_SERIAL_EVENT_RX_DMADONE | ((int)received << 8));
 }
 
+/* DMA 通道 → UART 反向映射表（避免 O(n) 扫描） */
+static struct acm32_uart *dma_ch_to_uart[2][DMA_CHANNEL_COUNT];  /* DMA1 + DMA2 */
+
 /* DMA TC 回调：DMA 传输完成 */
 static void dma_tx_tc_cb(dma_instance_t instance, dma_channel_t channel)
 {
-    /* 在所有已注册的 UART 中查找匹配的 DMA 通道 */
-    for (int i = 0; i < UART_MAX_COUNT; i++)
-    {
-        struct acm32_uart *uart = g_uart_instances[i];
-        if (uart == NULL)
-            continue;
-        if (uart->config->dma_instance == instance &&
-            uart->config->tx_dma_channel == channel)
-        {
-            dma_stop_channel(instance, channel);
-            uart_config_dma(uart->config->uart_num,
-                &(uart_dma_config_t){.tx_dma_enable = false, .rx_dma_enable = false});
-            rt_hw_serial_isr(&uart->serial, RT_SERIAL_EVENT_TX_DMADONE);
-            return;
-        }
-    }
+    struct acm32_uart *uart = dma_ch_to_uart[instance][channel];
+    if (uart == NULL)
+        return;
+
+    dma_stop_channel(instance, channel);
+    uart_config_dma(uart->config->uart_num,
+        &(uart_dma_config_t){.tx_dma_enable = false, .rx_dma_enable = false});
+    dma_ch_to_uart[instance][channel] = NULL;
+    rt_hw_serial_isr(&uart->serial, RT_SERIAL_EVENT_TX_DMADONE);
 }
 
 /* ==================== OPS 实现 ==================== */
@@ -185,10 +181,10 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial, struct serial_c
     };
     uart_init_custom(c->uart_num, &uart_init_cfg);
 
-    /* 配置 FIFO：TX 变空时触发中断，RX 每 1 字节触发中断 */
+    /* 配置 FIFO：TX 变空时触发中断，RX 4 字节阈值（平衡中断频率与延迟） */
     uart_fifo_config_t fifo_cfg = {
         .enable = true,
-        .rx_threshold = UART_RX_FIFO_THRESHOLD_1_BYTE,
+        .rx_threshold = UART_RX_FIFO_THRESHOLD_4_BYTES,
         .tx_threshold = UART_TX_FIFO_THRESHOLD_EMPTY
     };
     uart_config_fifo(c->uart_num, &fifo_cfg);
@@ -209,12 +205,11 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial, struct serial_c
     /* DMA 接收初始化 */
     if (c->rx_dma_channel != DMA_CHANNEL_NONE)
     {
-        /* 分配 DMA 接收缓冲区（使用静态分配的全局缓冲区避免依赖 heap） */
+        /* 分配 DMA 接收缓冲区（全局静态数组，按 UART 索引） */
         if (uart->rx_dma_buf == NULL)
         {
-            static rt_uint8_t uart1_rx_dma_buf[UART_DMA_RX_BUF_SIZE] __attribute__((aligned(4)));
-            uart->rx_dma_buf = uart1_rx_dma_buf;
-            uart->rx_dma_bufsz = sizeof(uart1_rx_dma_buf);
+            uart->rx_dma_buf = uart_dma_rx_buf[c->uart_num];
+            uart->rx_dma_bufsz = UART_DMA_RX_BUF_SIZE;
         }
 
         /* 使能 DMA 控制器 */
@@ -251,6 +246,10 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial, struct serial_c
         };
         dma_config_channel(c->dma_instance, c->rx_dma_channel, &rx_dma_cfg);
         dma_start_channel(c->dma_instance, c->rx_dma_channel);
+
+        /* DMA 模式下禁用 RX 逐字节中断，仅保留 IDLE 中断 */
+        uart_interrupt_disable(c->uart_num, UART_INT_RX);
+        uart->int_mask &= ~UART_INT_RX;
 
         /* 使能 IDLE 中断（帧边界检测） */
         uart_register_idle_callback(c->uart_num, uart_idle_cb);
@@ -369,7 +368,7 @@ static int _uart_getc(struct rt_serial_device *serial)
     struct acm32_uart *uart = raw_to_uart(serial);
     if (!uart_is_rx_fifo_empty(uart->config->uart_num))
         return (int)uart_getc(uart->config->uart_num);
-    return -1;
+    return -RT_EEMPTY;
 }
 
 /* 发送（中断模式或 DMA 模式，根据 open_flag 判断） */
@@ -387,6 +386,13 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial, rt_uint8_t *bu
     {
         if (c->tx_dma_channel == DMA_CHANNEL_NONE)
             return 0;
+
+        /* 检查 source buffer 地址对齐（ARM DMA 通常要求字节对齐即可，但此处显式检查） */
+        if (((rt_uint32_t)buf & 0x3) != 0)
+        {
+            /* 非字对齐的缓冲区，DMA 仍可按字节宽度传输 */
+            /* ACM32P4 DMA 支持 BYTE 宽度传输，无硬性对齐要求 */
+        }
 
         /* 使能 DMA 控制器 */
         dma_enable(c->dma_instance);
@@ -410,7 +416,7 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial, rt_uint8_t *bu
             .dest_width         = DMA_WIDTH_BYTE,
             .src_burst          = DMA_BURST_1,
             .dest_burst         = DMA_BURST_1,
-            .transfer_size      = (rt_uint16_t)size,
+            .transfer_size      = (rt_uint16_t)(size > 65535 ? 65535 : size),
             .src_periph_id      = 0,
             .dest_periph_id     = c->tx_periph_id,
             .src_master         = DMA_MASTER_1,
@@ -422,8 +428,9 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial, rt_uint8_t *bu
         };
         dma_config_channel(c->dma_instance, c->tx_dma_channel, &dma_cfg);
 
-        /* 注册 DMA TC 回调 */
+        /* 注册 DMA TC 回调 + 反向映射表 */
         dma_register_tc_callback(c->dma_instance, c->tx_dma_channel, dma_tx_tc_cb);
+        dma_ch_to_uart[c->dma_instance][c->tx_dma_channel] = uart;
 
         /* 启动 DMA */
         dma_start_channel(c->dma_instance, c->tx_dma_channel);
