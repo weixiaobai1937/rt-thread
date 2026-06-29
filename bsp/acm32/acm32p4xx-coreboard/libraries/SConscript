@@ -1,0 +1,26 @@
+import rtconfig
+Import('RTT_ROOT')
+from building import *
+
+cwd = GetCurrentDir()
+
+# ACM32P4 SDK source files
+src = Glob('acm32p4/src/*.c')
+src += ['acm32p4/startup/system_acm32p4xx.c']
+
+# Select startup file by compiler
+if rtconfig.PLATFORM in ['gcc']:
+    src += ['acm32p4/startup/startup_acm32p4xx_gcc.S']
+elif rtconfig.PLATFORM in ['armcc', 'armclang']:
+    src += ['acm32p4/startup/startup_acm32p4xx.s']
+elif rtconfig.PLATFORM in ['iccarm']:
+    src += ['acm32p4/startup/startup_acm32p4xx.s']
+
+path = [
+    cwd + '/acm32p4/include',
+    cwd + '/acm32p4/include/device',
+    cwd + '/acm32p4/include/hardware',
+]
+
+group = DefineGroup('ACM32P4_SDK', src, depend = [''], CPPPATH = path)
+Return('group')
