@@ -14,6 +14,7 @@
  * 8. LIN总线通信
  * 9. 多机通信（地址匹配）
  * 10. 波特率自适应
+ * 11. 中断模式发送
  */
 
 #include <string.h>
@@ -31,7 +32,7 @@
 
 #define printf(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 
-#define DEFAULT_SCENARIO 5
+#define DEFAULT_SCENARIO 11
 
 // UART1引脚配置
 // TX: PA9 (AF1)
@@ -45,11 +46,17 @@
 
 static volatile bool rx_complete = false;
 static volatile bool tx_complete = false;
+static volatile bool tc_complete = false;
 static volatile bool idle_detected = false;
 static volatile bool error_occurred = false;
 
 static uint8_t rx_buffer[256];
 static uint32_t rx_count = 0;
+
+/* 场景11中断发送用 */
+static volatile uint32_t tx_index = 0;
+static volatile uint32_t tx_total = 0;
+static const uint8_t *tx_buf_ptr = NULL;
 
 //===========================================
 // 辅助函数
@@ -105,8 +112,26 @@ void uart_rx_handler(uart_num_t uart, uint8_t data)
 
 void uart_tx_handler(uart_num_t uart)
 {
-    (void)uart;
+    /* 场景3/4：简单标记发送完成 */
     tx_complete = true;
+
+    /* 场景11：中断发送——FIFO 变空时触发，从 tx_buf_ptr 填充数据 */
+    if (tx_buf_ptr != NULL && tx_index < tx_total) {
+        /* 填充 FIFO 直到满或数据发完，最多填 16 字节（FIFO 深度） */
+        for (uint32_t i = 0; i < 16 && tx_index < tx_total; i++) {
+            if (uart_putc_try(uart, tx_buf_ptr[tx_index])) {
+                tx_index++;
+            } else {
+                break;  /* FIFO 满了，等下次中断 */
+            }
+        }
+    }
+}
+
+void uart_tc_handler(uart_num_t uart)
+{
+    (void)uart;
+    tc_complete = true;
 }
 
 void uart_error_handler(uart_num_t uart, uart_error_t error)
@@ -204,7 +229,8 @@ void scenario_2_fifo_mode(void)
         .word_length = UART_WORD_LENGTH_8BIT,
         .stop_bits = UART_STOP_BITS_1,
         .parity = UART_PARITY_NONE,
-        .endian = UART_ENDIAN_LSB_FIRST
+        .endian = UART_ENDIAN_LSB_FIRST,
+        .fifo_enable = false
     };
     uart_init_custom(UART_1, &config);
 
@@ -421,7 +447,7 @@ void scenario_5_dma_mode(void)
     }
 
     uint32_t uart_tx_addr = uart_get_base_address(UART_1);
-    printf("  UART TX寄存器地址: 0x%08X\n", uart_tx_addr);
+    printf("  UART TX寄存器地址: 0x%08X (UART DR 偏移为 0x00，基地址即 DR 地址)\n", uart_tx_addr);
     printf("  发送缓冲区地址: 0x%08X\n", (uint32_t)tx_buf);
     printf("  传输长度: %u 字节\n", sizeof(tx_buf));
 
@@ -800,6 +826,87 @@ void scenario_10_autobaud(void)
 }
 
 //===========================================
+// 场景11：中断模式发送
+//===========================================
+
+void scenario_11_interrupt_tx(void)
+{
+    print_separator();
+    printf("=== 场景11：中断模式发送 ===\n\n");
+
+    printf("步骤1：配置GPIO引脚\n");
+    uart1_gpio_init();
+
+    printf("\n步骤2：初始化UART_1（115200, 8N1）\n");
+    uart_init_default(UART_1, 115200);
+
+    printf("\n步骤3：配置FIFO\n");
+    uart_fifo_config_t fifo_config = {
+        .enable = true,
+        .rx_threshold = UART_RX_FIFO_THRESHOLD_8_BYTES,
+        .tx_threshold = UART_TX_FIFO_THRESHOLD_EMPTY   /* FIFO 变空时产生 TX 中断 */
+    };
+    uart_config_fifo(UART_1, &fifo_config);
+    printf("  TX FIFO阈值: 变空时触发中断\n");
+
+    printf("\n步骤4：注册发送回调和发送完成回调\n");
+    uart_register_tx_callback(UART_1, uart_tx_handler);
+    uart_register_tc_callback(UART_1, uart_tc_handler);
+
+    printf("\n步骤5：使能发送中断和发送完成中断\n");
+    uart_interrupt_enable(UART_1, UART_INT_TX | UART_INT_TC);
+    printf("  发送中断和发送完成中断已使能\n");
+
+    NVIC_SetPriority(UART1_IRQn, 2U);
+    NVIC_EnableIRQ(UART1_IRQn);
+
+    printf("\n步骤6：通过中断方式发送数据\n");
+    static const uint8_t tx_data[] =
+        "Interrupt TX test: 通过 TX 中断逐字节填充 FIFO，"
+        "TC 中断通知全部发送完成。\r\n";
+
+    printf("  数据长度: %u 字节\n", sizeof(tx_data) - 1);  /* 不含 \0 */
+    printf("  数据内容: %s", tx_data);
+
+    /* 重置发送状态 */
+    tx_complete = false;
+    tc_complete = false;
+    tx_index = 0;
+    tx_total = sizeof(tx_data) - 1;  /* 不含 \0 */
+    tx_buf_ptr = tx_data;
+
+    /* 填充第一批数据到 FIFO，触发后续 TX 中断 */
+    for (uint32_t i = 0; i < 16 && tx_index < tx_total; i++) {
+        if (uart_putc_try(UART_1, tx_data[tx_index])) {
+            tx_index++;
+        } else {
+            break;
+        }
+    }
+
+    printf("\n步骤7：等待发送完成（TX + TC）\n");
+    uint32_t timeout = 5000;
+    while (timeout-- && !tc_complete) {
+        delay_ms(1);
+    }
+
+    if (tc_complete) {
+        printf("  发送完成！所有 %u 字节已通过中断发送\n", tx_total);
+        printf("  TX 中断触发次数: 通过 FIFO 空阈值自动触发\n");
+        printf("  TC 中断: 移位寄存器完全空闲后触发\n");
+    } else {
+        printf("  发送超时！\n");
+    }
+
+    printf("\n步骤8：禁用中断\n");
+    uart_interrupt_disable(UART_1, UART_INT_TX | UART_INT_TC);
+    NVIC_DisableIRQ(UART1_IRQn);
+
+    printf("\n完成！\n");
+    print_separator();
+}
+
+//===========================================
 // 主函数
 //===========================================
 
@@ -824,6 +931,7 @@ int main(void)
         case 8:  scenario_8_lin_mode();         break;
         case 9:  scenario_9_multiprocessor();   break;
         case 10: scenario_10_autobaud();        break;
+        case 11: scenario_11_interrupt_tx();    break;
         default:
             printf("无效的场景编号！\n");
             break;
@@ -845,7 +953,17 @@ int main(void)
 // 中断服务函数
 //===========================================
 
-void UART1_IRQHandler(void)
-{
-    uart_irq_handler(UART_1);
-}
+/**
+ * @note UART 中断服务函数（USART1_IRQHandler ~ USART8_IRQHandler）
+ *       已在驱动文件 src/lib/acm32p4/src/uart.c 中定义，
+ *       各 ISR 内部调用 uart_irq_handler(UART_x)。
+ *       用户只需注册回调函数并使能 NVIC，无需自行编写 ISR。
+ *
+ * @code
+ * // 使用步骤：
+ * uart_register_rx_callback(UART_1, my_rx_handler);
+ * uart_interrupt_enable(UART_1, UART_INT_RX);
+ * NVIC_SetPriority(USART1_IRQn, 2U);
+ * NVIC_EnableIRQ(USART1_IRQn);
+ * @endcode
+ */

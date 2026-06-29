@@ -100,7 +100,7 @@ static void sdmmc_basic_init(void)
         .transfer_mode = SDMMC_TRANSFER_MODE_POLLING,
         .enable_ddr = false,
         .enable_hw_reset = false,
-        .irq_callback = on_irq_event,
+        .irq_cbs = NULL,
     };
     sdmmc_init(&cfg);
 }
@@ -160,7 +160,7 @@ static void scenario_2_card_detect(void)
 
     printf("\n步骤3：轮询卡状态（5 秒）\n");
     uint32_t start = system_get_tick();
-    while (system_elapsed(start) < 5000U) {
+    while (!system_elapsed(start, 5000U)) {
         if (sdmmc_is_card_inserted()) {
             printf("  卡已插入！\n");
             break;
@@ -424,13 +424,14 @@ static void scenario_8_sd_interrupt(void)
     printf("=== 场景8：SD 卡中断模式读写 ===\n\n");
 
     /* 使用中断模式的初始化 */
+    sdmmc_irq_callbacks_t cbs = {0};
     sdmmc_init_config_t cfg = {
         .clk_div = SDMMC_TEST_CLK_DIV,
         .bus_width = SDMMC_BUS_WIDTH_4BIT,
         .transfer_mode = SDMMC_TRANSFER_MODE_INTERRUPT,
         .enable_ddr = false,
         .enable_hw_reset = false,
-        .irq_callback = on_irq_event,
+        .irq_cbs = &cbs,
     };
     sdmmc_init(&cfg);
     sdmmc_send_init_sequence();
@@ -604,7 +605,7 @@ static void scenario_12_mmc(void)
 
     printf("\n步骤2：MMC 卡多块读写\n");
     uint32_t word_count = SDMMC_TEST_BLOCK_SIZE * 2U / 4U;
-    fill_test_pattern(s_test_buffer, word_count, 0xMMC00000U);
+    fill_test_pattern(s_test_buffer, word_count, 0xBEEF0000U);
     if (sdmmc_mmc_write_blocks(0U, s_test_buffer, 2U)) {
         printf("  结果: 写入成功\n");
     }
@@ -650,7 +651,7 @@ static void scenario_13_emmc_ddr(void)
     printf("  结果: 8 位总线已配置\n");
 
     printf("\n步骤4：DDR 8 位模式下读写测试\n");
-    fill_test_pattern(s_test_buffer, SDMMC_TEST_BLOCK_SIZE / 4U, 0xDDR80000U);
+    fill_test_pattern(s_test_buffer, SDMMC_TEST_BLOCK_SIZE / 4U, 0xD80D8000U);
     if (sdmmc_mmc_write_blocks(0U, s_test_buffer, 1U) &&
         sdmmc_mmc_read_blocks(0U, s_verify_buffer, 1U)) {
         if (verify_data(s_test_buffer, s_verify_buffer, SDMMC_TEST_BLOCK_SIZE / 4U)) {
@@ -744,13 +745,6 @@ int main(void)
 // 中断服务函数
 //===========================================
 
-void SDMMC_IRQHandler(void)
-{
-    sdmmc_irq_t irq = sdmmc_get_masked_irq_status();
-
-    if ((irq & SDMMC_IRQ_CDET) != 0U) {
-        s_card_inserted = sdmmc_is_card_inserted();
-    }
-
-    sdmmc_irq_clear(irq);
-}
+// 中断服务函数已在 sdmmc.c 中定义（SDMMC_IRQHandler），
+// 示例通过 sdmmc_irq_callbacks_t 注册各中断源的回调。
+// 无需在此重复定义 SDMMC_IRQHandler。

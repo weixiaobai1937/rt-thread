@@ -111,10 +111,10 @@ void WEAK SPI3_IRQHandler(void);
 void WEAK SPI4_IRQHandler(void);
 void WEAK I2S1_IRQHandler(void);
 void WEAK I2S2_IRQHandler(void);
-void WEAK UART1_IRQHandler(void);
-void WEAK UART2_IRQHandler(void);
-void WEAK UART3_IRQHandler(void);
-void WEAK UART4_IRQHandler(void);
+void WEAK USART1_IRQHandler(void);
+void WEAK USART2_IRQHandler(void);
+void WEAK USART3_IRQHandler(void);
+void WEAK USART4_IRQHandler(void);
 void WEAK EXTI15_10_IRQHandler(void);
 void WEAK LPUART1_IRQHandler(void);
 void WEAK LPUART2_IRQHandler(void);
@@ -124,10 +124,10 @@ void WEAK IWDT_WKUP_IRQHandler(void);
 void WEAK AES_SPI1_IRQHandler(void);
 void WEAK ETH_IRQHandler(void);
 void WEAK ETH_WKUP_IRQHandler(void);
-void WEAK UART5_IRQHandler(void);
-void WEAK UART6_IRQHandler(void);
-void WEAK UART7_IRQHandler(void);
-void WEAK UART8_IRQHandler(void);
+void WEAK USART5_IRQHandler(void);
+void WEAK USART6_IRQHandler(void);
+void WEAK USART7_IRQHandler(void);
+void WEAK USART8_IRQHandler(void);
 void WEAK TIM5_IRQHandler(void);
 void WEAK TIM9_IRQHandler(void);
 void WEAK TIM10_IRQHandler(void);
@@ -207,10 +207,10 @@ const uint32_t __Vectors[] = {
 (uint32_t)SPI4_IRQHandler,            /* 29: SPI4 */
     (uint32_t)I2S1_IRQHandler,             /* 30: I2S1 */
     (uint32_t)I2S2_IRQHandler,             /* 31: I2S2 */
-    (uint32_t)UART1_IRQHandler,            /* 32: UART1 */
-    (uint32_t)UART2_IRQHandler,            /* 33: UART2 */
-    (uint32_t)UART3_IRQHandler,            /* 34: UART3 */
-    (uint32_t)UART4_IRQHandler,            /* 35: UART4 */
+    (uint32_t)USART1_IRQHandler,            /* 32: USART1 */
+    (uint32_t)USART2_IRQHandler,            /* 33: USART2 */
+    (uint32_t)USART3_IRQHandler,            /* 34: USART3 */
+    (uint32_t)USART4_IRQHandler,            /* 35: USART4 */
     (uint32_t)EXTI15_10_IRQHandler,        /* 36: EXTI15-10 */
     0,                                     /* 37: Reserved */
     (uint32_t)LPUART1_IRQHandler,          /* 38: LPUART1 */
@@ -222,10 +222,10 @@ const uint32_t __Vectors[] = {
     (uint32_t)AES_SPI1_IRQHandler,         /* 44: AES/SPI1 */
     (uint32_t)ETH_IRQHandler,              /* 45: ETH */
     (uint32_t)ETH_WKUP_IRQHandler,         /* 46: ETH WKUP */
-    (uint32_t)UART5_IRQHandler,            /* 47: UART5 */
-    (uint32_t)UART6_IRQHandler,            /* 48: UART6 */
-    (uint32_t)UART7_IRQHandler,            /* 49: UART7 */
-    (uint32_t)UART8_IRQHandler,            /* 50: UART8 */
+    (uint32_t)USART5_IRQHandler,            /* 47: USART5 */
+    (uint32_t)USART6_IRQHandler,            /* 48: USART6 */
+    (uint32_t)USART7_IRQHandler,            /* 49: USART7 */
+    (uint32_t)USART8_IRQHandler,            /* 50: USART8 */
     (uint32_t)TIM5_IRQHandler,             /* 51: TIM5 */
     (uint32_t)TIM9_IRQHandler,             /* 52: TIM9 */
     (uint32_t)TIM10_IRQHandler,            /* 53: TIM10 */
@@ -318,10 +318,10 @@ void WEAK SPI3_IRQHandler(void)               { Default_Handler(); }
 void WEAK SPI4_IRQHandler(void)               { Default_Handler(); }
 void WEAK I2S1_IRQHandler(void)                { Default_Handler(); }
 void WEAK I2S2_IRQHandler(void)                { Default_Handler(); }
-void WEAK UART1_IRQHandler(void)               { Default_Handler(); }
-void WEAK UART2_IRQHandler(void)               { Default_Handler(); }
-void WEAK UART3_IRQHandler(void)               { Default_Handler(); }
-void WEAK UART4_IRQHandler(void)               { Default_Handler(); }
+void WEAK USART1_IRQHandler(void)               { Default_Handler(); }
+void WEAK USART2_IRQHandler(void)               { Default_Handler(); }
+void WEAK USART3_IRQHandler(void)               { Default_Handler(); }
+void WEAK USART4_IRQHandler(void)               { Default_Handler(); }
 void WEAK EXTI15_10_IRQHandler(void)           { Default_Handler(); }
 void WEAK LPUART1_IRQHandler(void)             { Default_Handler(); }
 void WEAK LPUART2_IRQHandler(void)             { Default_Handler(); }
@@ -331,10 +331,10 @@ void WEAK IWDT_WKUP_IRQHandler(void)           { Default_Handler(); }
 void WEAK AES_SPI1_IRQHandler(void)             { Default_Handler(); }
 void WEAK ETH_IRQHandler(void)                 { Default_Handler(); }
 void WEAK ETH_WKUP_IRQHandler(void)            { Default_Handler(); }
-void WEAK UART5_IRQHandler(void)               { Default_Handler(); }
-void WEAK UART6_IRQHandler(void)               { Default_Handler(); }
-void WEAK UART7_IRQHandler(void)               { Default_Handler(); }
-void WEAK UART8_IRQHandler(void)               { Default_Handler(); }
+void WEAK USART5_IRQHandler(void)               { Default_Handler(); }
+void WEAK USART6_IRQHandler(void)               { Default_Handler(); }
+void WEAK USART7_IRQHandler(void)               { Default_Handler(); }
+void WEAK USART8_IRQHandler(void)               { Default_Handler(); }
 void WEAK TIM5_IRQHandler(void)                { Default_Handler(); }
 void WEAK TIM9_IRQHandler(void)                { Default_Handler(); }
 void WEAK TIM10_IRQHandler(void)               { Default_Handler(); }
