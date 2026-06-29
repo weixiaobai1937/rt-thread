@@ -11,6 +11,9 @@
 #define UART_MAX_COUNT      8       /* UART1~UART8 = 8 个 UART */
 #define UART_DMA_RX_BUF_SIZE  256   /* DMA 接收循环缓冲区大小 */
 
+/* 自定义控制命令 */
+#define RT_DEVICE_CTRL_GET_UART_CONFIG  0x10
+
 /* DMA 接收缓冲区（按 UART 索引，每 UART 独立） */
 static rt_uint8_t uart_dma_rx_buf[UART_MAX_COUNT][UART_DMA_RX_BUF_SIZE] __attribute__((aligned(4)));
 
