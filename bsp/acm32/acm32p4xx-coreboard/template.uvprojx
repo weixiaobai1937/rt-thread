@@ -7,7 +7,7 @@
 
   <Targets>
     <Target>
-      <TargetName>ACM32F4XX</TargetName>
+      <TargetName>ACM32P4XX</TargetName>
       <ToolsetNumber>0x4</ToolsetNumber>
       <ToolsetName>ARM-ADS</ToolsetName>
       <pCCUsed>6210000::V6.21::ARMCLANG</pCCUsed>
@@ -49,7 +49,7 @@
             <InvalidFlash>1</InvalidFlash>
           </TargetStatus>
           <OutputDirectory>.\build\keil\</OutputDirectory>
-          <OutputName>ACM32F4XX</OutputName>
+          <OutputName>ACM32P4XX</OutputName>
           <CreateExecutable>1</CreateExecutable>
           <CreateLib>0</CreateLib>
           <CreateHexFile>1</CreateHexFile>
@@ -82,7 +82,7 @@
           <AfterMake>
             <RunUserProg1>1</RunUserProg1>
             <RunUserProg2>0</RunUserProg2>
-            <UserProg1Name>fromelf.exe --bin --output ./build/ACM32F4.bin ./build/ACM32F4.axf</UserProg1Name>
+            <UserProg1Name>fromelf.exe --bin --output ./build/ACM32P4XX.bin ./build/ACM32P4XX.axf</UserProg1Name>
             <UserProg2Name></UserProg2Name>
             <UserProg1Dos16Mode>0</UserProg1Dos16Mode>
             <UserProg2Dos16Mode>0</UserProg2Dos16Mode>
@@ -394,7 +394,7 @@
       <component Cclass="CMSIS" Cgroup="CORE" Cvendor="ARM" Cversion="6.2.0" condition="ARMv6_7_8-M Device">
         <package name="CMSIS" schemaVersion="1.7.53" url="https://www.keil.com/pack/" vendor="ARM" version="6.3.0"/>
         <targetInfos>
-          <targetInfo name="ACM32F4XX"/>
+          <targetInfo name="ACM32P4XX"/>
         </targetInfos>
       </component>
     </components>
