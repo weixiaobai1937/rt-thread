@@ -13,7 +13,11 @@ static rt_err_t _pin_irq_enable(struct rt_device *device, rt_base_t pin, rt_uint
 #define PIN2EXTILINE(pin)   ((pin) % 16)
 
 /* ==================== GPIO 端口 → EXTI 端口 ==================== */
-static exti_gpio_port_t _gpio_port_to_exti(gpio_pin_t pin)
+/*
+ * GPIO 端口 → EXTI 端口。
+ * 返回 -1 表示无效端口，由调用方检查。
+ */
+static int _gpio_port_to_exti(gpio_pin_t pin)
 {
     switch (GPIO_GET_PORT(pin))
     {
@@ -25,7 +29,7 @@ static exti_gpio_port_t _gpio_port_to_exti(gpio_pin_t pin)
         case 5: return EXTI_GPIO_PORTF;
         case 6: return EXTI_GPIO_PORTG;
         case 7: return EXTI_GPIO_PORTH;
-        default: return EXTI_GPIO_PORTA;
+        default: return -1;
     }
 }
 
@@ -37,6 +41,7 @@ struct pin_irq_map
 {
     rt_base_t           pin;        /* 绑定的引脚编号 (-1 = 空闲) */
     rt_uint8_t          mode;       /* PIN_IRQ_MODE_xxx */
+    rt_bool_t           configured; /* EXTI 已配置完成 */
     void              (*hdr)(void *args);
     void               *args;
 };
@@ -118,6 +123,12 @@ static rt_err_t _pin_attach_irq(struct rt_device *device, rt_base_t pin,
 {
     if (pin >= ACM32_PIN_MAX) return -RT_ENOSYS;
 
+    /* ACM32P4 EXTI 仅支持边沿触发，电平触发调用方自行通过轮询实现 */
+    if (mode != PIN_IRQ_MODE_RISING &&
+        mode != PIN_IRQ_MODE_FALLING &&
+        mode != PIN_IRQ_MODE_RISING_FALLING)
+        return -RT_EINVAL;
+
     rt_base_t level;
     rt_int32_t line = PIN2EXTILINE(pin);
 
@@ -160,14 +171,18 @@ static rt_err_t _pin_dettach_irq(struct rt_device *device, rt_base_t pin)
 
     _pin_irq_init();
 
-    /* 先禁用中断 */
-    _pin_irq_enable(device, pin, PIN_IRQ_DISABLE);
-
     level = rt_hw_interrupt_disable();
+
+    /* 先清除映射表（防止 ISR 在这之后仍调用用户回调），再禁用硬件中断 */
     pin_irq_map[line].pin  = -1;
     pin_irq_map[line].mode = 0;
     pin_irq_map[line].hdr  = RT_NULL;
     pin_irq_map[line].args = RT_NULL;
+
+    /* 禁用 EXTI 硬件中断（仍需在临界区内，防止 exti_disable 期间进 ISR） */
+    exti_disable((exti_line_t)line);
+    exti_remove_callback((exti_line_t)line);
+
     rt_hw_interrupt_enable(level);
 
     return RT_EOK;
@@ -186,6 +201,10 @@ static rt_err_t _pin_irq_enable(struct rt_device *device, rt_base_t pin, rt_uint
     {
         if (pin_irq_map[line].pin == -1)
             return -RT_ENOSYS;
+
+        /* 首次使能：配置 EXTI 硬件；重复调用跳过（避免 exti_gpio_init 副作用） */
+        if (pin_irq_map[line].configured)
+            return RT_EOK;
 
         /* 转换触发模式 */
         exti_trigger_t trigger;
@@ -207,11 +226,19 @@ static rt_err_t _pin_irq_enable(struct rt_device *device, rt_base_t pin, rt_uint
         level = rt_hw_interrupt_disable();
 
         /* 配置 EXTI: GPIO端口 + 引脚号 + 触发方式 */
-        exti_gpio_port_t port = _gpio_port_to_exti((gpio_pin_t)pin);
-        exti_gpio_init(port, line, trigger);
+        int port = _gpio_port_to_exti((gpio_pin_t)pin);
+        if (port < 0)
+        {
+            rt_hw_interrupt_enable(level);
+            return -RT_EINVAL;
+        }
+
+        exti_gpio_init((exti_gpio_port_t)port, line, trigger);
 
         /* 注册回调 */
         exti_set_callback((exti_line_t)line, _exti_callback);
+
+        pin_irq_map[line].configured = RT_TRUE;
 
         rt_hw_interrupt_enable(level);
     }
@@ -220,6 +247,7 @@ static rt_err_t _pin_irq_enable(struct rt_device *device, rt_base_t pin, rt_uint
         level = rt_hw_interrupt_disable();
         exti_disable((exti_line_t)line);
         exti_remove_callback((exti_line_t)line);
+        pin_irq_map[line].configured = RT_FALSE;
         rt_hw_interrupt_enable(level);
     }
     else
@@ -233,20 +261,32 @@ static rt_err_t _pin_irq_enable(struct rt_device *device, rt_base_t pin, rt_uint
 static rt_base_t _pin_get(const char *name)
 {
     rt_base_t pin = 0;
-    int port, pin_num;
-    rt_uint8_t hw_port_num;
+    int port, pin_num = 0;
+    int name_len = rt_strlen(name);
 
-    if (rt_strlen(name) < 4) return -RT_EINVAL;
-
-    /* 格式: "PX.NN" 例如 "PA.0", "PB.15", "PH.7" */
-    port    = name[1] - 'A';
-    pin_num = (name[3] - '0') * 10 + (name[4] - '0');
-
-    if (port < 0 || port > 7 || pin_num < 0 || pin_num > 15)
+    /* 格式: "PX.NN" 或 "PX.N"，例如 "PA.0", "PB.15", "PH.7" */
+    if (name_len < 4 || name_len > 5)
         return -RT_EINVAL;
 
-    pin = port * 16 + pin_num;
-    return pin;
+    if (name[0] != 'P' || name[2] != '.')
+        return -RT_EINVAL;
+
+    port = name[1] - 'A';
+    if (port < 0 || port > 7)
+        return -RT_EINVAL;
+
+    /* 从 name[3] 开始逐位解析引脚号（兼容单数字和双数字） */
+    for (int i = 3; i < name_len; i++)
+    {
+        if (name[i] < '0' || name[i] > '9')
+            return -RT_EINVAL;
+        pin_num = pin_num * 10 + (name[i] - '0');
+    }
+
+    if (pin_num < 0 || pin_num > 15)
+        return -RT_EINVAL;
+
+    return port * 16 + pin_num;
 }
 
 static const struct rt_pin_ops _acm32_pin_ops =
@@ -270,54 +310,35 @@ INIT_BOARD_EXPORT(rt_hw_pin_init);
 
 /* ==================== EXTI 中断服务函数 ==================== */
 
+/* EXTI 0~4 各独立中断线 */
+#define EXTI_ISR(line)                                                \
+    void EXTI##line##_IRQHandler(void)                                \
+    {                                                                 \
+        rt_interrupt_enter();                                         \
+        exti_clear_pending(EXTI_LINE_##line);                         \
+        exti_callback_t _cb = exti_get_callback(EXTI_LINE_##line);    \
+        if (_cb) _cb(EXTI_LINE_##line);                               \
+        rt_interrupt_leave();                                         \
+    }
+
 #if defined(EXTI0_IRQn)
-void EXTI0_IRQHandler(void)
-{
-    rt_interrupt_enter();
-    exti_clear_pending(EXTI_LINE_0);
-    exti_get_callback(EXTI_LINE_0)(EXTI_LINE_0);
-    rt_interrupt_leave();
-}
+EXTI_ISR(0)
 #endif
 
 #if defined(EXTI1_IRQn)
-void EXTI1_IRQHandler(void)
-{
-    rt_interrupt_enter();
-    exti_clear_pending(EXTI_LINE_1);
-    exti_get_callback(EXTI_LINE_1)(EXTI_LINE_1);
-    rt_interrupt_leave();
-}
+EXTI_ISR(1)
 #endif
 
 #if defined(EXTI2_IRQn)
-void EXTI2_IRQHandler(void)
-{
-    rt_interrupt_enter();
-    exti_clear_pending(EXTI_LINE_2);
-    exti_get_callback(EXTI_LINE_2)(EXTI_LINE_2);
-    rt_interrupt_leave();
-}
+EXTI_ISR(2)
 #endif
 
 #if defined(EXTI3_IRQn)
-void EXTI3_IRQHandler(void)
-{
-    rt_interrupt_enter();
-    exti_clear_pending(EXTI_LINE_3);
-    exti_get_callback(EXTI_LINE_3)(EXTI_LINE_3);
-    rt_interrupt_leave();
-}
+EXTI_ISR(3)
 #endif
 
 #if defined(EXTI4_IRQn)
-void EXTI4_IRQHandler(void)
-{
-    rt_interrupt_enter();
-    exti_clear_pending(EXTI_LINE_4);
-    exti_get_callback(EXTI_LINE_4)(EXTI_LINE_4);
-    rt_interrupt_leave();
-}
+EXTI_ISR(4)
 #endif
 
 #if defined(EXTI9_5_IRQn)
