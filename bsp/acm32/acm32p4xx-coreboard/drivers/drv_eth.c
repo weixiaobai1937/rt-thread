@@ -277,4 +277,178 @@ static struct pbuf *acm32_eth_rx(rt_device_t dev)
     return RT_NULL;
 }
 
+/**
+ * @brief PHY link status polling timer callback
+ *
+ * Runs every PHY_POLL_INTERVAL ms, checks BSR link status changes.
+ */
+static void phy_poll_link(void *parameter)
+{
+    struct acm32_eth *eth = (struct acm32_eth *)parameter;
+    rt_uint16_t bsr;
+    rt_uint8_t  new_status;
+
+    if (!eth_phy_read(PHY_ADDR, PHY_REG_BSR, &bsr)) {
+        return;  /* SMI read failed, keep current status */
+    }
+
+    new_status = (bsr & PHY_BSR_LINK_UP) ? 1 : 0;
+    if (new_status != eth->link_status) {
+        eth->link_status = new_status;
+        eth_device_linkchange(&eth->parent, new_status ? RT_TRUE : RT_FALSE);
+    }
+}
+
+/**
+ * @brief Wait for PHY auto-negotiation to complete and link up
+ * @param timeout_ms timeout in ms
+ * @return RT_TRUE if link established, RT_FALSE on timeout
+ */
+static rt_bool_t phy_wait_link_up(rt_uint32_t timeout_ms)
+{
+    rt_uint16_t bsr;
+    rt_tick_t   start = rt_tick_get();
+    rt_tick_t   timeout = rt_tick_from_millisecond(timeout_ms);
+
+    while (rt_tick_get() - start < timeout) {
+        if (eth_phy_read(PHY_ADDR, PHY_REG_BSR, &bsr)) {
+            if ((bsr & PHY_BSR_AN_COMPLETE) && (bsr & PHY_BSR_LINK_UP)) {
+                return RT_TRUE;
+            }
+        }
+        rt_thread_mdelay(10);
+    }
+    return RT_FALSE;
+}
+
+/**
+ * @brief ETH driver initialization entry (auto-called via INIT_DEVICE_EXPORT)
+ *
+ * Init sequence:
+ * 1. GPIO + PHY reset
+ * 2. Clock enable + RMII config
+ * 3. Descriptor chain init
+ * 4. eth_init() SDK one-shot init
+ * 5. PHY soft reset + auto-negotiation
+ * 6. Wait for link up
+ * 7. Configure MAC address
+ * 8. Enable MAC TX/RX + start DMA
+ * 9. Register interrupt callback (managed by SDK built-in ISR)
+ * 10. Register to RT-Thread eth_device framework
+ * 11. Start PHY link polling timer
+ */
+static int rt_hw_eth_init(void)
+{
+    rt_err_t     result;
+    rt_uint16_t  bcr;
+
+    /* 1. GPIO init */
+    gpio_init_eth_rmii();
+
+    /* 2. Clock init */
+    eth_clock_init();
+
+    /* 3. Descriptor chain init */
+    desc_init_tx();
+    desc_init_rx();
+
+    /* 4. SDK one-shot init */
+    eth_init_config_t eth_cfg = {
+        .phy_interface    = ETH_PHY_RMII,
+        .smi_clk_range    = ETH_SMI_CR_150_250MHZ,
+        .speed            = ETH_SPEED_100M,
+        .duplex           = ETH_DUPLEX_FULL,
+        .checksum_offload = ETH_CHECKSUM_NONE,
+        .tx_desc_base     = tx_desc,
+        .rx_desc_base     = rx_desc,
+        .tx_desc_count    = TX_DESC_COUNT,
+        .rx_desc_count    = RX_DESC_COUNT,
+        .enhanced_desc    = false,
+    };
+
+    if (!eth_init(&eth_cfg)) {
+        rt_kprintf("[eth] eth_init failed\n");
+        return -RT_ERROR;
+    }
+
+    /* 5. PHY soft reset + start auto-negotiation */
+    eth_phy_write(PHY_ADDR, PHY_REG_BCR, PHY_BCR_RESET);
+    /* Poll for reset completion (BCR bit15 self-clears) */
+    {
+        rt_tick_t rst_start = rt_tick_get();
+        do {
+            eth_phy_read(PHY_ADDR, PHY_REG_BCR, &bcr);
+        } while ((bcr & PHY_BCR_RESET)
+                 && (rt_tick_get() - rst_start < rt_tick_from_millisecond(100)));
+    }
+
+    eth_phy_write(PHY_ADDR, PHY_REG_BCR, PHY_BCR_AN_EN | PHY_BCR_AN_RESTART);
+
+    /* 6. Wait for link up */
+    if (!phy_wait_link_up(PHY_LINK_TIMEOUT)) {
+        rt_kprintf("[eth] PHY link timeout\n");
+        /* Do not return error: allow later link recovery */
+    }
+    eth_dev.link_status = 1;
+
+    /* 7. Configure MAC address (default 00:11:22:33:44:55) */
+    eth_dev.dev_addr[0] = 0x00;
+    eth_dev.dev_addr[1] = 0x11;
+    eth_dev.dev_addr[2] = 0x22;
+    eth_dev.dev_addr[3] = 0x33;
+    eth_dev.dev_addr[4] = 0x44;
+    eth_dev.dev_addr[5] = 0x55;
+
+    eth_mac_addr_config_t mac_cfg = {
+        .addr   = {
+            eth_dev.dev_addr[0], eth_dev.dev_addr[1], eth_dev.dev_addr[2],
+            eth_dev.dev_addr[3], eth_dev.dev_addr[4], eth_dev.dev_addr[5]
+        },
+        .enable = true,
+    };
+    eth_config_mac_addr(0, &mac_cfg);
+
+    /* 8. Enable MAC TX/RX + start DMA */
+    eth_mac_tx_enable();
+    eth_mac_rx_enable();
+    eth_start_tx();
+    eth_start_rx();
+
+    /* 9. ISR managed by SDK built-in handler (polling mode for now) */
+
+    /* 10. Register to RT-Thread eth_device framework */
+    eth_dev.parent.parent.init       = RT_NULL;
+    eth_dev.parent.parent.open       = RT_NULL;
+    eth_dev.parent.parent.close      = RT_NULL;
+    eth_dev.parent.parent.read       = RT_NULL;
+    eth_dev.parent.parent.write      = RT_NULL;
+    eth_dev.parent.parent.control    = RT_NULL;
+    eth_dev.parent.parent.user_data  = RT_NULL;
+    eth_dev.parent.eth_rx            = acm32_eth_rx;
+    eth_dev.parent.eth_tx            = acm32_eth_tx;
+
+    result = eth_device_init(&eth_dev.parent, "e0");
+    if (result != RT_EOK) {
+        rt_kprintf("[eth] eth_device_init failed: %d\n", result);
+        return result;
+    }
+
+    /* 11. Start PHY link polling timer */
+    rt_timer_init(&eth_dev.poll_link_timer, "eth_link",
+                  phy_poll_link, &eth_dev,
+                  rt_tick_from_millisecond(PHY_POLL_INTERVAL),
+                  RT_TIMER_FLAG_PERIODIC);
+    rt_timer_start(&eth_dev.poll_link_timer);
+
+    /* Notify framework device is ready */
+    eth_device_ready(&eth_dev.parent);
+
+    rt_kprintf("[eth] initialized, MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+               eth_dev.dev_addr[0], eth_dev.dev_addr[1], eth_dev.dev_addr[2],
+               eth_dev.dev_addr[3], eth_dev.dev_addr[4], eth_dev.dev_addr[5]);
+
+    return RT_EOK;
+}
+INIT_DEVICE_EXPORT(rt_hw_eth_init);
+
 #endif /* BSP_USING_ETH */
