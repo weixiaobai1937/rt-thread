@@ -37,6 +37,21 @@ menu "On-chip Peripheral Drivers"
         bool "Enable GPIO (PA-PB)"
         select RT_USING_PIN
         default y
+    config BSP_USING_ETH
+        bool "Enable ETH (RMII, LAN8720A)"
+        select RT_USING_LWIP
+        default n
+        if BSP_USING_ETH
+            config BSP_ETH_PHY_ADDR
+                int "PHY address (0-31)"
+                default 0
+            config BSP_ETH_RX_DESC_COUNT
+                int "RX descriptor count"
+                default 4
+            config BSP_ETH_TX_DESC_COUNT
+                int "TX descriptor count"
+                default 4
+        endif
 endmenu
 
 endmenu
