@@ -162,6 +162,22 @@ struct acm32_eth {
 static struct acm32_eth eth_dev;
 
 /**
+ * @brief Device control callback for eth_device framework
+ */
+static rt_err_t eth_control(rt_device_t dev, int cmd, void *args)
+{
+    struct acm32_eth *eth = (struct acm32_eth *)dev;
+
+    switch (cmd) {
+    case NIOCTL_GADDR:
+        rt_memcpy(args, eth->dev_addr, 6);
+        return RT_EOK;
+    default:
+        return -RT_EINVAL;
+    }
+}
+
+/**
  * @brief lwIP eth_tx interface: send pbuf to Ethernet
  *
  * 1. Get available TX descriptor
@@ -248,9 +264,12 @@ static struct pbuf *acm32_eth_rx(rt_device_t dev)
 
         /* Get frame length (excluding CRC) */
         frame_len = (rx_desc[idx].rdes0 & RDES0_FL_MSK) >> RDES0_FL_POS;
-        if (frame_len >= 4) {
-            frame_len -= 4;
+        if (frame_len < 14 || frame_len > ETH_FRAME_SIZE) {
+            /* Invalid length: return descriptor to DMA */
+            rx_desc[idx].rdes0 = RDES0_OWN;
+            continue;
         }
+        frame_len -= 4;  /* Remove CRC */
 
         /* Allocate pbuf */
         p = pbuf_alloc(PBUF_RAW, frame_len, PBUF_RAM);
@@ -385,11 +404,10 @@ static int rt_hw_eth_init(void)
     eth_phy_write(PHY_ADDR, PHY_REG_BCR, PHY_BCR_AN_EN | PHY_BCR_AN_RESTART);
 
     /* 6. Wait for link up */
-    if (!phy_wait_link_up(PHY_LINK_TIMEOUT)) {
+    eth_dev.link_status = phy_wait_link_up(PHY_LINK_TIMEOUT) ? 1 : 0;
+    if (!eth_dev.link_status) {
         rt_kprintf("[eth] PHY link timeout\n");
-        /* Do not return error: allow later link recovery */
     }
-    eth_dev.link_status = 1;
 
     /* 7. Configure MAC address (default 00:11:22:33:44:55) */
     eth_dev.dev_addr[0] = 0x00;
@@ -422,7 +440,7 @@ static int rt_hw_eth_init(void)
     eth_dev.parent.parent.close      = RT_NULL;
     eth_dev.parent.parent.read       = RT_NULL;
     eth_dev.parent.parent.write      = RT_NULL;
-    eth_dev.parent.parent.control    = RT_NULL;
+    eth_dev.parent.parent.control    = eth_control;
     eth_dev.parent.parent.user_data  = RT_NULL;
     eth_dev.parent.eth_rx            = acm32_eth_rx;
     eth_dev.parent.eth_tx            = acm32_eth_tx;
