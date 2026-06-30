@@ -71,3 +71,8 @@ vdso.lds
 
 # mac
 .DS_Store
+
+# local dev tooling
+.hooks/
+.omo/
+.superpowers/
