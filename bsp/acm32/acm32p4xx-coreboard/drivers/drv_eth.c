@@ -151,4 +151,130 @@ static rt_uint8_t get_next_rx_desc(void)
     return RX_DESC_COUNT;
 }
 
+/* ── Device structure (forward reference) ── */
+struct acm32_eth {
+    struct eth_device parent;
+    rt_uint8_t        dev_addr[6];
+    rt_uint8_t        link_status;
+    struct rt_timer   poll_link_timer;
+};
+
+static struct acm32_eth eth_dev;
+
+/**
+ * @brief lwIP eth_tx interface: send pbuf to Ethernet
+ *
+ * 1. Get available TX descriptor
+ * 2. Copy data from pbuf chain to TX buffer
+ * 3. Set descriptor control word and submit to DMA
+ * 4. Poll for completion (timeout 100ms)
+ *
+ * @param dev  rt_device_t device handle
+ * @param p    pbuf chain to send
+ * @return RT_EOK on success, RT_EBUSY if no descriptor, RT_ETIMEOUT on timeout
+ */
+static rt_err_t acm32_eth_tx(rt_device_t dev, struct pbuf *p)
+{
+    rt_uint8_t  idx;
+    rt_uint32_t total_len = 0;
+    rt_uint8_t *dst;
+
+    /* Get available descriptor */
+    idx = get_next_tx_desc();
+    if (idx >= TX_DESC_COUNT) {
+        return -RT_EBUSY;
+    }
+
+    /* Copy from pbuf chain */
+    dst = tx_buf[idx];
+    for (struct pbuf *q = p; q != RT_NULL; q = q->next) {
+        if (total_len + q->len > ETH_FRAME_SIZE) {
+            return -RT_ERROR;
+        }
+        rt_memcpy(dst + total_len, q->payload, q->len);
+        total_len += q->len;
+    }
+
+    /* Submit to DMA */
+    tx_desc[idx].tdes2 = (rt_uint32_t)dst;
+    tx_desc[idx].tdes1 = total_len;
+    tx_desc[idx].tdes0 = TDES0_OWN | TDES0_IC | TDES0_FS | TDES0_LS
+                       | (tx_desc[idx].tdes0 & (TDES0_TER | TDES0_TCH));
+
+    /* Wake TX DMA if suspended */
+    if (ETH->DMASR & (1UL << 1)) {
+        *((volatile rt_uint32_t *)&ETH->DMATPDR) = 1U;
+    }
+
+    /* Poll for completion (OWN cleared by ISR in interrupt mode) */
+    rt_tick_t timeout = rt_tick_from_millisecond(100);
+    rt_tick_t start   = rt_tick_get();
+    while (tx_desc[idx].tdes0 & TDES0_OWN) {
+        if (rt_tick_get() - start > timeout) {
+            return -RT_ETIMEOUT;
+        }
+    }
+
+    return RT_EOK;
+}
+
+/**
+ * @brief lwIP eth_rx interface: receive frame from Ethernet
+ *
+ * Iterate RX descriptor ring, read DMA-written frames and wrap in pbuf.
+ *
+ * @param dev rt_device_t device handle
+ * @return received pbuf, or NULL if no frame
+ */
+static struct pbuf *acm32_eth_rx(rt_device_t dev)
+{
+    rt_uint8_t    idx;
+    rt_uint32_t   frame_len;
+    struct pbuf  *p;
+
+    /* Iterate RX descriptor ring */
+    for (rt_uint8_t i = 0; i < RX_DESC_COUNT; i++) {
+        idx = get_next_rx_desc();
+        if (idx >= RX_DESC_COUNT) {
+            break;  /* No new frame */
+        }
+
+        /* Check error flag */
+        if (rx_desc[idx].rdes0 & RDES0_ES) {
+            /* Error frame: return descriptor to DMA */
+            rx_desc[idx].rdes0 = RDES0_OWN;
+            continue;
+        }
+
+        /* Get frame length (excluding CRC) */
+        frame_len = (rx_desc[idx].rdes0 & RDES0_FL_MSK) >> RDES0_FL_POS;
+        if (frame_len >= 4) {
+            frame_len -= 4;
+        }
+
+        /* Allocate pbuf */
+        p = pbuf_alloc(PBUF_RAW, frame_len, PBUF_RAM);
+        if (p == RT_NULL) {
+            /* Return descriptor, discard frame */
+            rx_desc[idx].rdes0 = RDES0_OWN;
+            continue;
+        }
+
+        /* Copy data */
+        pbuf_take(p, rx_buf[idx], frame_len);
+
+        /* Return descriptor to DMA */
+        rx_desc[idx].rdes0 = RDES0_OWN;
+
+        /* Wake RX DMA if suspended */
+        if (ETH->DMASR & ((1UL << 7) | (1UL << 8))) {
+            *((volatile rt_uint32_t *)&ETH->DMARPDR) = 1U;
+        }
+
+        return p;
+    }
+
+    return RT_NULL;
+}
+
 #endif /* BSP_USING_ETH */
