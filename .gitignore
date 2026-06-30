@@ -76,3 +76,11 @@ vdso.lds
 .hooks/
 .omo/
 .superpowers/
+
+# IDE user-specific
+project.uvguix.*
+project.uvoptx
+**/RTE/
+
+# agent instructions (per-user)
+AGENTS.md
