@@ -14,8 +14,14 @@
 /* 自定义控制命令 */
 #define RT_DEVICE_CTRL_GET_UART_CONFIG  0x10
 
-/* DMA 接收缓冲区（按 UART 索引，每 UART 独立） */
+/* DMA 接收缓冲区（按 UART 索引，每 UART 独立）。
+ * 仅当至少一个 BSP_USING_UARTx_DMA 启用时才分配，节省 RAM。 */
+#if defined(BSP_USING_UART1_DMA) || defined(BSP_USING_UART2_DMA) || \
+    defined(BSP_USING_UART3_DMA) || defined(BSP_USING_UART4_DMA) || \
+    defined(BSP_USING_UART5_DMA) || defined(BSP_USING_UART6_DMA) || \
+    defined(BSP_USING_UART7_DMA) || defined(BSP_USING_UART8_DMA)
 static rt_uint8_t uart_dma_rx_buf[UART_MAX_COUNT][UART_DMA_RX_BUF_SIZE] __attribute__((aligned(4)));
+#endif
 
 /* ==================== 运行时结构体 ==================== */
 
@@ -25,7 +31,7 @@ struct acm32_uart
     struct rt_serial_device     serial;
 
     /* 中断发送状态 */
-    const rt_uint8_t           *tx_buf;
+    volatile const rt_uint8_t    *tx_buf;
     rt_size_t                   tx_size;
     rt_size_t                   tx_pos;
 
@@ -118,7 +124,14 @@ static void uart_idle_cb(uart_num_t uart_num)
     struct acm32_uart_config *c = uart->config;
     uint32_t received = 0;
 
-    /* 计算 DMA 已接收的字节数（循环缓冲区：总大小 - 剩余传输次数） */
+    /*
+     * 计算 DMA 已接收的字节数。
+     * 前提：dma_get_transfer_progress 返回 DMA 控制器中剩余的传输次数
+     * （即 配置的 transfer_size - 已传输字节数）。
+     * 因此 已接收 = rx_dma_bufsz - dma_get_transfer_progress(...)。
+     * 注意：不同 DMA 控制器实现可能返回已传输字节数而非剩余字节数，
+     * 移植到其他平台时需要确认此 API 的返回语义。
+     */
     if (c->rx_dma_channel != DMA_CHANNEL_NONE)
         received = uart->rx_dma_bufsz - dma_get_transfer_progress(c->dma_instance, c->rx_dma_channel);
 
@@ -137,6 +150,13 @@ static void uart_idle_cb(uart_num_t uart_num)
         dma_stop_channel(c->dma_instance, c->rx_dma_channel);
         dma_start_channel(c->dma_instance, c->rx_dma_channel);
     }
+
+    /*
+     * 内存屏障：确保 ISR 中对 rx_dma_buf 的写入对后续 task context
+     * 中的读取可见。Cortex-M 默认无 Cache 时 __DSB() 为 nop，不增加开销；
+     * 开启 Cache 时保证写入已到达内存。
+     */
+    __DSB();
 
     /* V2 框架通过事件高 8 位获取 rx_length，必须编码实际接收字节数 */
     rt_hw_serial_isr(&uart->serial, RT_SERIAL_EVENT_RX_DMADONE | ((int)received << 8));
@@ -157,6 +177,19 @@ static void dma_tx_tc_cb(dma_instance_t instance, dma_channel_t channel)
         &(uart_dma_config_t){.tx_dma_enable = false, .rx_dma_enable = false});
     dma_ch_to_uart[instance][channel] = NULL;
     rt_hw_serial_isr(&uart->serial, RT_SERIAL_EVENT_TX_DMADONE);
+}
+
+/* 将 RT-Thread data_bits 映射为 SDK word_length */
+static uart_word_length_t cfg_to_word_length(int data_bits)
+{
+    switch (data_bits)
+    {
+    case DATA_BITS_5: return UART_WORD_LENGTH_5BIT;
+    case DATA_BITS_6: return UART_WORD_LENGTH_6BIT;
+    case DATA_BITS_7: return UART_WORD_LENGTH_7BIT;
+    case DATA_BITS_9: return UART_WORD_LENGTH_9BIT;
+    default:          return UART_WORD_LENGTH_8BIT;
+    }
 }
 
 /* ==================== OPS 实现 ==================== */
@@ -211,7 +244,12 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial, struct serial_c
         /* 分配 DMA 接收缓冲区（全局静态数组，按 UART 索引） */
         if (uart->rx_dma_buf == NULL)
         {
+#if defined(BSP_USING_UART1_DMA) || defined(BSP_USING_UART2_DMA) || \
+    defined(BSP_USING_UART3_DMA) || defined(BSP_USING_UART4_DMA) || \
+    defined(BSP_USING_UART5_DMA) || defined(BSP_USING_UART6_DMA) || \
+    defined(BSP_USING_UART7_DMA) || defined(BSP_USING_UART8_DMA)
             uart->rx_dma_buf = uart_dma_rx_buf[c->uart_num];
+#endif
             uart->rx_dma_bufsz = UART_DMA_RX_BUF_SIZE;
         }
 
@@ -302,12 +340,7 @@ static rt_err_t _uart_control(struct rt_serial_device *serial, int cmd, void *ar
 
         /* 逐项重配置 */
         uart_config_baudrate(c->uart_num, cfg->baud_rate);
-        uart_config_word_length(c->uart_num,
-            (cfg->data_bits == DATA_BITS_5) ? UART_WORD_LENGTH_5BIT :
-            (cfg->data_bits == DATA_BITS_6) ? UART_WORD_LENGTH_6BIT :
-            (cfg->data_bits == DATA_BITS_7) ? UART_WORD_LENGTH_7BIT :
-            (cfg->data_bits == DATA_BITS_9) ? UART_WORD_LENGTH_9BIT :
-            UART_WORD_LENGTH_8BIT);
+        uart_config_word_length(c->uart_num, cfg_to_word_length(cfg->data_bits));
 
         uart_config_stop_bits(c->uart_num,
             (cfg->stop_bits == STOP_BITS_2) ? UART_STOP_BITS_2 : UART_STOP_BITS_1);
@@ -323,6 +356,13 @@ static rt_err_t _uart_control(struct rt_serial_device *serial, int cmd, void *ar
         uart_enable(c->uart_num);
         uart_tx_enable(c->uart_num);
         uart_rx_enable(c->uart_num);
+
+        /* DMA 接收通道需要重新启动（重配置期间 UART 被禁用，DMA 通道可能停止） */
+        if (c->rx_dma_channel != DMA_CHANNEL_NONE)
+        {
+            dma_stop_channel(c->dma_instance, c->rx_dma_channel);
+            dma_start_channel(c->dma_instance, c->rx_dma_channel);
+        }
 
         /* 更新镜像 */
         uart->shadow_config = *cfg;
@@ -390,13 +430,6 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial, rt_uint8_t *bu
         if (c->tx_dma_channel == DMA_CHANNEL_NONE)
             return 0;
 
-        /* 检查 source buffer 地址对齐（ARM DMA 通常要求字节对齐即可，但此处显式检查） */
-        if (((rt_uint32_t)buf & 0x3) != 0)
-        {
-            /* 非字对齐的缓冲区，DMA 仍可按字节宽度传输 */
-            /* ACM32P4 DMA 支持 BYTE 宽度传输，无硬性对齐要求 */
-        }
-
         /* 使能 DMA 控制器 */
         dma_enable(c->dma_instance);
 
@@ -409,6 +442,7 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial, rt_uint8_t *bu
         uart_config_dma(c->uart_num, &uart_dma_cfg);
 
         /* 配置 DMA 通道 */
+        rt_uint16_t actual_size = (rt_uint16_t)(size > 65535 ? 65535 : size);
         dma_channel_config_t dma_cfg = {
             .direction          = DMA_MEM_TO_PERIPH,
             .src_address        = (rt_uint32_t)buf,
@@ -419,7 +453,7 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial, rt_uint8_t *bu
             .dest_width         = DMA_WIDTH_BYTE,
             .src_burst          = DMA_BURST_1,
             .dest_burst         = DMA_BURST_1,
-            .transfer_size      = (rt_uint16_t)(size > 65535 ? 65535 : size),
+            .transfer_size      = actual_size,
             .src_periph_id      = 0,
             .dest_periph_id     = c->tx_periph_id,
             .src_master         = DMA_MASTER_1,
@@ -438,7 +472,7 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial, rt_uint8_t *bu
         /* 启动 DMA */
         dma_start_channel(c->dma_instance, c->tx_dma_channel);
 
-        return size;
+        return actual_size;
     }
 #endif /* RT_SERIAL_USING_DMA */
 
@@ -496,7 +530,7 @@ static struct acm32_uart uart_obj[UART_MAX_INDEX] = {0};
 
 rt_err_t rt_hw_uart_init(void)
 {
-    rt_size_t n = sizeof(uart_obj) / sizeof(struct acm32_uart);
+    int n = sizeof(uart_obj) / sizeof(struct acm32_uart);
     struct serial_configure c = RT_SERIAL_CONFIG_DEFAULT;
 
     for (int i = 0; i < n; i++)
