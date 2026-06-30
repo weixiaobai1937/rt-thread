@@ -84,3 +84,6 @@ project.uvoptx
 
 # agent instructions (per-user)
 AGENTS.md
+
+# local docs/plans/specs
+docs/
