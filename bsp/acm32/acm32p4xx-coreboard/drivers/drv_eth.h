@@ -6,6 +6,7 @@
  * Change Logs:
  * Date           Author       Notes
  * 2026-06-30     ACM32        first version
+ * 2026-07-03     ACM32        adapt to new SDK eth.h API
  */
 
 #ifndef __DRV_ETH_H__
@@ -56,24 +57,12 @@
 #define PHY_BSR_AN_COMPLETE (1U << 5)
 #define PHY_BSR_LINK_UP     (1U << 2)
 
-/* DMA descriptor control bits */
-#define TDES0_OWN           (1UL << 31)
-#define TDES0_IC            (1UL << 30)
-#define TDES0_FS            (1UL << 28)
-#define TDES0_LS            (1UL << 29)
-#define TDES0_TER           (1UL << 21)
-#define TDES0_TCH           (1UL << 20)
+/* RX frame length sanity bounds (for driver-level check) */
+#define ETH_MIN_FRAME_LEN   14      /* Min valid frame: 6DA + 6SA + 2Type */
+#define ETH_MAX_FRAME_LEN   1518    /* Max standard frame with CRC */
 
-#define RDES0_OWN           (1UL << 31)
-#define RDES0_ES            (1UL << 15)
-#define RDES0_FL_POS        16
-#define RDES0_FL_MSK        (0x3FFFUL << 16)
-#define RDES1_RER           (1UL << 15)
-
-/* DMA status register bits */
-#define DMA_SR_NIS          (1UL << 16)
-#define DMA_SR_RI           (1UL << 6)
-#define DMA_SR_TI           (1UL << 0)
+/* TX completion poll timeout (ms) */
+#define ETH_TX_POLL_TIMEOUT 100
 
 #endif /* BSP_USING_ETH */
 
