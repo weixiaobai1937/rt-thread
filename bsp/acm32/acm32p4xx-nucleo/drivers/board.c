@@ -65,7 +65,13 @@ void rt_hw_board_init(void)
 
 #ifdef RT_USING_HEAP
 #if defined(__ARMCC_VERSION)
+#if defined(BSP_USING_ETH)
+    /* Reserve 0x20016800-0x2001FFFF for ETH DMA buffers (~39KB).
+     * ETH DMA can only access SRAM in 0x20010000-0x2001FFFF range. */
+    rt_system_heap_init((void *)&Image$$RW_IRAM1$$ZI$$Limit, (void *)0x20016800U);
+#else
     rt_system_heap_init((void *)&Image$$RW_IRAM1$$ZI$$Limit, (void *)SOC_SRAM_END_ADDR);
+#endif
 #elif __ICCARM__
     rt_system_heap_init(__segment_end("HEAP"), (void *)SOC_SRAM_END_ADDR);
 #else

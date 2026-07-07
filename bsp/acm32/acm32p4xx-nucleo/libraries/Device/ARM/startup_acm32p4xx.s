@@ -5,7 +5,7 @@
 ; * @date:    
 ; *
 ; *****************************************************************************/
-Stack_Size      EQU     0x00002000
+Stack_Size      EQU     0x00003000
 Heap_Size       EQU     0x00000000
 ;__initial_sp    EQU    0x20003000       ;Define SP size
 

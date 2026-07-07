@@ -41,6 +41,11 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         select RT_USING_SERIAL_V2
         default y
 
+    config BSP_USING_UART1_DMA
+        bool "Enable UART1 DMA (TX: DMA1_CH1, RX: DMA1_CH2)"
+        depends on BSP_USING_UART1
+        default n
+
     config BSP_USING_UART2
         bool "Enable UART2 (PD5/PD6)"
         select RT_USING_SERIAL_V2
@@ -90,6 +95,89 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         bool "Enable GPIO1"
         select RT_USING_PIN
         default y
+
+    config BSP_USING_ETH
+        bool "Enable Ethernet (LAN8720A, RMII)"
+        select RT_USING_ETH
+        select RT_USING_LWIP
+        select RT_LWIP_DHCP
+        default n
+        help
+            Enable ETH driver for ACM32P4xx-Nucleo.
+            PHY: LAN8720A, Interface: RMII, Pins: all AF6.
+            Enables lwIP protocol stack with DHCP.
+
+    config LWIP_SUPPORT_CUSTOM_PBUF
+        int
+        default 1 if BSP_USING_ETH
+
+    config BSP_ETH_STATIC_IP
+        bool "Use static IP address instead of DHCP"
+        depends on BSP_USING_ETH
+        default y
+        help
+            Set a static IP address at startup instead of relying on DHCP.
+            Useful when no DHCP server is available on the network.
+
+    config BSP_ETH_STATIC_IP0
+        int "Static IP byte 0"
+        depends on BSP_ETH_STATIC_IP
+        default 192
+
+    config BSP_ETH_STATIC_IP1
+        int "Static IP byte 1"
+        depends on BSP_ETH_STATIC_IP
+        default 168
+
+    config BSP_ETH_STATIC_IP2
+        int "Static IP byte 2"
+        depends on BSP_ETH_STATIC_IP
+        default 16
+
+    config BSP_ETH_STATIC_IP3
+        int "Static IP byte 3"
+        depends on BSP_ETH_STATIC_IP
+        default 50
+
+    config BSP_ETH_STATIC_GW0
+        int "Gateway byte 0"
+        depends on BSP_ETH_STATIC_IP
+        default 192
+
+    config BSP_ETH_STATIC_GW1
+        int "Gateway byte 1"
+        depends on BSP_ETH_STATIC_IP
+        default 168
+
+    config BSP_ETH_STATIC_GW2
+        int "Gateway byte 2"
+        depends on BSP_ETH_STATIC_IP
+        default 16
+
+    config BSP_ETH_STATIC_GW3
+        int "Gateway byte 3"
+        depends on BSP_ETH_STATIC_IP
+        default 100
+
+    config BSP_ETH_STATIC_NM0
+        int "Netmask byte 0"
+        depends on BSP_ETH_STATIC_IP
+        default 255
+
+    config BSP_ETH_STATIC_NM1
+        int "Netmask byte 1"
+        depends on BSP_ETH_STATIC_IP
+        default 255
+
+    config BSP_ETH_STATIC_NM2
+        int "Netmask byte 2"
+        depends on BSP_ETH_STATIC_IP
+        default 255
+
+    config BSP_ETH_STATIC_NM3
+        int "Netmask byte 3"
+        depends on BSP_ETH_STATIC_IP
+        default 0
 
 endmenu
 

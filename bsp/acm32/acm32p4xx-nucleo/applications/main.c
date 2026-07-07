@@ -24,11 +24,6 @@ int main(void)
 
     while (1)
     {
-        rt_pin_write(LED_PIN_NUM, PIN_LOW);
-        rt_kprintf("LED ON\n");
-        rt_thread_delay(RT_TICK_PER_SECOND / 2);
-        rt_pin_write(LED_PIN_NUM, PIN_HIGH);
-        rt_kprintf("LED OFF\n");
         rt_thread_delay(RT_TICK_PER_SECOND / 2);
     }
 }

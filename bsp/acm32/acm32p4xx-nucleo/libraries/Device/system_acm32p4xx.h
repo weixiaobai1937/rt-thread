@@ -92,5 +92,6 @@ extern volatile uint32_t SystemCoreClock; /*!< System Clock Frequency (Core Cloc
 void SystemInit(void);
 void SystemCoreClockUpdate(void);
 HAL_StatusTypeDef SystemClock_Config(uint32_t sysclkSel, uint32_t pclk1Div, uint32_t pclk2Div);
+HAL_StatusTypeDef System_Get_ChipSN(uint8_t *pSN);  
 
 #endif /* __SYSTEM_ACM32P4XX_H */

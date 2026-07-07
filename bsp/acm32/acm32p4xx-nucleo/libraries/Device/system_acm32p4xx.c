@@ -437,6 +437,44 @@ HAL_StatusTypeDef SystemClock_Config(uint32_t sysclkSel, uint32_t pclk1Div, uint
     return (HAL_OK);
 }
 
+
+/******************************************************************************
+*@brief : Get Chip SN.
+*@param : none.
+*@return: HAL_OK,HAL_ERROR
+******************************************************************************/
+HAL_StatusTypeDef System_Get_ChipSN(uint8_t *pSN)
+{
+    uint8_t buff[16];
+    
+    if (NULL == pSN)
+    {
+        return HAL_ERROR;   
+    }
+    
+    if(HAL_EFUSE_ReadBytes(EFUSE1, 0x40, buff, 13, 10000) != HAL_OK)
+    {
+        return HAL_ERROR;
+    }
+    
+    memcpy(pSN, buff, 13);
+    
+    if(HAL_EFUSE_ReadBytes(EFUSE1, 0x20, buff, 3, 10000) != HAL_OK) 
+    {       
+        return HAL_ERROR;
+    }
+    
+    memcpy(pSN + 13, buff, 3);  
+    
+    if (buff[0] != (uint8_t)(~buff[2]) ) 
+    {
+        return HAL_ERROR;  
+    }
+        
+    return HAL_OK;  
+}
+
+
 #ifdef DATA_IN_ExtSRAM
 
 __attribute__((weak)) void SystemInit_ExtMemCtl(void)

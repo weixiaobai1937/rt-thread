@@ -324,7 +324,7 @@ HAL_StatusTypeDef HAL_ETH_Init(ETH_HandleTypeDef *heth)
             return HAL_ERROR;
         }
     }
-    
+
     /*--------------- Delay Block of ETH RX Clock Configuration ----------------*/
     ETH_DelayBlockConfig(10, 15);
     //ETH_DelayBlockConfig(1, 5);
@@ -3126,8 +3126,8 @@ static uint32_t ETH_Prepare_Tx_Descriptors(ETH_HandleTypeDef *heth, const ETH_Tx
 
     descnbr += 1U;
 
-        /* Set header or buffer 1 address */
-        WRITE_REG(dmatxdesc->DESC2, (uint32_t)txbuffer->buffer);
+    /* Set header or buffer 1 address */
+    WRITE_REG(dmatxdesc->DESC2, (uint32_t)txbuffer->buffer);
 
     /* Set header or buffer 1 Length */
     MODIFY_REG(dmatxdesc->DESC1, ETH_DMATXDESC_TBS1, txbuffer->len);

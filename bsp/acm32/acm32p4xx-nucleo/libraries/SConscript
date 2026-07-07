@@ -19,6 +19,7 @@ HAL_Driver/Src/hal_usart.c
 HAL_Driver/Src/hal_lpuart.c
 HAL_Driver/Src/hal_pmu.c
 HAL_Driver/Src/hal_efuse.c
+HAL_Driver/Src/hal_eth.c
 """)
 
 if rtconfig.PLATFORM in ['gcc']:
@@ -31,6 +32,11 @@ elif rtconfig.PLATFORM in ['iccarm']:
 path = [cwd + '/HAL_Driver/Inc',
     cwd + '/Device',
     cwd + '/CMSIS']
+
+# add lwIP include path when ETH is enabled
+if GetDepend('BSP_USING_ETH'):
+    path += [RTT_ROOT + '/components/net/lwip/lwip-2.1.2/src/include',
+             RTT_ROOT + '/components/net/lwip/port']
 
 group = DefineGroup('ACM32_HAL', src, depend = [''], CPPPATH = path)
 

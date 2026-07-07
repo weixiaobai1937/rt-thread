@@ -92,7 +92,7 @@ LoopFillZerobss:
   /*  bl __libc_init_array */
   
 /* Call the applications entry point.*/
-    bl entry
+    bl main
   
 LoopForever:
     b LoopForever
