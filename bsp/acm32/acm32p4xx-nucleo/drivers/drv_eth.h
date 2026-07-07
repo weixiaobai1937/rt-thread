@@ -63,14 +63,15 @@ enum acm32_phy_link_state
     PHY_LINK_100M_FULL_DUPLEX,
 };
 
-///* ========== Constants for ETH driver ========== */
-//#define ETH_RX_BUFFER_SIZE          1600U
-//#define ETH_RX_BUFFER_CNT           24U
-//#define ETH_RX_BUF_ITEM_SIZE        ((ETH_RX_BUFFER_SIZE + 31) & ~31)
-//#define ETH_RX_POOL_SIZE            (ETH_RX_BUFFER_CNT * ETH_RX_BUF_ITEM_SIZE)
-//#define ETH_TX_DESC_CNT             8U
-//#define ETH_RX_DESC_CNT             4U
-//#define ETHIF_TX_TIMEOUT            2000U
+/* ========== Constants for ETH driver ========== */
+#define ETH_RX_BUFFER_SIZE          1600U
+#define ETH_RX_BUFFER_CNT           24U
+#define ETH_RX_BUF_ITEM_SIZE        ((ETH_RX_BUFFER_SIZE + 31) & ~31)
+#define ETH_RX_POOL_SIZE            (ETH_RX_BUFFER_CNT * ETH_RX_BUF_ITEM_SIZE)
+#undef ETH_TX_DESC_CNT
+#define ETH_TX_DESC_CNT             8U
+#define ETH_RX_DESC_CNT             4U
+#define ETHIF_TX_TIMEOUT            2000U
 
 #ifdef __cplusplus
 }

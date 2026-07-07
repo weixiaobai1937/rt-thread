@@ -66,8 +66,12 @@
 
 /* board configuration */
 
+#ifndef SOC_SRAM_START_ADDR
 #define SOC_SRAM_START_ADDR     (0x20000000)
+#endif
+#ifndef SOC_SRAM_SIZE
 #define SOC_SRAM_SIZE           (128)
+#endif
 
 void rt_hw_board_init(void);
 
