@@ -432,7 +432,7 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
         uart->dma_rx.Channel      = c->rx_dma_channel;
         uart->dma_rx.Init.Mode        = DMA_MODE_CIRCULAR;
         uart->dma_rx.Init.DataFlow    = DMA_DATAFLOW_P2M;
-        uart->dma_rx.Init.ReqID       = 0;
+        uart->dma_rx.Init.ReqID       = c->rx_dma_reqid;
         uart->dma_rx.Init.SrcIncDec   = DMA_SRCINCDEC_DISABLE;
         uart->dma_rx.Init.DestIncDec  = DMA_DESTINCDEC_INC;
         uart->dma_rx.Init.SrcWidth    = DMA_SRCWIDTH_BYTE;
@@ -560,7 +560,7 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial,
         uart->dma_tx.Channel      = c->tx_dma_channel;
         uart->dma_tx.Init.Mode        = DMA_MODE_NORMAL;
         uart->dma_tx.Init.DataFlow    = DMA_DATAFLOW_M2P;
-        uart->dma_tx.Init.ReqID       = 0;
+        uart->dma_tx.Init.ReqID       = c->tx_dma_reqid;
         uart->dma_tx.Init.SrcIncDec   = DMA_SRCINCDEC_INC;
         uart->dma_tx.Init.DestIncDec  = DMA_DESTINCDEC_DISABLE;
         uart->dma_tx.Init.SrcWidth    = DMA_SRCWIDTH_BYTE;
