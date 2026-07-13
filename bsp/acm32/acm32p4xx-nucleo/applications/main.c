@@ -25,6 +25,10 @@ int uart2_echo_test(void)
         rt_kprintf("uart2 not found\n");
         return -1;
     }
+    else
+    {
+        rt_kprintf("uart2 found\n");
+    }
 
     rt_err_t ret = rt_device_open(dev, RT_DEVICE_OFLAG_RDWR | RT_DEVICE_FLAG_DMA_RX);
     if (ret != RT_EOK)
@@ -32,8 +36,13 @@ int uart2_echo_test(void)
         rt_kprintf("uart2 open failed: %d\n", ret);
         return -1;
     }
+    else {
+        rt_kprintf("uart2 open success\n");
+    }
 
     rt_uint8_t buf[512];
+
+    rt_kprintf("UART2 DMA echo test: receive and send back\n");
 
     while (1)
     {

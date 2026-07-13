@@ -52,6 +52,7 @@ struct acm32_uart
     rt_uint32_t                 int_mask;
 
     /* DMA 接收缓冲区 */
+    rt_uint8_t                  *rx_dma_ping_buf;
     rt_uint16_t                 rx_dma_bufsz;
     rt_uint16_t                 rx_dma_last_pos;
 
@@ -409,7 +410,7 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
         uart_reg_ie(inst, type) | _BIT(type, U_IE_RXI, L_IE_RXI));
 
     /* ---- DMA 接收初始化 ---- */
-    if ((serial->serial_rx != RT_NULL) && c->rx_dma_instance != UART_DMA_NONE)
+    if ((serial->parent.open_flag & RT_DEVICE_FLAG_DMA_RX) && c->rx_dma_instance != UART_DMA_NONE)
     {
 #ifdef HAL_DMA_MODULE_ENABLED
         /* 使能 DMA 控制器时钟 */
@@ -450,6 +451,7 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
         uart->dma_rx.XferHalfCpltCallback = _dma_rx_half_cplt;
         uart->dma_rx.XferCpltCallback     = _dma_rx_cplt;
         uart->dma_rx.XferErrorCallback    = _dma_rx_err;
+        uart->rx_dma_ping_buf = rx_dma_buf;
         uart->rx_dma_bufsz = rx_dma_bufsz;
         uart->rx_dma_last_pos = 0;
         HAL_DMA_Start_IT(&uart->dma_rx,
@@ -708,6 +710,19 @@ static void uart_isr(struct acm32_uart *uart)
 
             __DSB();
 
+            /* FIFO 残留排空 */
+            if (uart->rx_dma_ping_buf)
+            {
+                rt_uint32_t rxfe = _BIT(type, U_FR_RXFE, L_FR_RXFE);
+                while (!(uart_reg_fr(inst, type) & rxfe))
+                {
+                    if (cur_pos < uart->rx_dma_bufsz)
+                        uart->rx_dma_ping_buf[cur_pos++] = uart_reg_dr_read(inst, type);
+                    else
+                        (void)uart_reg_dr_read(inst, type);
+                }
+            }
+
             if (cur_pos != uart->rx_dma_last_pos)
             {
                 rt_uint16_t tail;
@@ -731,7 +746,7 @@ static void uart_isr(struct acm32_uart *uart)
 static void _dma_rx_half_cplt(DMA_HandleTypeDef *hdma)
 {
     struct acm32_uart *uart = (struct acm32_uart *)hdma->Parent;
-    rt_uint16_t half = 256; /* dma_ping_bufsz/2 */
+    rt_uint16_t half = uart->rx_dma_bufsz / 2;
 
     rt_hw_serial_isr(&uart->serial,
         RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)half << 8));
@@ -741,7 +756,7 @@ static void _dma_rx_half_cplt(DMA_HandleTypeDef *hdma)
 static void _dma_rx_cplt(DMA_HandleTypeDef *hdma)
 {
     struct acm32_uart *uart = (struct acm32_uart *)hdma->Parent;
-    rt_uint16_t half = 256;
+    rt_uint16_t half = uart->rx_dma_bufsz / 2;
 
     rt_hw_serial_isr(&uart->serial,
         RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)half << 8));
@@ -757,7 +772,7 @@ static void _dma_rx_err(DMA_HandleTypeDef *hdma)
         &((LPUART_TypeDef *)uart->config->Instance)->RXDR);
 
     HAL_DMA_Start_IT(&uart->dma_rx, src,
-        hdma->Instance->CXDESTADDR,
+        (rt_uint32_t)uart->rx_dma_ping_buf,
         uart->rx_dma_bufsz);
     uart->rx_dma_last_pos = 0;
 }
@@ -935,7 +950,6 @@ UART_IRQ_HANDLER(LPUART2, &uart_obj[LPUART2_INDEX])
                 (1UL << uart_obj[__i].dma_rx.Channel))  \
             {                                           \
                 HAL_DMA_IRQHandler(&uart_obj[__i].dma_rx);\
-                break;                                  \
             }                                           \
         }                                               \
         rt_interrupt_leave();                           \
@@ -965,7 +979,6 @@ DMA_RX_IRQ_HANDLER(DMA2_CH2)
                 (1UL << uart_obj[__i].dma_tx.Channel))  \
             {                                           \
                 HAL_DMA_IRQHandler(&uart_obj[__i].dma_tx);\
-                break;                                  \
             }                                           \
         }                                               \
         rt_interrupt_leave();                           \
