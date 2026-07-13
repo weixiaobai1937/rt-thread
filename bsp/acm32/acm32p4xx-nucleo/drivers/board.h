@@ -31,7 +31,7 @@
     #define BSP_UART2_PORT          GPIOD
     #define BSP_UART2_PIN_TX        GPIO_PIN_5
     #define BSP_UART2_PIN_RX        GPIO_PIN_6
-    #define BSP_UART2_AF            GPIO_FUNCTION_1
+    #define BSP_UART2_AF            GPIO_FUNCTION_3
 #endif
 
 #if defined(BSP_USING_UART3)
@@ -45,7 +45,7 @@
     #define BSP_UART4_PORT          GPIOC
     #define BSP_UART4_PIN_TX        GPIO_PIN_10
     #define BSP_UART4_PIN_RX        GPIO_PIN_11
-    #define BSP_UART4_AF            GPIO_FUNCTION_1
+    #define BSP_UART4_AF            GPIO_FUNCTION_4
 #endif
 
 #if defined(BSP_USING_LPUART1)
