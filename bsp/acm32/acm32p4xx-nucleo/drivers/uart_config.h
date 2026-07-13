@@ -25,9 +25,6 @@ extern "C" {
 #define UART_DMA_CH_NONE   ((uint32_t)0xFF)
 #define UART_DMA_REQ_NONE  ((uint32_t)0xFF)
 
-/* DMA 接收循环缓冲区大小 */
-#define UART_DMA_RX_BUF_SIZE  256
-
 struct acm32_uart_config
 {
     const char          *name;
@@ -82,7 +79,7 @@ struct acm32_uart_config
 #define UART2_CONFIG \
     { .name = "uart2", .uart_type = 0, .Instance = USART2, .irq_type = USART2_IRQn, \
       .tx_dma_instance = DMA1_Channel3, .tx_dma_channel = 3, .tx_dma_irq = DMA1_CH3_IRQn, .tx_dma_reqid = DMA1_REQ_USART2_TX, \
-      .rx_dma_instance = DMA1_Channel4, .rx_dma_channel = 4, .rx_dma_irq = DMA1_CH4_IRQn, .rx_dma_reqid = DMA1_REQ_USART2_RX }
+      .rx_dma_instance = DMA2_Channel0, .rx_dma_channel = 0, .rx_dma_irq = DMA2_CH0_IRQn, .rx_dma_reqid = DMA2_REQ_USART2_RX }
 #endif
 #endif
 
@@ -96,8 +93,8 @@ struct acm32_uart_config
 #else
 #define UART3_CONFIG \
     { .name = "uart3", .uart_type = 0, .Instance = USART3, .irq_type = USART3_IRQn, \
-      .tx_dma_instance = DMA1_Channel5, .tx_dma_channel = 5, .tx_dma_irq = DMA1_CH5_IRQn, .tx_dma_reqid = DMA1_REQ_USART3_TX, \
-      .rx_dma_instance = DMA1_Channel6, .rx_dma_channel = 6, .rx_dma_irq = DMA1_CH6_IRQn, .rx_dma_reqid = DMA1_REQ_USART3_RX }
+      .tx_dma_instance = DMA2_Channel2, .tx_dma_channel = 2, .tx_dma_irq = DMA2_CH2_IRQn, .tx_dma_reqid = DMA2_REQ_USART3_TX, \
+      .rx_dma_instance = DMA2_Channel3, .rx_dma_channel = 3, .rx_dma_irq = DMA2_CH3_IRQn, .rx_dma_reqid = DMA2_REQ_USART3_RX }
 #endif
 #endif
 
@@ -111,8 +108,8 @@ struct acm32_uart_config
 #else
 #define UART4_CONFIG \
     { .name = "uart4", .uart_type = 0, .Instance = USART4, .irq_type = USART4_IRQn, \
-      .tx_dma_instance = DMA1_Channel7, .tx_dma_channel = 7, .tx_dma_irq = DMA1_CH7_IRQn, .tx_dma_reqid = DMA1_REQ_USART4_TX, \
-      .rx_dma_instance = DMA2_Channel1, .rx_dma_channel = 1, .rx_dma_irq = DMA2_CH1_IRQn, .rx_dma_reqid = DMA2_REQ_USART4_RX }
+      .tx_dma_instance = DMA2_Channel1, .tx_dma_channel = 1, .tx_dma_irq = DMA2_CH1_IRQn, .tx_dma_reqid = DMA2_REQ_USART4_TX, \
+      .rx_dma_instance = DMA2_Channel2, .rx_dma_channel = 2, .rx_dma_irq = DMA2_CH2_IRQn, .rx_dma_reqid = DMA2_REQ_USART4_RX }
 #endif
 #endif
 
