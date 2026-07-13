@@ -191,6 +191,10 @@ rt_inline rt_uint32_t uart_reg_isr(void *inst, int type)
 #define _BIT(type, usart_bit, lpuart_bit) \
     ((type) == UART_TYPE_USART ? (usart_bit) : (lpuart_bit))
 
+/* 错误位掩码（USART ISR / LPUART SR） */
+#define U_ERR_MASK   (USART_ISR_OEI | USART_ISR_BEI | USART_ISR_PEI | USART_ISR_FEI)
+#define L_ERR_MASK   (LPUART_SR_RXOVIF | LPUART_SR_FEIF | LPUART_SR_PEIF)
+
 /* ==================== 引脚映射表（MspInit 驱动） ==================== */
 
 typedef struct {
@@ -201,8 +205,10 @@ typedef struct {
 } uart_pin_t;
 
 static const uart_pin_t g_pin_map[] = {
+#ifdef BSP_USING_UART1
     /* USART1: PA9(TX) PA10(RX) AF1 */
     { USART1, GPIOA, GPIO_PIN_9,  GPIOA, GPIO_PIN_10, GPIO_FUNCTION_1 },
+#endif
 #ifdef BSP_USING_UART2
     /* USART2: PD5(TX) PD6(RX) AF3 */
     { USART2, GPIOD, GPIO_PIN_5,  GPIOD, GPIO_PIN_6,  GPIO_FUNCTION_3 },
@@ -378,7 +384,8 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
     {
         uart->handle.lpuart.Instance          = (LPUART_TypeDef *)inst;
         uart->handle.lpuart.Init.BaudRate     = cfg->baud_rate;
-        uart->handle.lpuart.Init.WordLength   = LPUART_WORDLENGTH_8B;
+        uart->handle.lpuart.Init.WordLength   =
+            (cfg->data_bits == DATA_BITS_9) ? LPUART_WORDLENGTH_9B : LPUART_WORDLENGTH_8B;
         uart->handle.lpuart.Init.StopBits     =
             (cfg->stop_bits == STOP_BITS_2) ? LPUART_STOPBITS_2B : LPUART_STOPBITS_1B;
         uart->handle.lpuart.Init.Parity       = LPUART_PARITY_NONE;
@@ -422,6 +429,8 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
         /* 使能 UART DMA 接收 */
         if (type == UART_TYPE_USART)
             SET_BIT(((USART_TypeDef *)inst)->CR1, USART_CR1_RXDMAE);
+        else
+            SET_BIT(((LPUART_TypeDef *)inst)->CR, LPUART_CR_DMA_EN);
 
         /* 从 V2 框架获取 dma_ping_rb 缓冲区 */
         rt_uint8_t *rx_dma_buf = NULL;
@@ -512,6 +521,31 @@ static rt_err_t _uart_control(struct rt_serial_device *serial,
             NVIC_EnableIRQ(c->irq_type);
         }
         break;
+
+    case RT_DEVICE_CTRL_CLOSE:
+        if (uart->int_mask)
+        {
+            uart_reg_ie_set(inst, type,
+                uart_reg_ie(inst, type) & ~uart->int_mask);
+            NVIC_DisableIRQ(c->irq_type);
+            uart->int_mask = 0;
+        }
+#ifdef HAL_DMA_MODULE_ENABLED
+        if (uart->dma_rx.Instance)
+        {
+            HAL_DMA_Abort(&uart->dma_rx);
+            uart->dma_rx.Instance = NULL;
+            uart->rx_dma_ping_buf = NULL;
+            uart->rx_dma_bufsz = 0;
+            uart->rx_dma_last_pos = 0;
+        }
+        if (uart->dma_tx.Instance)
+        {
+            HAL_DMA_Abort(&uart->dma_tx);
+            uart->dma_tx.Instance = NULL;
+        }
+#endif
+        break;
     }
     return RT_EOK;
 }
@@ -562,6 +596,8 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial,
     {
         if (type == UART_TYPE_USART)
             SET_BIT(((USART_TypeDef *)inst)->CR1, USART_CR1_TXDMAE);
+        else
+            SET_BIT(((LPUART_TypeDef *)inst)->CR, LPUART_CR_DMA_EN);
 
         /* 使能 DMA 控制器时钟 */
         if ((rt_uint32_t)c->tx_dma_instance < (rt_uint32_t)DMA2_Channel0)
@@ -644,6 +680,13 @@ static void uart_isr(struct acm32_uart *uart)
 
     rt_uint32_t isr = uart_reg_isr(inst, type);
     rt_uint32_t ie  = uart_reg_ie(inst, type);
+
+    /* ---- 清除错误标志（溢出/帧/奇偶 等），防止持续中断 ---- */
+    rt_uint32_t err_mask = _BIT(type, U_ERR_MASK, L_ERR_MASK);
+    if (isr & err_mask)
+    {
+        uart_reg_isr_clear(inst, type, isr & err_mask);
+    }
 
     /* ---- RXI: 将硬件 FIFO 数据喂入 V2 ringbuffer ---- */
     if ((ie & _BIT(type, U_IE_RXI, L_IE_RXI)) &&
@@ -746,21 +789,47 @@ static void uart_isr(struct acm32_uart *uart)
 static void _dma_rx_half_cplt(DMA_HandleTypeDef *hdma)
 {
     struct acm32_uart *uart = (struct acm32_uart *)hdma->Parent;
-    rt_uint16_t half = uart->rx_dma_bufsz / 2;
 
-    rt_hw_serial_isr(&uart->serial,
-        RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)half << 8));
-    uart->rx_dma_last_pos = half;
+    rt_uint16_t cur_pos = uart->rx_dma_bufsz -
+        (rt_uint16_t)__HAL_DMA_GET_TRANSFER_SIZE(&uart->dma_rx);
+
+    __DSB();
+
+    if (cur_pos != uart->rx_dma_last_pos)
+    {
+        rt_uint16_t tail;
+        if (cur_pos > uart->rx_dma_last_pos)
+            tail = cur_pos - uart->rx_dma_last_pos;
+        else
+            tail = (uart->rx_dma_bufsz - uart->rx_dma_last_pos) + cur_pos;
+
+        rt_hw_serial_isr(&uart->serial,
+            RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)tail << 8));
+        uart->rx_dma_last_pos = cur_pos;
+    }
 }
 
 static void _dma_rx_cplt(DMA_HandleTypeDef *hdma)
 {
     struct acm32_uart *uart = (struct acm32_uart *)hdma->Parent;
-    rt_uint16_t half = uart->rx_dma_bufsz / 2;
 
-    rt_hw_serial_isr(&uart->serial,
-        RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)half << 8));
-    uart->rx_dma_last_pos = 0;
+    rt_uint16_t cur_pos = uart->rx_dma_bufsz -
+        (rt_uint16_t)__HAL_DMA_GET_TRANSFER_SIZE(&uart->dma_rx);
+
+    __DSB();
+
+    if (cur_pos != uart->rx_dma_last_pos)
+    {
+        rt_uint16_t tail;
+        if (cur_pos > uart->rx_dma_last_pos)
+            tail = cur_pos - uart->rx_dma_last_pos;
+        else
+            tail = (uart->rx_dma_bufsz - uart->rx_dma_last_pos) + cur_pos;
+
+        rt_hw_serial_isr(&uart->serial,
+            RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)tail << 8));
+        uart->rx_dma_last_pos = cur_pos;
+    }
 }
 
 static void _dma_rx_err(DMA_HandleTypeDef *hdma)
@@ -785,6 +854,7 @@ static void _dma_tx_cplt(DMA_HandleTypeDef *hdma)
 
     if (type == UART_TYPE_USART)
         CLEAR_BIT(((USART_TypeDef *)inst)->CR1, USART_CR1_TXDMAE);
+    /* LPUART: DMA_EN 是共享位（TX+RX），TX 完成时不关闭 */
 
     rt_hw_serial_isr(&uart->serial, RT_SERIAL_EVENT_TX_DMADONE);
 }
@@ -943,13 +1013,13 @@ UART_IRQ_HANDLER(LPUART2, &uart_obj[LPUART2_INDEX])
     void irq_name##_IRQHandler(void)                    \
     {                                                   \
         rt_interrupt_enter();                           \
-        for (int __i = 0; __i < UART_MAX_INDEX; __i++)  \
+        for (int _i = 0; _i < UART_MAX_INDEX; _i++)  \
         {                                               \
-            if (uart_obj[__i].dma_rx.DMA &&             \
-                uart_obj[__i].dma_rx.DMA->INTSTATUS &   \
-                (1UL << uart_obj[__i].dma_rx.Channel))  \
+            if (uart_obj[_i].dma_rx.DMA &&             \
+                uart_obj[_i].dma_rx.DMA->INTSTATUS &   \
+                (1UL << uart_obj[_i].dma_rx.Channel))  \
             {                                           \
-                HAL_DMA_IRQHandler(&uart_obj[__i].dma_rx);\
+                HAL_DMA_IRQHandler(&uart_obj[_i].dma_rx);\
             }                                           \
         }                                               \
         rt_interrupt_leave();                           \
@@ -972,13 +1042,13 @@ DMA_RX_IRQ_HANDLER(DMA2_CH2)
     void irq_name##_IRQHandler(void)                    \
     {                                                   \
         rt_interrupt_enter();                           \
-        for (int __i = 0; __i < UART_MAX_INDEX; __i++)  \
+        for (int _i = 0; _i < UART_MAX_INDEX; _i++)  \
         {                                               \
-            if (uart_obj[__i].dma_tx.DMA &&             \
-                uart_obj[__i].dma_tx.DMA->INTSTATUS &   \
-                (1UL << uart_obj[__i].dma_tx.Channel))  \
+            if (uart_obj[_i].dma_tx.DMA &&             \
+                uart_obj[_i].dma_tx.DMA->INTSTATUS &   \
+                (1UL << uart_obj[_i].dma_tx.Channel))  \
             {                                           \
-                HAL_DMA_IRQHandler(&uart_obj[__i].dma_tx);\
+                HAL_DMA_IRQHandler(&uart_obj[_i].dma_tx);\
             }                                           \
         }                                               \
         rt_interrupt_leave();                           \
