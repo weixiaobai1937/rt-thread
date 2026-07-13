@@ -52,8 +52,10 @@ struct acm32_uart
     rt_uint32_t                 int_mask;
 
     /* DMA 接收缓冲区 */
+    rt_uint8_t                  *rx_dma_buf;
     rt_uint16_t                 rx_dma_bufsz;
     rt_uint16_t                 rx_dma_last_pos;
+    rt_bool_t                   rx_dma_from_framework;
 
     /* DMA 接收 handle */
 #ifdef HAL_DMA_MODULE_ENABLED
@@ -409,7 +411,7 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
         uart_reg_ie(inst, type) | _BIT(type, U_IE_RXI, L_IE_RXI));
 
     /* ---- DMA 接收初始化 ---- */
-    if ((serial->serial_rx != RT_NULL) && c->rx_dma_instance != UART_DMA_NONE)
+    if (c->rx_dma_instance != UART_DMA_NONE)
     {
 #ifdef HAL_DMA_MODULE_ENABLED
         /* 使能 DMA 控制器时钟 */
@@ -422,11 +424,23 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
         if (type == UART_TYPE_USART)
             SET_BIT(((USART_TypeDef *)inst)->CR1, USART_CR1_RXDMAE);
 
-        /* 从 V2 框架获取 dma_ping_rb 缓冲区 */
-        rt_uint8_t *rx_dma_buf = NULL;
-        rt_hw_serial_control_isr(&uart->serial,
-            RT_HW_SERIAL_CTRL_GET_DMA_PING_BUF, &rx_dma_buf);
-        rt_uint16_t rx_dma_bufsz = cfg->dma_ping_bufsz;
+        /* 选择缓冲区：框架 dma_ping_rb 优先，不可用时用私有 Fallback */
+        rt_uint8_t *rx_dma_buf;
+        rt_uint16_t rx_dma_bufsz;
+        if (serial->serial_rx != RT_NULL)
+        {
+            rt_hw_serial_control_isr(&uart->serial,
+                RT_HW_SERIAL_CTRL_GET_DMA_PING_BUF, &rx_dma_buf);
+            rx_dma_bufsz = cfg->dma_ping_bufsz;
+            uart->rx_dma_from_framework = RT_TRUE;
+        }
+        else
+        {
+            static rt_uint8_t fallback_buf[512] __attribute__((aligned(4)));
+            rx_dma_buf = fallback_buf;
+            rx_dma_bufsz = sizeof(fallback_buf);
+            uart->rx_dma_from_framework = RT_FALSE;
+        }
 
         /* 配置 DMA 循环接收 */
         uart->dma_rx.Instance     = c->rx_dma_instance;
@@ -450,6 +464,7 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
         uart->dma_rx.XferHalfCpltCallback = _dma_rx_half_cplt;
         uart->dma_rx.XferCpltCallback     = _dma_rx_cplt;
         uart->dma_rx.XferErrorCallback    = _dma_rx_err;
+        uart->rx_dma_buf = rx_dma_buf;
         uart->rx_dma_bufsz = rx_dma_bufsz;
         uart->rx_dma_last_pos = 0;
         HAL_DMA_Start_IT(&uart->dma_rx,
@@ -710,14 +725,36 @@ static void uart_isr(struct acm32_uart *uart)
 
             if (cur_pos != uart->rx_dma_last_pos)
             {
-                rt_uint16_t tail;
-                if (cur_pos > uart->rx_dma_last_pos)
-                    tail = cur_pos - uart->rx_dma_last_pos;
-                else
-                    tail = (uart->rx_dma_bufsz - uart->rx_dma_last_pos) + cur_pos;
+                if (uart->rx_dma_from_framework)
+                {
+                    rt_uint16_t tail;
+                    if (cur_pos > uart->rx_dma_last_pos)
+                        tail = cur_pos - uart->rx_dma_last_pos;
+                    else
+                        tail = (uart->rx_dma_bufsz - uart->rx_dma_last_pos) + cur_pos;
 
-                rt_hw_serial_isr(&uart->serial,
-                    RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)tail << 8));
+                    rt_hw_serial_isr(&uart->serial,
+                        RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)tail << 8));
+                }
+                else
+                {
+                    if (cur_pos > uart->rx_dma_last_pos)
+                    {
+                        for (rt_uint16_t i = uart->rx_dma_last_pos; i < cur_pos; i++)
+                            rt_hw_serial_control_isr(&uart->serial,
+                                RT_HW_SERIAL_CTRL_PUTC, &uart->rx_dma_buf[i]);
+                    }
+                    else
+                    {
+                        for (rt_uint16_t i = uart->rx_dma_last_pos; i < uart->rx_dma_bufsz; i++)
+                            rt_hw_serial_control_isr(&uart->serial,
+                                RT_HW_SERIAL_CTRL_PUTC, &uart->rx_dma_buf[i]);
+                        for (rt_uint16_t i = 0; i < cur_pos; i++)
+                            rt_hw_serial_control_isr(&uart->serial,
+                                RT_HW_SERIAL_CTRL_PUTC, &uart->rx_dma_buf[i]);
+                    }
+                    rt_hw_serial_isr(&uart->serial, RT_SERIAL_EVENT_RX_IND);
+                }
                 uart->rx_dma_last_pos = cur_pos;
             }
         }
@@ -731,20 +768,40 @@ static void uart_isr(struct acm32_uart *uart)
 static void _dma_rx_half_cplt(DMA_HandleTypeDef *hdma)
 {
     struct acm32_uart *uart = (struct acm32_uart *)hdma->Parent;
-    rt_uint16_t half = 256; /* dma_ping_bufsz/2 */
+    rt_uint16_t half = uart->rx_dma_bufsz / 2;
 
-    rt_hw_serial_isr(&uart->serial,
-        RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)half << 8));
+    if (uart->rx_dma_from_framework)
+    {
+        rt_hw_serial_isr(&uart->serial,
+            RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)half << 8));
+    }
+    else
+    {
+        for (rt_uint16_t i = 0; i < half; i++)
+            rt_hw_serial_control_isr(&uart->serial,
+                RT_HW_SERIAL_CTRL_PUTC, &uart->rx_dma_buf[i]);
+        rt_hw_serial_isr(&uart->serial, RT_SERIAL_EVENT_RX_IND);
+    }
     uart->rx_dma_last_pos = half;
 }
 
 static void _dma_rx_cplt(DMA_HandleTypeDef *hdma)
 {
     struct acm32_uart *uart = (struct acm32_uart *)hdma->Parent;
-    rt_uint16_t half = 256;
+    rt_uint16_t half = uart->rx_dma_bufsz / 2;
 
-    rt_hw_serial_isr(&uart->serial,
-        RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)half << 8));
+    if (uart->rx_dma_from_framework)
+    {
+        rt_hw_serial_isr(&uart->serial,
+            RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)half << 8));
+    }
+    else
+    {
+        for (rt_uint16_t i = half; i < uart->rx_dma_bufsz; i++)
+            rt_hw_serial_control_isr(&uart->serial,
+                RT_HW_SERIAL_CTRL_PUTC, &uart->rx_dma_buf[i]);
+        rt_hw_serial_isr(&uart->serial, RT_SERIAL_EVENT_RX_IND);
+    }
     uart->rx_dma_last_pos = 0;
 }
 
