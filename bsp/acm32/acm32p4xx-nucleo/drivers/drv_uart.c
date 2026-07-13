@@ -52,8 +52,8 @@ struct acm32_uart
     rt_uint32_t                 int_mask;
 
     /* DMA 接收缓冲区 */
-    rt_uint8_t                 *rx_dma_buf;
     rt_uint16_t                 rx_dma_bufsz;
+    rt_uint16_t                 rx_dma_last_pos;
 
     /* DMA 接收 handle */
 #ifdef HAL_DMA_MODULE_ENABLED
@@ -334,13 +334,6 @@ void HAL_LPUART_MspInit(LPUART_HandleTypeDef *hlpuart)
         HAL_GPIO_Init(pin->rx_port, &g);
     }
 }
-
-/* ==================== DMA 缓冲区 ==================== */
-
-#if defined(BSP_USING_UART1_DMA) || defined(BSP_USING_UART2_DMA) || defined(BSP_USING_UART3_DMA) || defined(BSP_USING_UART4_DMA)
-static rt_uint8_t uart_dma_rx_buf[UART_MAX_COUNT][UART_DMA_RX_BUF_SIZE]
-    __attribute__((aligned(4)));
-#endif
 
 /* ==================== OPS: configure ==================== */
 
@@ -818,12 +811,18 @@ rt_err_t rt_hw_uart_init(void)
         uart_obj[i].serial.ops = &acm32_uart_ops;
         uart_obj[i].serial.config = cfg;
 
+        rt_uint32_t flags = RT_DEVICE_FLAG_RDWR | RT_DEVICE_FLAG_INT_RX | RT_DEVICE_FLAG_INT_TX;
+        if (uart_obj[i].config->rx_dma_instance != UART_DMA_NONE)
+        {
+            flags |= RT_DEVICE_FLAG_DMA_RX | RT_DEVICE_FLAG_DMA_TX;
+            uart_obj[i].serial.config.rx_bufsz = 1024;
+            uart_obj[i].serial.config.dma_ping_bufsz = 512;
+        }
+
         g_uart_instances[i] = &uart_obj[i];
 
         rt_err_t rc = rt_hw_serial_register(&uart_obj[i].serial,
-            uart_obj[i].config->name,
-            RT_DEVICE_FLAG_RDWR | RT_DEVICE_FLAG_INT_RX | RT_DEVICE_FLAG_INT_TX,
-            NULL);
+            uart_obj[i].config->name, flags, NULL);
         RT_ASSERT(rc == RT_EOK);
     }
     return RT_EOK;
