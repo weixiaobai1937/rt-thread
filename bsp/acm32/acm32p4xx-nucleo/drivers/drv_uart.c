@@ -409,7 +409,7 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
         uart_reg_ie(inst, type) | _BIT(type, U_IE_RXI, L_IE_RXI));
 
     /* ---- DMA 接收初始化 ---- */
-    if (c->rx_dma_instance != UART_DMA_NONE)
+    if ((serial->serial_rx != RT_NULL) && c->rx_dma_instance != UART_DMA_NONE)
     {
 #ifdef HAL_DMA_MODULE_ENABLED
         /* 使能 DMA 控制器时钟 */
