@@ -70,6 +70,7 @@ struct acm32_uart
 static void _dma_rx_half_cplt(DMA_HandleTypeDef *hdma);
 static void _dma_rx_cplt(DMA_HandleTypeDef *hdma);
 static void _dma_rx_err(DMA_HandleTypeDef *hdma);
+static void _dma_tx_cplt(DMA_HandleTypeDef *hdma);
 #endif
 
 /* ==================== 全局查找表（ISR 反向映射、DMA 缓冲区索引） ==================== */
@@ -582,7 +583,10 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial,
         uart->dma_tx.Init.DestMaster  = DMA_DESTMASTER_1;
         uart->dma_tx.Init.Lock        = 0;
         HAL_DMA_Init(&uart->dma_tx);
-        HAL_DMA_Start(&uart->dma_tx,
+
+        uart->dma_tx.Parent = uart;
+        uart->dma_tx.XferCpltCallback = _dma_tx_cplt;
+        HAL_DMA_Start_IT(&uart->dma_tx,
             (rt_uint32_t)buf,
             (rt_uint32_t)(type == UART_TYPE_USART ?
                 &((USART_TypeDef *)inst)->DR :
@@ -756,6 +760,18 @@ static void _dma_rx_err(DMA_HandleTypeDef *hdma)
         hdma->Instance->CXDESTADDR,
         uart->rx_dma_bufsz);
     uart->rx_dma_last_pos = 0;
+}
+
+static void _dma_tx_cplt(DMA_HandleTypeDef *hdma)
+{
+    struct acm32_uart *uart = (struct acm32_uart *)hdma->Parent;
+    void *inst = uart->config->Instance;
+    int type = uart->config->uart_type;
+
+    if (type == UART_TYPE_USART)
+        CLEAR_BIT(((USART_TypeDef *)inst)->CR1, USART_CR1_TXDMAE);
+
+    rt_hw_serial_isr(&uart->serial, RT_SERIAL_EVENT_TX_DMADONE);
 }
 #endif
 
