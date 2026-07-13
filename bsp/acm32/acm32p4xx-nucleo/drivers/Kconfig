@@ -51,14 +51,29 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         select RT_USING_SERIAL_V2
         default n
 
+    config BSP_USING_UART2_DMA
+        bool "Enable UART2 DMA (TX: DMA1_CH3, RX: DMA2_CH0)"
+        depends on BSP_USING_UART2
+        default n
+
     config BSP_USING_UART3
         bool "Enable UART3 (PB10/PB11)"
         select RT_USING_SERIAL_V2
         default n
 
+    config BSP_USING_UART3_DMA
+        bool "Enable UART3 DMA (TX: DMA2_CH2, RX: DMA2_CH3)"
+        depends on BSP_USING_UART3
+        default n
+
     config BSP_USING_UART4
         bool "Enable UART4 (PC10/PC11)"
         select RT_USING_SERIAL_V2
+        default n
+
+    config BSP_USING_UART4_DMA
+        bool "Enable UART4 DMA (TX: DMA2_CH1, RX: DMA2_CH2)"
+        depends on BSP_USING_UART4
         default n
 
     config BSP_USING_UART5
