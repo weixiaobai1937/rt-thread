@@ -384,8 +384,7 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
     {
         uart->handle.lpuart.Instance          = (LPUART_TypeDef *)inst;
         uart->handle.lpuart.Init.BaudRate     = cfg->baud_rate;
-        uart->handle.lpuart.Init.WordLength   =
-            (cfg->data_bits == DATA_BITS_9) ? LPUART_WORDLENGTH_9B : LPUART_WORDLENGTH_8B;
+        uart->handle.lpuart.Init.WordLength   = LPUART_WORDLENGTH_8B;
         uart->handle.lpuart.Init.StopBits     =
             (cfg->stop_bits == STOP_BITS_2) ? LPUART_STOPBITS_2B : LPUART_STOPBITS_1B;
         uart->handle.lpuart.Init.Parity       = LPUART_PARITY_NONE;
