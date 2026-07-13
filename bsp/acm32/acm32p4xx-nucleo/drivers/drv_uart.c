@@ -723,6 +723,16 @@ static void uart_isr(struct acm32_uart *uart)
 
             __DSB();
 
+            /* FIFO 残留写入缓冲区 */
+            rt_uint32_t rxfe = _BIT(type, U_FR_RXFE, L_FR_RXFE);
+            while (!(uart_reg_fr(inst, type) & rxfe))
+            {
+                if (cur_pos < uart->rx_dma_bufsz)
+                    uart->rx_dma_buf[cur_pos++] = uart_reg_dr_read(inst, type);
+                else
+                    (void)uart_reg_dr_read(inst, type);
+            }
+
             if (cur_pos != uart->rx_dma_last_pos)
             {
                 if (uart->rx_dma_from_framework)
