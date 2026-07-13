@@ -399,29 +399,28 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
     uart_reg_ie_set(inst, type,
         uart_reg_ie(inst, type) | _BIT(type, U_IE_RXI, L_IE_RXI));
 
-    /* ---- DMA 接收初始化（可选） ---- */
+    /* ---- DMA 接收初始化 ---- */
     if (c->rx_dma_instance != UART_DMA_NONE)
     {
 #ifdef HAL_DMA_MODULE_ENABLED
-        /* 使用我们自己的静态 DMA 缓冲区（不依赖 V2 框架的 dma_ping_rb） */
-#if defined(BSP_USING_UART1_DMA) || defined(BSP_USING_UART2_DMA) || defined(BSP_USING_UART3_DMA) || defined(BSP_USING_UART4_DMA)
-        uart->rx_dma_buf = uart_dma_rx_buf[uart_index_of(uart)];
-        uart->rx_dma_bufsz = UART_DMA_RX_BUF_SIZE;
-#endif
-
         /* 使能 DMA 控制器时钟 */
         if ((rt_uint32_t)c->rx_dma_instance < (rt_uint32_t)DMA2_Channel0)
             __HAL_RCC_DMA1_CLK_ENABLE();
         else
             __HAL_RCC_DMA2_CLK_ENABLE();
 
-        /* 使能 UART DMA 接收（USART CR1.RXDMAE） */
+        /* 使能 UART DMA 接收 */
         if (type == UART_TYPE_USART)
             SET_BIT(((USART_TypeDef *)inst)->CR1, USART_CR1_RXDMAE);
 
+        /* 从 V2 框架获取 dma_ping_rb 缓冲区 */
+        rt_uint8_t *rx_dma_buf = NULL;
+        rt_hw_serial_control_isr(&uart->serial,
+            RT_HW_SERIAL_CTRL_GET_DMA_PING_BUF, &rx_dma_buf);
+        rt_uint16_t rx_dma_bufsz = cfg->dma_ping_bufsz;
+
         /* 配置 DMA 循环接收 */
         uart->dma_rx.Instance     = c->rx_dma_instance;
-        /* dma_rx.DMA is auto-detected by HAL_DMA_Init based on Instance address */
         uart->dma_rx.Channel      = c->rx_dma_channel;
         uart->dma_rx.Init.Mode        = DMA_MODE_CIRCULAR;
         uart->dma_rx.Init.DataFlow    = DMA_DATAFLOW_P2M;
@@ -435,13 +434,24 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
         uart->dma_rx.Init.SrcMaster   = DMA_SRCMASTER_1;
         uart->dma_rx.Init.DestMaster  = DMA_DESTMASTER_1;
         uart->dma_rx.Init.Lock        = 0;
+        uart->dma_rx.Init.NextMaster  = 0;
         HAL_DMA_Init(&uart->dma_rx);
-        HAL_DMA_Start(&uart->dma_rx,
+
+        uart->dma_rx.Parent = uart;
+        uart->dma_rx.XferHalfCpltCallback = _dma_rx_half_cplt;
+        uart->dma_rx.XferCpltCallback     = _dma_rx_cplt;
+        uart->dma_rx.XferErrorCallback    = _dma_rx_err;
+        uart->rx_dma_bufsz = rx_dma_bufsz;
+        uart->rx_dma_last_pos = 0;
+        HAL_DMA_Start_IT(&uart->dma_rx,
             (rt_uint32_t)(type == UART_TYPE_USART ?
                 &((USART_TypeDef *)inst)->DR :
                 &((LPUART_TypeDef *)inst)->RXDR),
-            (rt_uint32_t)uart->rx_dma_buf,
-            uart->rx_dma_bufsz);
+            (rt_uint32_t)rx_dma_buf,
+            rx_dma_bufsz);
+
+        NVIC_SetPriority(c->rx_dma_irq, 2);
+        NVIC_EnableIRQ(c->rx_dma_irq);
 
         /* 禁用逐字节 RX 中断，改用 IDLE 中断 */
         uart_reg_ie_set(inst, type,
