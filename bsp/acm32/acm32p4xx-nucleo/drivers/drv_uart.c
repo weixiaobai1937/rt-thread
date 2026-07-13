@@ -921,4 +921,68 @@ UART_IRQ_HANDLER(LPUART1, &uart_obj[LPUART1_INDEX])
 UART_IRQ_HANDLER(LPUART2, &uart_obj[LPUART2_INDEX])
 #endif
 
+/* ==================== DMA RX IRQ 实例化 ==================== */
+
+#ifdef HAL_DMA_MODULE_ENABLED
+#define DMA_RX_IRQ_HANDLER(irq_name)                   \
+    void irq_name##_IRQHandler(void)                    \
+    {                                                   \
+        rt_interrupt_enter();                           \
+        for (int __i = 0; __i < UART_MAX_INDEX; __i++)  \
+        {                                               \
+            if (uart_obj[__i].dma_rx.DMA &&             \
+                uart_obj[__i].dma_rx.DMA->INTSTATUS &   \
+                (1UL << uart_obj[__i].dma_rx.Channel))  \
+            {                                           \
+                HAL_DMA_IRQHandler(&uart_obj[__i].dma_rx);\
+                break;                                  \
+            }                                           \
+        }                                               \
+        rt_interrupt_leave();                           \
+    }
+
+#ifdef BSP_USING_UART1_DMA
+DMA_RX_IRQ_HANDLER(DMA1_CH2)
+#endif
+#ifdef BSP_USING_UART2_DMA
+DMA_RX_IRQ_HANDLER(DMA2_CH0)
+#endif
+#ifdef BSP_USING_UART3_DMA
+DMA_RX_IRQ_HANDLER(DMA2_CH3)
+#endif
+#ifdef BSP_USING_UART4_DMA
+DMA_RX_IRQ_HANDLER(DMA2_CH2)
+#endif
+
+#define DMA_TX_IRQ_HANDLER(irq_name)                   \
+    void irq_name##_IRQHandler(void)                    \
+    {                                                   \
+        rt_interrupt_enter();                           \
+        for (int __i = 0; __i < UART_MAX_INDEX; __i++)  \
+        {                                               \
+            if (uart_obj[__i].dma_tx.DMA &&             \
+                uart_obj[__i].dma_tx.DMA->INTSTATUS &   \
+                (1UL << uart_obj[__i].dma_tx.Channel))  \
+            {                                           \
+                HAL_DMA_IRQHandler(&uart_obj[__i].dma_tx);\
+                break;                                  \
+            }                                           \
+        }                                               \
+        rt_interrupt_leave();                           \
+    }
+
+#ifdef BSP_USING_UART1_DMA
+DMA_TX_IRQ_HANDLER(DMA1_CH1)
+#endif
+#ifdef BSP_USING_UART2_DMA
+DMA_TX_IRQ_HANDLER(DMA1_CH3)
+#endif
+#ifdef BSP_USING_UART3_DMA
+DMA_TX_IRQ_HANDLER(DMA2_CH2)
+#endif
+#ifdef BSP_USING_UART4_DMA
+DMA_TX_IRQ_HANDLER(DMA2_CH1)
+#endif
+#endif /* HAL_DMA_MODULE_ENABLED */
+
 #endif /* RT_USING_SERIAL_V2 */
