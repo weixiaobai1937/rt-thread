@@ -64,6 +64,14 @@ struct acm32_uart
 
 #define raw_to_uart(raw) rt_container_of(raw, struct acm32_uart, serial)
 
+/* ==================== DMA RX 回调前向声明 ==================== */
+
+#ifdef HAL_DMA_MODULE_ENABLED
+static void _dma_rx_half_cplt(DMA_HandleTypeDef *hdma);
+static void _dma_rx_cplt(DMA_HandleTypeDef *hdma);
+static void _dma_rx_err(DMA_HandleTypeDef *hdma);
+#endif
+
 /* ==================== 全局查找表（ISR 反向映射、DMA 缓冲区索引） ==================== */
 
 static struct acm32_uart *g_uart_instances[UART_MAX_COUNT] = {NULL};
@@ -724,6 +732,44 @@ static void uart_isr(struct acm32_uart *uart)
 #endif
     }
 }
+
+/* ==================== DMA RX 回调 ==================== */
+
+#ifdef HAL_DMA_MODULE_ENABLED
+static void _dma_rx_half_cplt(DMA_HandleTypeDef *hdma)
+{
+    struct acm32_uart *uart = (struct acm32_uart *)hdma->Parent;
+    rt_uint16_t half = 256; /* dma_ping_bufsz/2 */
+
+    rt_hw_serial_isr(&uart->serial,
+        RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)half << 8));
+    uart->rx_dma_last_pos = half;
+}
+
+static void _dma_rx_cplt(DMA_HandleTypeDef *hdma)
+{
+    struct acm32_uart *uart = (struct acm32_uart *)hdma->Parent;
+    rt_uint16_t half = 256;
+
+    rt_hw_serial_isr(&uart->serial,
+        RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)half << 8));
+    uart->rx_dma_last_pos = 0;
+}
+
+static void _dma_rx_err(DMA_HandleTypeDef *hdma)
+{
+    struct acm32_uart *uart = (struct acm32_uart *)hdma->Parent;
+    int type = uart->config->uart_type;
+    rt_uint32_t src = (rt_uint32_t)(type == UART_TYPE_USART ?
+        &((USART_TypeDef *)uart->config->Instance)->DR :
+        &((LPUART_TypeDef *)uart->config->Instance)->RXDR);
+
+    HAL_DMA_Start_IT(&uart->dma_rx, src,
+        hdma->Instance->CXDESTADDR,
+        uart->rx_dma_bufsz);
+    uart->rx_dma_last_pos = 0;
+}
+#endif
 
 /* ==================== ISR 入口 ==================== */
 
