@@ -690,44 +690,32 @@ static void uart_isr(struct acm32_uart *uart)
         rt_hw_serial_isr(&uart->serial, RT_SERIAL_EVENT_TX_DONE);
     }
 
-    /* ---- IDLEI: DMA RX 帧边界检测 ---- */
+    /* ---- IDLEI: DMA RX 帧尾处理 ---- */
     if ((ie & _BIT(type, U_IE_IDLEI, L_IE_IDLEI)) &&
         (isr & _BIT(type, U_ISR_IDLEI, L_ISR_IDLEI)))
     {
         uart_reg_isr_clear(inst, type, _BIT(type, U_ISR_IDLEI, L_ISR_IDLEI));
 
 #ifdef HAL_DMA_MODULE_ENABLED
-        if (uart->rx_dma_buf && uart->dma_rx.Instance)
+        if (uart->dma_rx.Instance)
         {
-            rt_uint16_t received = uart->rx_dma_bufsz -
+            rt_uint16_t cur_pos = uart->rx_dma_bufsz -
                 (rt_uint16_t)__HAL_DMA_GET_TRANSFER_SIZE(&uart->dma_rx);
-
-            /* 补充 FIFO 残留 */
-            rt_uint32_t rxfe = _BIT(type, U_FR_RXFE, L_FR_RXFE);
-            while (!(uart_reg_fr(inst, type) & rxfe))
-            {
-                if (received < uart->rx_dma_bufsz)
-                    uart->rx_dma_buf[received++] = uart_reg_dr_read(inst, type);
-                else
-                    (void)uart_reg_dr_read(inst, type);
-            }
 
             __DSB();
 
-            /* 喂入 V2 ringbuffer */
-            for (rt_uint16_t i = 0; i < received; i++)
-                rt_hw_serial_control_isr(&uart->serial,
-                    RT_HW_SERIAL_CTRL_PUTC, &uart->rx_dma_buf[i]);
+            if (cur_pos != uart->rx_dma_last_pos)
+            {
+                rt_uint16_t tail;
+                if (cur_pos > uart->rx_dma_last_pos)
+                    tail = cur_pos - uart->rx_dma_last_pos;
+                else
+                    tail = (uart->rx_dma_bufsz - uart->rx_dma_last_pos) + cur_pos;
 
-            rt_hw_serial_isr(&uart->serial, RT_SERIAL_EVENT_RX_IND);
-
-            /* 重启 DMA（循环模式需要手动重启） */
-            HAL_DMA_Start(&uart->dma_rx,
-                (rt_uint32_t)(type == UART_TYPE_USART ?
-                    &((USART_TypeDef *)inst)->DR :
-                    &((LPUART_TypeDef *)inst)->RXDR),
-                (rt_uint32_t)uart->rx_dma_buf,
-                uart->rx_dma_bufsz);
+                rt_hw_serial_isr(&uart->serial,
+                    RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)tail << 8));
+                uart->rx_dma_last_pos = cur_pos;
+            }
         }
 #endif
     }
