@@ -125,7 +125,11 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         bool "Enable SPI2 (PB13/PB15/PB14, soft CS PB12)"
         select RT_USING_SPI
         select RT_USING_PIN
+        depends on !BSP_USING_ETH
         default n
+        help
+          SPI2 uses PB12/PB13 which conflict with ETH RMII TXD0/TXD1.
+          Disable Ethernet when enabling SPI2 on this pin mux.
 
     config BSP_USING_SPI2_DMA
         bool "Enable SPI2 DMA (TX: DMA1_CH0, RX: DMA1_CH1)"

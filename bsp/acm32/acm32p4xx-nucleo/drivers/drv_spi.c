@@ -7,6 +7,7 @@
  * Date           Author       Notes
  * 2026-07-14     AisinoChip   ACM32P4xx-Nucleo SPI1 master poll + soft CS
  * 2026-07-14     AisinoChip   SPI1 half-duplex TX DMA (>=32B)
+ * 2026-07-14     AisinoChip   table-driven SPI1/SPI2 multi-instance
  */
 
 #include <rthw.h>
