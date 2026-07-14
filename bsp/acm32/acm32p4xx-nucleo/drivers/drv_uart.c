@@ -51,15 +51,18 @@ struct acm32_uart
     /* 当前使能的中断掩码 */
     rt_uint32_t                 int_mask;
 
+    /* DMA 能力标志（注册时设置，control 中映射 BLOCKING→DMA/INT） */
+    rt_uint16_t                 uart_dma_flag;
+
     /* DMA 接收缓冲区 */
     rt_uint8_t                  *rx_dma_ping_buf;
     rt_uint16_t                 rx_dma_bufsz;
-    rt_uint16_t                 rx_dma_last_pos;
+    volatile rt_uint16_t        rx_dma_last_pos;
 
-    /* DMA 接收 handle */
 #ifdef HAL_DMA_MODULE_ENABLED
     DMA_HandleTypeDef           dma_tx;
     DMA_HandleTypeDef           dma_rx;
+    rt_bool_t                   dma_tx_ready;
 #endif
 };
 
@@ -77,16 +80,6 @@ static void _dma_tx_cplt(DMA_HandleTypeDef *hdma);
 /* ==================== 全局查找表（ISR 反向映射、DMA 缓冲区索引） ==================== */
 
 static struct acm32_uart *g_uart_instances[UART_MAX_COUNT] = {NULL};
-
-static int uart_index_of(struct acm32_uart *uart)
-{
-    for (int i = 0; i < UART_MAX_COUNT; i++)
-    {
-        if (g_uart_instances[i] == uart)
-            return i;
-    }
-    return 0;
-}
 
 static struct acm32_uart *uart_find(void *instance)
 {
@@ -351,6 +344,196 @@ void HAL_LPUART_MspInit(LPUART_HandleTypeDef *hlpuart)
     }
 }
 
+/* ==================== DMA 启停（V2: control CONFIG 时启动） ==================== */
+
+#ifdef HAL_DMA_MODULE_ENABLED
+static void _dma_clk_enable(DMA_Channel_TypeDef *ch)
+{
+    if ((rt_uint32_t)ch < (rt_uint32_t)DMA2_Channel0)
+        __HAL_RCC_DMA1_CLK_ENABLE();
+    else
+        __HAL_RCC_DMA2_CLK_ENABLE();
+}
+
+static void _uart_dma_rx_stop(struct acm32_uart *uart)
+{
+    struct acm32_uart_config *c = uart->config;
+    void *inst = c->Instance;
+    int type = c->uart_type;
+
+    if (uart->dma_rx.Instance == NULL)
+        return;
+
+    uart_reg_ie_set(inst, type,
+        uart_reg_ie(inst, type) & ~_BIT(type, U_IE_IDLEI, L_IE_IDLEI));
+    uart->int_mask &= ~_BIT(type, U_IE_IDLEI, L_IE_IDLEI);
+
+    if (type == UART_TYPE_USART)
+        CLEAR_BIT(((USART_TypeDef *)inst)->CR1, USART_CR1_RXDMAE);
+    else
+        CLEAR_BIT(((LPUART_TypeDef *)inst)->CR, LPUART_CR_DMA_EN);
+
+    NVIC_DisableIRQ(c->rx_dma_irq);
+    HAL_DMA_Abort(&uart->dma_rx);
+    HAL_DMA_DeInit(&uart->dma_rx);
+    uart->dma_rx.Instance = NULL;
+    uart->rx_dma_ping_buf = NULL;
+    uart->rx_dma_bufsz = 0;
+    uart->rx_dma_last_pos = 0;
+}
+
+static void _uart_dma_tx_stop(struct acm32_uart *uart)
+{
+    struct acm32_uart_config *c = uart->config;
+    void *inst = c->Instance;
+    int type = c->uart_type;
+
+    if (uart->dma_tx.Instance == NULL && !uart->dma_tx_ready)
+        return;
+
+    if (type == UART_TYPE_USART)
+        CLEAR_BIT(((USART_TypeDef *)inst)->CR1, USART_CR1_TXDMAE);
+    /* LPUART DMA_EN 共享，仅在 RX 也停时由 _uart_dma_rx_stop 清除 */
+
+    if (c->tx_dma_instance != UART_DMA_NONE)
+        NVIC_DisableIRQ(c->tx_dma_irq);
+
+    if (uart->dma_tx.Instance)
+    {
+        HAL_DMA_Abort(&uart->dma_tx);
+        HAL_DMA_DeInit(&uart->dma_tx);
+        uart->dma_tx.Instance = NULL;
+    }
+    uart->dma_tx_ready = RT_FALSE;
+}
+
+static rt_err_t _uart_dma_rx_start(struct acm32_uart *uart)
+{
+    struct acm32_uart_config *c = uart->config;
+    void *inst = c->Instance;
+    int type = c->uart_type;
+    rt_uint8_t *rx_dma_buf = NULL;
+    rt_uint16_t rx_dma_bufsz;
+
+    if (c->rx_dma_instance == UART_DMA_NONE)
+        return -RT_EINVAL;
+
+    if (uart->dma_rx.Instance)
+        _uart_dma_rx_stop(uart);
+
+    rt_hw_serial_control_isr(&uart->serial,
+        RT_HW_SERIAL_CTRL_GET_DMA_PING_BUF, &rx_dma_buf);
+    if (rx_dma_buf == NULL)
+        return -RT_ERROR;
+
+    rx_dma_bufsz = uart->serial.config.dma_ping_bufsz;
+    if (rx_dma_bufsz == 0)
+        return -RT_EINVAL;
+
+    _dma_clk_enable(c->rx_dma_instance);
+
+    uart->dma_rx.Instance     = c->rx_dma_instance;
+    uart->dma_rx.Channel      = c->rx_dma_channel;
+    uart->dma_rx.Init.Mode        = DMA_MODE_CIRCULAR;
+    uart->dma_rx.Init.DataFlow    = DMA_DATAFLOW_P2M;
+    uart->dma_rx.Init.ReqID       = c->rx_dma_reqid;
+    uart->dma_rx.Init.SrcIncDec   = DMA_SRCINCDEC_DISABLE;
+    uart->dma_rx.Init.DestIncDec  = DMA_DESTINCDEC_INC;
+    uart->dma_rx.Init.SrcWidth    = DMA_SRCWIDTH_BYTE;
+    uart->dma_rx.Init.DestWidth   = DMA_DESTWIDTH_BYTE;
+    uart->dma_rx.Init.SrcBurst    = DMA_SRCBURST_1;
+    uart->dma_rx.Init.DestBurst   = DMA_DESTBURST_1;
+    uart->dma_rx.Init.SrcMaster   = DMA_SRCMASTER_1;
+    uart->dma_rx.Init.DestMaster  = DMA_DESTMASTER_1;
+    uart->dma_rx.Init.Lock        = 0;
+    uart->dma_rx.Init.NextMaster  = 0;
+    if (HAL_DMA_Init(&uart->dma_rx) != HAL_OK)
+    {
+        uart->dma_rx.Instance = NULL;
+        return -RT_ERROR;
+    }
+
+    uart->dma_rx.Parent = uart;
+    uart->dma_rx.XferHalfCpltCallback = _dma_rx_half_cplt;
+    uart->dma_rx.XferCpltCallback     = _dma_rx_cplt;
+    uart->dma_rx.XferErrorCallback    = _dma_rx_err;
+    uart->rx_dma_ping_buf = rx_dma_buf;
+    uart->rx_dma_bufsz = rx_dma_bufsz;
+    uart->rx_dma_last_pos = 0;
+
+    if (type == UART_TYPE_USART)
+        SET_BIT(((USART_TypeDef *)inst)->CR1, USART_CR1_RXDMAE);
+    else
+        SET_BIT(((LPUART_TypeDef *)inst)->CR, LPUART_CR_DMA_EN);
+
+    if (HAL_DMA_Start_IT(&uart->dma_rx,
+            (rt_uint32_t)(type == UART_TYPE_USART ?
+                &((USART_TypeDef *)inst)->DR :
+                &((LPUART_TypeDef *)inst)->RXDR),
+            (rt_uint32_t)rx_dma_buf,
+            rx_dma_bufsz) != HAL_OK)
+    {
+        _uart_dma_rx_stop(uart);
+        return -RT_ERROR;
+    }
+
+    NVIC_SetPriority(c->rx_dma_irq, 2);
+    NVIC_EnableIRQ(c->rx_dma_irq);
+
+    /* 关闭逐字节 RXI，改用 IDLE 尾处理 */
+    uart_reg_ie_set(inst, type,
+        uart_reg_ie(inst, type) & ~_BIT(type, U_IE_RXI, L_IE_RXI));
+    uart->int_mask &= ~_BIT(type, U_IE_RXI, L_IE_RXI);
+    uart_reg_ie_set(inst, type,
+        uart_reg_ie(inst, type) | _BIT(type, U_IE_IDLEI, L_IE_IDLEI));
+    uart->int_mask |= _BIT(type, U_IE_IDLEI, L_IE_IDLEI);
+
+    NVIC_SetPriority(c->irq_type, 2);
+    NVIC_EnableIRQ(c->irq_type);
+    return RT_EOK;
+}
+
+static rt_err_t _uart_dma_tx_prepare(struct acm32_uart *uart)
+{
+    struct acm32_uart_config *c = uart->config;
+
+    if (c->tx_dma_instance == UART_DMA_NONE)
+        return -RT_EINVAL;
+
+    if (uart->dma_tx_ready)
+        return RT_EOK;
+
+    _dma_clk_enable(c->tx_dma_instance);
+
+    uart->dma_tx.Instance     = c->tx_dma_instance;
+    uart->dma_tx.Channel      = c->tx_dma_channel;
+    uart->dma_tx.Init.Mode        = DMA_MODE_NORMAL;
+    uart->dma_tx.Init.DataFlow    = DMA_DATAFLOW_M2P;
+    uart->dma_tx.Init.ReqID       = c->tx_dma_reqid;
+    uart->dma_tx.Init.SrcIncDec   = DMA_SRCINCDEC_INC;
+    uart->dma_tx.Init.DestIncDec  = DMA_DESTINCDEC_DISABLE;
+    uart->dma_tx.Init.SrcWidth    = DMA_SRCWIDTH_BYTE;
+    uart->dma_tx.Init.DestWidth   = DMA_DESTWIDTH_BYTE;
+    uart->dma_tx.Init.SrcBurst    = DMA_SRCBURST_1;
+    uart->dma_tx.Init.DestBurst   = DMA_DESTBURST_1;
+    uart->dma_tx.Init.SrcMaster   = DMA_SRCMASTER_1;
+    uart->dma_tx.Init.DestMaster  = DMA_DESTMASTER_1;
+    uart->dma_tx.Init.Lock        = 0;
+    if (HAL_DMA_Init(&uart->dma_tx) != HAL_OK)
+    {
+        uart->dma_tx.Instance = NULL;
+        return -RT_ERROR;
+    }
+
+    uart->dma_tx.Parent = uart;
+    uart->dma_tx.XferCpltCallback = _dma_tx_cplt;
+    NVIC_SetPriority(c->tx_dma_irq, 2);
+    NVIC_EnableIRQ(c->tx_dma_irq);
+    uart->dma_tx_ready = RT_TRUE;
+    return RT_EOK;
+}
+#endif /* HAL_DMA_MODULE_ENABLED */
+
 /* ==================== OPS: configure ==================== */
 
 static rt_err_t _uart_configure(struct rt_serial_device *serial,
@@ -361,7 +544,7 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
     void *inst = c->Instance;
     int type = c->uart_type;
 
-    /* ---- HAL_UART_Init / HAL_LPUART_Init（GPIO + UART 初始化） ---- */
+    /* 仅做硬件参数初始化；DMA 在 control(CONFIG) 且 serial_rx 就绪后启动 */
     if (type == UART_TYPE_USART)
     {
         uart->handle.usart.Instance          = (USART_TypeDef *)inst;
@@ -398,93 +581,18 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
         HAL_LPUART_Init(&uart->handle.lpuart);
     }
 
-    /* ---- 配置 FIFO 阈值（在 HAL_UART_Init 之后，因为 HAL 会覆盖 CR3） ---- */
     if (type == UART_TYPE_USART)
     {
-        /*
-         * RX: USART_RX_FIFO_1_16 = 1 字节触发中断（Finsh 交互需要即时响应）
-         * TX: USART_TX_FIFO_1_16 = TX FIFO 空时触发 TXI
-         */
         MODIFY_REG(((USART_TypeDef *)inst)->CR3,
                    USART_CR3_RXIFLSEL_Msk | USART_CR3_TXIFLSEL_Msk,
                    USART_RX_FIFO_1_16 | USART_TX_FIFO_1_16);
     }
 
-    /* ---- 使能 RX 中断（逐字节模式；DMA 模式时在下文禁用） ---- */
-    uart->int_mask = U_IE_RXI; /* 两种类型值相同，直接用 USART 宏 */
+    /* 默认 INT RX；DMA 路径在 CONFIG 时关闭 RXI、打开 IDLE */
+    uart->int_mask = _BIT(type, U_IE_RXI, L_IE_RXI);
     uart_reg_ie_set(inst, type,
         uart_reg_ie(inst, type) | _BIT(type, U_IE_RXI, L_IE_RXI));
 
-    /* ---- DMA 接收初始化 ---- */
-    if ((serial->parent.open_flag & RT_DEVICE_FLAG_DMA_RX) && c->rx_dma_instance != UART_DMA_NONE)
-    {
-#ifdef HAL_DMA_MODULE_ENABLED
-        /* 使能 DMA 控制器时钟 */
-        if ((rt_uint32_t)c->rx_dma_instance < (rt_uint32_t)DMA2_Channel0)
-            __HAL_RCC_DMA1_CLK_ENABLE();
-        else
-            __HAL_RCC_DMA2_CLK_ENABLE();
-
-        /* 使能 UART DMA 接收 */
-        if (type == UART_TYPE_USART)
-            SET_BIT(((USART_TypeDef *)inst)->CR1, USART_CR1_RXDMAE);
-        else
-            SET_BIT(((LPUART_TypeDef *)inst)->CR, LPUART_CR_DMA_EN);
-
-        /* 从 V2 框架获取 dma_ping_rb 缓冲区 */
-        rt_uint8_t *rx_dma_buf = NULL;
-        rt_hw_serial_control_isr(&uart->serial,
-            RT_HW_SERIAL_CTRL_GET_DMA_PING_BUF, &rx_dma_buf);
-        rt_uint16_t rx_dma_bufsz = cfg->dma_ping_bufsz;
-
-        /* 配置 DMA 循环接收 */
-        uart->dma_rx.Instance     = c->rx_dma_instance;
-        uart->dma_rx.Channel      = c->rx_dma_channel;
-        uart->dma_rx.Init.Mode        = DMA_MODE_CIRCULAR;
-        uart->dma_rx.Init.DataFlow    = DMA_DATAFLOW_P2M;
-        uart->dma_rx.Init.ReqID       = c->rx_dma_reqid;
-        uart->dma_rx.Init.SrcIncDec   = DMA_SRCINCDEC_DISABLE;
-        uart->dma_rx.Init.DestIncDec  = DMA_DESTINCDEC_INC;
-        uart->dma_rx.Init.SrcWidth    = DMA_SRCWIDTH_BYTE;
-        uart->dma_rx.Init.DestWidth   = DMA_DESTWIDTH_BYTE;
-        uart->dma_rx.Init.SrcBurst    = DMA_SRCBURST_1;
-        uart->dma_rx.Init.DestBurst   = DMA_DESTBURST_1;
-        uart->dma_rx.Init.SrcMaster   = DMA_SRCMASTER_1;
-        uart->dma_rx.Init.DestMaster  = DMA_DESTMASTER_1;
-        uart->dma_rx.Init.Lock        = 0;
-        uart->dma_rx.Init.NextMaster  = 0;
-        HAL_DMA_Init(&uart->dma_rx);
-
-        uart->dma_rx.Parent = uart;
-        uart->dma_rx.XferHalfCpltCallback = _dma_rx_half_cplt;
-        uart->dma_rx.XferCpltCallback     = _dma_rx_cplt;
-        uart->dma_rx.XferErrorCallback    = _dma_rx_err;
-        uart->rx_dma_ping_buf = rx_dma_buf;
-        uart->rx_dma_bufsz = rx_dma_bufsz;
-        uart->rx_dma_last_pos = 0;
-        HAL_DMA_Start_IT(&uart->dma_rx,
-            (rt_uint32_t)(type == UART_TYPE_USART ?
-                &((USART_TypeDef *)inst)->DR :
-                &((LPUART_TypeDef *)inst)->RXDR),
-            (rt_uint32_t)rx_dma_buf,
-            rx_dma_bufsz);
-
-        NVIC_SetPriority(c->rx_dma_irq, 2);
-        NVIC_EnableIRQ(c->rx_dma_irq);
-
-        /* 禁用逐字节 RX 中断，改用 IDLE 中断 */
-        uart_reg_ie_set(inst, type,
-            uart_reg_ie(inst, type) & ~_BIT(type, U_IE_RXI, L_IE_RXI));
-        uart->int_mask &= ~_BIT(type, U_IE_RXI, L_IE_RXI);
-
-        /* 使能 IDLE 中断 */
-        uart_reg_ie_set(inst, type,
-            uart_reg_ie(inst, type) | _BIT(type, U_IE_IDLEI, L_IE_IDLEI));
-        uart->int_mask |= _BIT(type, U_IE_IDLEI, L_IE_IDLEI);
-#endif
-    }
-
-    /* ---- NVIC ---- */
     NVIC_SetPriority(c->irq_type, 2);
     NVIC_EnableIRQ(c->irq_type);
 
@@ -500,49 +608,99 @@ static rt_err_t _uart_control(struct rt_serial_device *serial,
     struct acm32_uart_config *c = uart->config;
     void *inst = c->Instance;
     int type = c->uart_type;
+    rt_ubase_t ctrl_arg = (rt_ubase_t)arg;
+
+    /* V2: BLOCKING/NON_BLOCKING → DMA 或 INT（按注册能力） */
+    if (ctrl_arg & (RT_DEVICE_FLAG_RX_BLOCKING | RT_DEVICE_FLAG_RX_NON_BLOCKING))
+    {
+        if (uart->uart_dma_flag & RT_DEVICE_FLAG_DMA_RX)
+            ctrl_arg = RT_DEVICE_FLAG_DMA_RX;
+        else
+            ctrl_arg = RT_DEVICE_FLAG_INT_RX;
+    }
+    else if (ctrl_arg & (RT_DEVICE_FLAG_TX_BLOCKING | RT_DEVICE_FLAG_TX_NON_BLOCKING))
+    {
+        if (uart->uart_dma_flag & RT_DEVICE_FLAG_DMA_TX)
+            ctrl_arg = RT_DEVICE_FLAG_DMA_TX;
+        else
+            ctrl_arg = RT_DEVICE_FLAG_INT_TX;
+    }
 
     switch (cmd)
     {
     case RT_DEVICE_CTRL_CLR_INT:
-        if (uart->int_mask)
+        if (ctrl_arg == RT_DEVICE_FLAG_INT_RX)
         {
             uart_reg_ie_set(inst, type,
-                uart_reg_ie(inst, type) & ~uart->int_mask);
-            NVIC_DisableIRQ(c->irq_type);
+                uart_reg_ie(inst, type) & ~_BIT(type, U_IE_RXI, L_IE_RXI));
+            uart->int_mask &= ~_BIT(type, U_IE_RXI, L_IE_RXI);
         }
+        else if (ctrl_arg == RT_DEVICE_FLAG_INT_TX)
+        {
+            uart_reg_ie_set(inst, type,
+                uart_reg_ie(inst, type)
+                & ~(_BIT(type, U_IE_TXI, L_IE_TXI) | _BIT(type, U_IE_TCI, L_IE_TCI)));
+            uart->int_mask &= ~(_BIT(type, U_IE_TXI, L_IE_TXI) | _BIT(type, U_IE_TCI, L_IE_TCI));
+        }
+#ifdef HAL_DMA_MODULE_ENABLED
+        else if (ctrl_arg == RT_DEVICE_FLAG_DMA_RX)
+        {
+            _uart_dma_rx_stop(uart);
+        }
+        else if (ctrl_arg == RT_DEVICE_FLAG_DMA_TX)
+        {
+            _uart_dma_tx_stop(uart);
+        }
+#endif
         break;
 
     case RT_DEVICE_CTRL_SET_INT:
-        if (uart->int_mask)
+        NVIC_SetPriority(c->irq_type, 2);
+        NVIC_EnableIRQ(c->irq_type);
+        if (ctrl_arg == RT_DEVICE_FLAG_INT_RX)
         {
             uart_reg_ie_set(inst, type,
-                uart_reg_ie(inst, type) | uart->int_mask);
-            NVIC_EnableIRQ(c->irq_type);
+                uart_reg_ie(inst, type) | _BIT(type, U_IE_RXI, L_IE_RXI));
+            uart->int_mask |= _BIT(type, U_IE_RXI, L_IE_RXI);
+        }
+        else if (ctrl_arg == RT_DEVICE_FLAG_INT_TX)
+        {
+            uart_reg_ie_set(inst, type,
+                uart_reg_ie(inst, type)
+                | _BIT(type, U_IE_TXI, L_IE_TXI)
+                | _BIT(type, U_IE_TCI, L_IE_TCI));
+            uart->int_mask |= _BIT(type, U_IE_TXI, L_IE_TXI)
+                           |  _BIT(type, U_IE_TCI, L_IE_TCI);
         }
         break;
+
+    case RT_DEVICE_CTRL_CONFIG:
+#ifdef HAL_DMA_MODULE_ENABLED
+        if (ctrl_arg == RT_DEVICE_FLAG_DMA_RX)
+            return _uart_dma_rx_start(uart);
+        if (ctrl_arg == RT_DEVICE_FLAG_DMA_TX)
+            return _uart_dma_tx_prepare(uart);
+#endif
+        return _uart_control(serial, RT_DEVICE_CTRL_SET_INT, (void *)ctrl_arg);
+
+    case RT_DEVICE_CHECK_OPTMODE:
+        if (ctrl_arg & RT_DEVICE_FLAG_DMA_TX)
+            return RT_SERIAL_TX_BLOCKING_NO_BUFFER;
+        return RT_SERIAL_TX_BLOCKING_BUFFER;
 
     case RT_DEVICE_CTRL_CLOSE:
         if (uart->int_mask)
         {
             uart_reg_ie_set(inst, type,
                 uart_reg_ie(inst, type) & ~uart->int_mask);
-            NVIC_DisableIRQ(c->irq_type);
             uart->int_mask = 0;
         }
+        NVIC_DisableIRQ(c->irq_type);
 #ifdef HAL_DMA_MODULE_ENABLED
-        if (uart->dma_rx.Instance)
-        {
-            HAL_DMA_Abort(&uart->dma_rx);
-            uart->dma_rx.Instance = NULL;
-            uart->rx_dma_ping_buf = NULL;
-            uart->rx_dma_bufsz = 0;
-            uart->rx_dma_last_pos = 0;
-        }
-        if (uart->dma_tx.Instance)
-        {
-            HAL_DMA_Abort(&uart->dma_tx);
-            uart->dma_tx.Instance = NULL;
-        }
+        _uart_dma_rx_stop(uart);
+        _uart_dma_tx_stop(uart);
+        if (type == UART_TYPE_LPUART)
+            CLEAR_BIT(((LPUART_TypeDef *)inst)->CR, LPUART_CR_DMA_EN);
 #endif
         break;
     }
@@ -589,46 +747,27 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial,
     if (size == 0) return 0;
 
 #ifdef HAL_DMA_MODULE_ENABLED
-    /* DMA TX 模式 */
-    if ((serial->parent.open_flag & RT_DEVICE_FLAG_DMA_TX) &&
+    /* DMA TX：能力由 uart_dma_flag 决定，NVIC 在 CONFIG 时已使能 */
+    if ((uart->uart_dma_flag & RT_DEVICE_FLAG_DMA_TX) &&
         c->tx_dma_instance != UART_DMA_NONE)
     {
+        if (_uart_dma_tx_prepare(uart) != RT_EOK)
+            return 0;
+
         if (type == UART_TYPE_USART)
             SET_BIT(((USART_TypeDef *)inst)->CR1, USART_CR1_TXDMAE);
         else
             SET_BIT(((LPUART_TypeDef *)inst)->CR, LPUART_CR_DMA_EN);
 
-        /* 使能 DMA 控制器时钟 */
-        if ((rt_uint32_t)c->tx_dma_instance < (rt_uint32_t)DMA2_Channel0)
-            __HAL_RCC_DMA1_CLK_ENABLE();
-        else
-            __HAL_RCC_DMA2_CLK_ENABLE();
-
-        uart->dma_tx.Instance     = c->tx_dma_instance;
-        /* dma_tx.DMA is auto-detected by HAL_DMA_Init based on Instance address */
-        uart->dma_tx.Channel      = c->tx_dma_channel;
-        uart->dma_tx.Init.Mode        = DMA_MODE_NORMAL;
-        uart->dma_tx.Init.DataFlow    = DMA_DATAFLOW_M2P;
-        uart->dma_tx.Init.ReqID       = c->tx_dma_reqid;
-        uart->dma_tx.Init.SrcIncDec   = DMA_SRCINCDEC_INC;
-        uart->dma_tx.Init.DestIncDec  = DMA_DESTINCDEC_DISABLE;
-        uart->dma_tx.Init.SrcWidth    = DMA_SRCWIDTH_BYTE;
-        uart->dma_tx.Init.DestWidth   = DMA_DESTWIDTH_BYTE;
-        uart->dma_tx.Init.SrcBurst    = DMA_SRCBURST_1;
-        uart->dma_tx.Init.DestBurst   = DMA_DESTBURST_1;
-        uart->dma_tx.Init.SrcMaster   = DMA_SRCMASTER_1;
-        uart->dma_tx.Init.DestMaster  = DMA_DESTMASTER_1;
-        uart->dma_tx.Init.Lock        = 0;
-        HAL_DMA_Init(&uart->dma_tx);
-
-        uart->dma_tx.Parent = uart;
-        uart->dma_tx.XferCpltCallback = _dma_tx_cplt;
-        HAL_DMA_Start_IT(&uart->dma_tx,
-            (rt_uint32_t)buf,
-            (rt_uint32_t)(type == UART_TYPE_USART ?
-                &((USART_TypeDef *)inst)->DR :
-                &((LPUART_TypeDef *)inst)->TXDR),
-            size);
+        if (HAL_DMA_Start_IT(&uart->dma_tx,
+                (rt_uint32_t)buf,
+                (rt_uint32_t)(type == UART_TYPE_USART ?
+                    &((USART_TypeDef *)inst)->DR :
+                    &((LPUART_TypeDef *)inst)->TXDR),
+                size) != HAL_OK)
+        {
+            return 0;
+        }
 
         return size;
     }
@@ -745,25 +884,13 @@ static void uart_isr(struct acm32_uart *uart)
         uart_reg_isr_clear(inst, type, _BIT(type, U_ISR_IDLEI, L_ISR_IDLEI));
 
 #ifdef HAL_DMA_MODULE_ENABLED
-        if (uart->dma_rx.Instance)
+        /* circular DMA 运行中：只按 HW 当前位置上报 tail，禁止 CPU 写 ping buffer */
+        if (uart->dma_rx.Instance && uart->rx_dma_bufsz)
         {
             rt_uint16_t cur_pos = uart->rx_dma_bufsz -
                 (rt_uint16_t)__HAL_DMA_GET_TRANSFER_SIZE(&uart->dma_rx);
 
             __DSB();
-
-            /* FIFO 残留排空 */
-            if (uart->rx_dma_ping_buf)
-            {
-                rt_uint32_t rxfe = _BIT(type, U_FR_RXFE, L_FR_RXFE);
-                while (!(uart_reg_fr(inst, type) & rxfe))
-                {
-                    if (cur_pos < uart->rx_dma_bufsz)
-                        uart->rx_dma_ping_buf[cur_pos++] = uart_reg_dr_read(inst, type);
-                    else
-                        (void)uart_reg_dr_read(inst, type);
-                }
-            }
 
             if (cur_pos != uart->rx_dma_last_pos)
             {
@@ -834,15 +961,32 @@ static void _dma_rx_cplt(DMA_HandleTypeDef *hdma)
 static void _dma_rx_err(DMA_HandleTypeDef *hdma)
 {
     struct acm32_uart *uart = (struct acm32_uart *)hdma->Parent;
+    void *inst = uart->config->Instance;
     int type = uart->config->uart_type;
-    rt_uint32_t src = (rt_uint32_t)(type == UART_TYPE_USART ?
-        &((USART_TypeDef *)uart->config->Instance)->DR :
-        &((LPUART_TypeDef *)uart->config->Instance)->RXDR);
+    rt_uint32_t src;
 
-    HAL_DMA_Start_IT(&uart->dma_rx, src,
-        (rt_uint32_t)uart->rx_dma_ping_buf,
-        uart->rx_dma_bufsz);
-    uart->rx_dma_last_pos = 0;
+    if (uart->rx_dma_ping_buf == NULL || uart->rx_dma_bufsz == 0)
+        return;
+
+    /* 清 UART 错误标志，abort 后重启 circular RX */
+    uart_reg_isr_clear(inst, type, _BIT(type, U_ERR_MASK, L_ERR_MASK));
+    HAL_DMA_Abort(&uart->dma_rx);
+
+    src = (rt_uint32_t)(type == UART_TYPE_USART ?
+        &((USART_TypeDef *)inst)->DR :
+        &((LPUART_TypeDef *)inst)->RXDR);
+
+    if (type == UART_TYPE_USART)
+        SET_BIT(((USART_TypeDef *)inst)->CR1, USART_CR1_RXDMAE);
+    else
+        SET_BIT(((LPUART_TypeDef *)inst)->CR, LPUART_CR_DMA_EN);
+
+    if (HAL_DMA_Start_IT(&uart->dma_rx, src,
+            (rt_uint32_t)uart->rx_dma_ping_buf,
+            uart->rx_dma_bufsz) == HAL_OK)
+    {
+        uart->rx_dma_last_pos = 0;
+    }
 }
 
 static void _dma_tx_cplt(DMA_HandleTypeDef *hdma)
@@ -956,11 +1100,18 @@ rt_err_t rt_hw_uart_init(void)
         uart_obj[i].serial.config = cfg;
 
         rt_uint32_t flags = RT_DEVICE_FLAG_RDWR | RT_DEVICE_FLAG_INT_RX | RT_DEVICE_FLAG_INT_TX;
+        uart_obj[i].uart_dma_flag = 0;
         if (uart_obj[i].config->rx_dma_instance != UART_DMA_NONE)
         {
-            flags |= RT_DEVICE_FLAG_DMA_RX | RT_DEVICE_FLAG_DMA_TX;
+            flags |= RT_DEVICE_FLAG_DMA_RX;
+            uart_obj[i].uart_dma_flag |= RT_DEVICE_FLAG_DMA_RX;
             uart_obj[i].serial.config.rx_bufsz = 1024;
             uart_obj[i].serial.config.dma_ping_bufsz = 512;
+        }
+        if (uart_obj[i].config->tx_dma_instance != UART_DMA_NONE)
+        {
+            flags |= RT_DEVICE_FLAG_DMA_TX;
+            uart_obj[i].uart_dma_flag |= RT_DEVICE_FLAG_DMA_TX;
         }
 
         g_uart_instances[i] = &uart_obj[i];
@@ -1034,7 +1185,7 @@ DMA_RX_IRQ_HANDLER(DMA2_CH0)
 DMA_RX_IRQ_HANDLER(DMA2_CH3)
 #endif
 #ifdef BSP_USING_UART4_DMA
-DMA_RX_IRQ_HANDLER(DMA2_CH2)
+DMA_RX_IRQ_HANDLER(DMA1_CH0)
 #endif
 
 #define DMA_TX_IRQ_HANDLER(irq_name)                   \

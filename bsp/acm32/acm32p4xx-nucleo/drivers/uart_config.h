@@ -68,7 +68,7 @@ struct acm32_uart_config
 #endif
 #endif
 
-/* ---- USART2 (PD5/PD6, AF1) ---- */
+/* ---- USART2 (PD5/PD6, AF3) ---- */
 #ifdef BSP_USING_UART2
 #ifndef BSP_USING_UART2_DMA
 #define UART2_CONFIG \
@@ -98,7 +98,8 @@ struct acm32_uart_config
 #endif
 #endif
 
-/* ---- USART4 (PC10/PC11, AF1) ---- */
+/* ---- USART4 (PC10/PC11, AF4) ---- */
+/* RX 使用 DMA1_CH0，避免与 UART3 TX(DMA2_CH2) 通道/IRQ 冲突 */
 #ifdef BSP_USING_UART4
 #ifndef BSP_USING_UART4_DMA
 #define UART4_CONFIG \
@@ -109,7 +110,7 @@ struct acm32_uart_config
 #define UART4_CONFIG \
     { .name = "uart4", .uart_type = 0, .Instance = USART4, .irq_type = USART4_IRQn, \
       .tx_dma_instance = DMA2_Channel1, .tx_dma_channel = 1, .tx_dma_irq = DMA2_CH1_IRQn, .tx_dma_reqid = DMA2_REQ_USART4_TX, \
-      .rx_dma_instance = DMA2_Channel2, .rx_dma_channel = 2, .rx_dma_irq = DMA2_CH2_IRQn, .rx_dma_reqid = DMA2_REQ_USART4_RX }
+      .rx_dma_instance = DMA1_Channel0, .rx_dma_channel = 0, .rx_dma_irq = DMA1_CH0_IRQn, .rx_dma_reqid = DMA1_REQ_USART4_RX }
 #endif
 #endif
 

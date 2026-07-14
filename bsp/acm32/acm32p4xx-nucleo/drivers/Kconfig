@@ -72,7 +72,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         default n
 
     config BSP_USING_UART4_DMA
-        bool "Enable UART4 DMA (TX: DMA2_CH1, RX: DMA2_CH2)"
+        bool "Enable UART4 DMA (TX: DMA2_CH1, RX: DMA1_CH0)"
         depends on BSP_USING_UART4
         default n
 

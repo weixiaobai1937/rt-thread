@@ -267,7 +267,6 @@
 /* ACM32P4xx Onboard Peripheral Drivers */
 
 #define BSP_USING_UART1
-#define BSP_USING_UART1_DMA
 #define BSP_USING_UART2
 #define BSP_USING_UART2_DMA
 #define BSP_USING_GPIO1
