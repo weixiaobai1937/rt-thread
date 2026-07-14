@@ -106,6 +106,12 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         select RT_USING_SERIAL_V2
         default n
 
+    config BSP_USING_SPI1
+        bool "Enable SPI1 (PE12/PE11/PE10, soft CS PE13)"
+        select RT_USING_SPI
+        select RT_USING_PIN
+        default n
+
     config BSP_USING_GPIO1
         bool "Enable GPIO1"
         select RT_USING_PIN
