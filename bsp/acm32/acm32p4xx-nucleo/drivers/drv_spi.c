@@ -70,6 +70,8 @@ struct acm32_spi
     struct rt_spi_configuration *cfg;
     struct rt_spi_bus            spi_bus;
 #ifdef ACM32_SPI_USING_DMA
+    const struct acm32_spi_dma_config *dma_tx_cfg;
+    const struct acm32_spi_dma_config *dma_rx_cfg;
     DMA_HandleTypeDef            dma_tx;
     DMA_HandleTypeDef            dma_rx;
     rt_uint8_t                   spi_dma_flag;
@@ -103,6 +105,10 @@ static struct acm32_spi spi_bus_obj[SPI_MAX_INDEX] = {0};
 #ifdef BSP_USING_SPI1_DMA
 static const struct acm32_spi_dma_config spi1_dma_tx = SPI1_DMA_TX_CONFIG;
 static const struct acm32_spi_dma_config spi1_dma_rx = SPI1_DMA_RX_CONFIG;
+#endif
+#ifdef BSP_USING_SPI2_DMA
+static const struct acm32_spi_dma_config spi2_dma_tx = SPI2_DMA_TX_CONFIG;
+static const struct acm32_spi_dma_config spi2_dma_rx = SPI2_DMA_RX_CONFIG;
 #endif
 #endif
 
@@ -215,20 +221,23 @@ static void acm32_spi_dma_fill(DMA_HandleTypeDef *hdma,
 
 static rt_err_t acm32_spi_dma_init(struct acm32_spi *spi_drv)
 {
-#ifdef BSP_USING_SPI1_DMA
-    if (spi_drv->config->Instance != SPI1)
-        return RT_EOK;
+    if (spi_drv->dma_tx_cfg == RT_NULL || spi_drv->dma_rx_cfg == RT_NULL)
+        return RT_EOK; /* bus without DMA */
 
     if (spi_drv->spi_dma_flag & (SPI_USING_TX_DMA_FLAG | SPI_USING_RX_DMA_FLAG))
         return RT_EOK;
 
-    __HAL_RCC_DMA2_CLK_ENABLE();
+    /* SPI1 DMA on DMA2; SPI2 DMA on DMA1 */
+    if ((rt_uint32_t)spi_drv->dma_tx_cfg->Instance < (rt_uint32_t)DMA2_Channel0)
+        __HAL_RCC_DMA1_CLK_ENABLE();
+    else
+        __HAL_RCC_DMA2_CLK_ENABLE();
 
-    acm32_spi_dma_fill(&spi_drv->dma_tx, &spi1_dma_tx, DMA_DATAFLOW_M2P);
+    acm32_spi_dma_fill(&spi_drv->dma_tx, spi_drv->dma_tx_cfg, DMA_DATAFLOW_M2P);
     if (HAL_DMA_Init(&spi_drv->dma_tx) != HAL_OK)
         return -RT_EIO;
 
-    acm32_spi_dma_fill(&spi_drv->dma_rx, &spi1_dma_rx, DMA_DATAFLOW_P2M);
+    acm32_spi_dma_fill(&spi_drv->dma_rx, spi_drv->dma_rx_cfg, DMA_DATAFLOW_P2M);
     if (HAL_DMA_Init(&spi_drv->dma_rx) != HAL_OK)
         return -RT_EIO;
 
@@ -241,10 +250,6 @@ static rt_err_t acm32_spi_dma_init(struct acm32_spi *spi_drv)
     NVIC_EnableIRQ(spi_drv->config->irq_type);
 
     return RT_EOK;
-#else
-    (void)spi_drv;
-    return RT_EOK;
-#endif
 }
 
 static rt_uint32_t acm32_spi_dma_spins(rt_size_t length)
@@ -480,6 +485,26 @@ int rt_hw_spi_init(void)
         spi_bus_obj[i].config = &spi_config[i];
         spi_bus_obj[i].handle.Instance = spi_config[i].Instance;
         spi_bus_obj[i].spi_bus.parent.user_data = &spi_config[i];
+
+#ifdef ACM32_SPI_USING_DMA
+        spi_bus_obj[i].dma_tx_cfg = RT_NULL;
+        spi_bus_obj[i].dma_rx_cfg = RT_NULL;
+        spi_bus_obj[i].spi_dma_flag = 0;
+#ifdef BSP_USING_SPI1_DMA
+        if (spi_config[i].Instance == SPI1)
+        {
+            spi_bus_obj[i].dma_tx_cfg = &spi1_dma_tx;
+            spi_bus_obj[i].dma_rx_cfg = &spi1_dma_rx;
+        }
+#endif
+#ifdef BSP_USING_SPI2_DMA
+        if (spi_config[i].Instance == SPI2)
+        {
+            spi_bus_obj[i].dma_tx_cfg = &spi2_dma_tx;
+            spi_bus_obj[i].dma_rx_cfg = &spi2_dma_rx;
+        }
+#endif
+#endif
 
         result = rt_spi_bus_register(&spi_bus_obj[i].spi_bus,
                                      spi_config[i].bus_name,
