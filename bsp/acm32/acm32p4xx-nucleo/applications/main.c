@@ -251,6 +251,90 @@ int spi1_dma_test(int argc, char **argv)
 MSH_CMD_EXPORT(spi1_dma_test, "SPI1 long xfer test [len]");
 #endif
 
+#ifdef BSP_USING_SPI2
+#ifndef BSP_USING_SPI1
+extern rt_err_t rt_hw_spi_device_attach(const char *bus_name, const char *device_name, rt_base_t cs_pin);
+#endif
+
+static struct rt_spi_device *spi2_test_prepare(void)
+{
+    struct rt_spi_device *dev;
+    struct rt_spi_configuration cfg;
+    rt_err_t ret;
+
+    ret = rt_hw_spi_device_attach("spi2", "spi20", SPI2_DEFAULT_CS_PIN_INDEX);
+    if (ret != RT_EOK)
+    {
+        rt_kprintf("attach ret=%d (may already exist)\n", ret);
+    }
+
+    dev = (struct rt_spi_device *)rt_device_find("spi20");
+    if (dev == RT_NULL)
+    {
+        rt_kprintf("spi20 not found\n");
+        return RT_NULL;
+    }
+
+    cfg.mode = RT_SPI_MASTER | RT_SPI_MODE_0 | RT_SPI_MSB;
+    cfg.data_width = 8;
+    cfg.max_hz = 1000000;
+    ret = rt_spi_configure(dev, &cfg);
+    if (ret != RT_EOK)
+    {
+        rt_kprintf("spi configure failed: %d\n", ret);
+        return RT_NULL;
+    }
+
+    return dev;
+}
+
+int spi2_loopback_test(int argc, char **argv)
+{
+    struct rt_spi_device *dev;
+    static rt_uint8_t tx[512];
+    static rt_uint8_t rx[512];
+    int i;
+    int len = 16;
+    int pass = 1;
+
+    if (argc >= 2)
+        len = atoi(argv[1]);
+    if (len <= 0 || len > 512)
+        len = 16;
+
+    dev = spi2_test_prepare();
+    if (dev == RT_NULL)
+        return -1;
+
+    for (i = 0; i < len; i++)
+        tx[i] = (rt_uint8_t)(0xA0 + (i & 0x0F));
+    rt_memset(rx, 0, (rt_size_t)len);
+
+    rt_kprintf("SPI2 loopback len=%d: short MOSI(PB15)-MISO(PB14)\n", len);
+#ifdef BSP_USING_SPI2_DMA
+    rt_kprintf("DMA enabled, half-duplex TX>=32 uses DMA\n");
+#endif
+    if (rt_spi_transfer(dev, tx, rx, (rt_size_t)len) != len)
+    {
+        rt_kprintf("transfer failed\n");
+        return -1;
+    }
+
+    for (i = 0; i < len; i++)
+    {
+        if (rx[i] != tx[i])
+        {
+            pass = 0;
+            rt_kprintf("mismatch @%d tx=%02X rx=%02X\n", i, tx[i], rx[i]);
+        }
+    }
+
+    rt_kprintf("SPI2 loopback %s\n", pass ? "PASS" : "FAIL");
+    return pass ? 0 : -1;
+}
+MSH_CMD_EXPORT(spi2_loopback_test, "SPI2 MOSI-MISO loopback [len]");
+#endif
+
 int main(void)
 {
     rt_kprintf("ACM32P4xx-Nucleo BSP boot success!\n");
@@ -258,6 +342,9 @@ int main(void)
     rt_kprintf("Run 'spi1_loopback_test' after shorting MOSI-MISO\n");
 #ifdef BSP_USING_SPI1
     rt_kprintf("Run 'spi1_dma_test' for long/half-duplex TX path\n");
+#endif
+#ifdef BSP_USING_SPI2
+    rt_kprintf("Run 'spi2_loopback_test' after shorting MOSI(PB15)-MISO(PB14)\n");
 #endif
 
     rt_pin_mode(LED_PIN_NUM, PIN_MODE_OUTPUT);
