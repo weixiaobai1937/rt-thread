@@ -213,7 +213,65 @@ static rt_err_t acm32_spi_dma_init(struct acm32_spi *spi_drv)
 
     return RT_EOK;
 }
+
+/* HAL Timeout 参数是忙等计数，不是 ms；按 length 放大 spin 上限 */
+static rt_bool_t acm32_spi_wait_tx_idle(SPI_HandleTypeDef *hspi, rt_uint32_t spins)
+{
+    while (spins--)
+    {
+        if (HAL_SPI_GetTxState(hspi) == SPI_TX_STATE_IDLE)
+            return RT_TRUE;
+    }
+    return RT_FALSE;
+}
+
+static rt_bool_t acm32_spi_wait_rx_idle(SPI_HandleTypeDef *hspi, rt_uint32_t spins)
+{
+    while (spins--)
+    {
+        if (HAL_SPI_GetRxState(hspi) == SPI_RX_STATE_IDLE)
+            return RT_TRUE;
+    }
+    return RT_FALSE;
+}
+
+static rt_uint32_t acm32_spi_dma_spins(rt_size_t length)
+{
+    /* 粗算：每字节大量循环 + 底数，避免极短超时 */
+    rt_uint32_t s = (rt_uint32_t)length * 4096U + 100000U;
+    return s;
+}
+
+static HAL_StatusTypeDef acm32_spi_dma_tx(struct acm32_spi *spi_drv,
+                                          const rt_uint8_t *buf, rt_size_t len)
+{
+    SPI_HandleTypeDef *hspi = &spi_drv->handle;
+    if (HAL_SPI_Transmit_DMA(hspi, (uint8_t *)buf, len) != HAL_OK)
+        return HAL_ERROR;
+    if (!acm32_spi_wait_tx_idle(hspi, acm32_spi_dma_spins(len)))
+    {
+        if (hspi->HDMA_Tx)
+            HAL_DMA_Abort(hspi->HDMA_Tx);
+        hspi->TxState = SPI_TX_STATE_IDLE;
+        return HAL_TIMEOUT;
+    }
+    return HAL_OK;
+}
 #endif
+
+/* 静态 0xFF dummy，禁止按 length malloc */
+#define SPI_DMA_DUMMY_CHUNK  64
+static rt_uint8_t spi_dma_dummy_ff[SPI_DMA_DUMMY_CHUNK];
+
+static void acm32_spi_dummy_ff_init_once(void)
+{
+    static rt_uint8_t inited;
+    if (!inited)
+    {
+        rt_memset(spi_dma_dummy_ff, 0xFF, sizeof(spi_dma_dummy_ff));
+        inited = 1;
+    }
+}
 
 static rt_err_t acm32_spi_init(struct acm32_spi *spi_drv, struct rt_spi_configuration *cfg)
 {
@@ -310,31 +368,44 @@ static rt_ssize_t spixfer(struct rt_spi_device *device, struct rt_spi_message *m
 
     if (message->length > 0)
     {
+#ifdef BSP_USING_SPI1_DMA
+        if ((spi_drv->spi_dma_flag & SPI_USING_TX_DMA_FLAG) &&
+            send_buf && !recv_buf && message->length >= SPI_DMA_MIN_SIZE)
+        {
+            state = acm32_spi_dma_tx(spi_drv, send_buf, message->length);
+        }
+        else
+#endif
         if (send_buf && recv_buf)
         {
+            /* full-duplex: always poll */
             state = HAL_SPI_TransmitReceive(hspi, (uint8_t *)send_buf, recv_buf,
                                             message->length, SPI_XFER_TIMEOUT_MS);
         }
         else if (send_buf)
         {
+            /* length < SPI_DMA_MIN_SIZE or no DMA */
             state = HAL_SPI_Transmit(hspi, (uint8_t *)send_buf,
                                      message->length, SPI_XFER_TIMEOUT_MS);
         }
         else if (recv_buf)
         {
-            /* Master RX needs clocks: full-duplex with 0xFF dummy TX */
-            rt_uint8_t *dummy = RT_NULL;
-            dummy = (rt_uint8_t *)rt_malloc(message->length);
-            if (dummy == RT_NULL)
+            /* RX: chunked static dummy + TransmitReceive, no malloc.
+             * RX DMA deferred: HAL has no TransmitReceive_DMA; master needs
+             * clock via dummy TX, so keep poll path for correctness. */
+            acm32_spi_dummy_ff_init_once();
             {
-                state = HAL_ERROR;
-            }
-            else
-            {
-                rt_memset(dummy, 0xFF, message->length);
-                state = HAL_SPI_TransmitReceive(hspi, dummy, recv_buf,
-                                                message->length, SPI_XFER_TIMEOUT_MS);
-                rt_free(dummy);
+                rt_size_t left = message->length;
+                rt_uint8_t *p = recv_buf;
+                state = HAL_OK;
+                while (left && state == HAL_OK)
+                {
+                    rt_size_t n = left > SPI_DMA_DUMMY_CHUNK ? SPI_DMA_DUMMY_CHUNK : left;
+                    state = HAL_SPI_TransmitReceive(hspi, spi_dma_dummy_ff, p, n,
+                                                    SPI_XFER_TIMEOUT_MS);
+                    p += n;
+                    left -= n;
+                }
             }
         }
     }
