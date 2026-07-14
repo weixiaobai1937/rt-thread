@@ -19,12 +19,20 @@
 #include "hal_spi.h"
 #include "hal_gpio.h"
 #include "hal_rcc.h"
+#ifdef BSP_USING_SPI1_DMA
+#include "hal_dma.h"
+#endif
 
 #define DBG_TAG "drv.spi"
 #define DBG_LVL DBG_INFO
 #include <rtdbg.h>
 
 #define SPI_XFER_TIMEOUT_MS    1000U
+
+#ifdef BSP_USING_SPI1_DMA
+#define SPI_USING_RX_DMA_FLAG   (1U << 0)
+#define SPI_USING_TX_DMA_FLAG   (1U << 1)
+#endif
 
 struct acm32_spi_config
 {
@@ -42,12 +50,27 @@ struct acm32_spi_config
     rt_uint32_t      miso_af;
 };
 
+#ifdef BSP_USING_SPI1_DMA
+struct acm32_spi_dma_config
+{
+    DMA_Channel_TypeDef *Instance;
+    rt_uint32_t          Channel;
+    IRQn_Type            irq;
+    rt_uint32_t          reqid;
+};
+#endif
+
 struct acm32_spi
 {
     SPI_HandleTypeDef            handle;
     struct acm32_spi_config     *config;
     struct rt_spi_configuration *cfg;
     struct rt_spi_bus            spi_bus;
+#ifdef BSP_USING_SPI1_DMA
+    DMA_HandleTypeDef            dma_tx;
+    DMA_HandleTypeDef            dma_rx;
+    rt_uint8_t                   spi_dma_flag;
+#endif
 };
 
 enum
@@ -62,6 +85,11 @@ static struct acm32_spi_config spi_config[] =
 };
 
 static struct acm32_spi spi_bus_obj[SPI_MAX_INDEX] = {0};
+
+#ifdef BSP_USING_SPI1_DMA
+static const struct acm32_spi_dma_config spi1_dma_tx = SPI1_DMA_TX_CONFIG;
+static const struct acm32_spi_dma_config spi1_dma_rx = SPI1_DMA_RX_CONFIG;
+#endif
 
 void HAL_SPI_MspInit(SPI_HandleTypeDef *hspi)
 {
@@ -139,6 +167,54 @@ static rt_uint32_t acm32_spi_baud_prescaler(rt_uint32_t max_hz)
     return 254;
 }
 
+#ifdef BSP_USING_SPI1_DMA
+static void acm32_spi_dma_fill(DMA_HandleTypeDef *hdma,
+                               const struct acm32_spi_dma_config *cfg,
+                               rt_uint32_t dataflow)
+{
+    hdma->Instance = cfg->Instance;
+    hdma->Channel  = cfg->Channel;
+    hdma->Init.Mode       = DMA_MODE_NORMAL;
+    hdma->Init.DataFlow   = dataflow;
+    hdma->Init.ReqID      = cfg->reqid;
+    hdma->Init.SrcIncDec  = (dataflow == DMA_DATAFLOW_M2P) ?
+                            DMA_SRCINCDEC_INC : DMA_SRCINCDEC_DISABLE;
+    hdma->Init.DestIncDec = (dataflow == DMA_DATAFLOW_M2P) ?
+                            DMA_DESTINCDEC_DISABLE : DMA_DESTINCDEC_INC;
+    hdma->Init.SrcWidth   = DMA_SRCWIDTH_BYTE;
+    hdma->Init.DestWidth  = DMA_DESTWIDTH_BYTE;
+    hdma->Init.SrcBurst   = DMA_SRCBURST_1;
+    hdma->Init.DestBurst  = DMA_DESTBURST_1;
+    hdma->Init.SrcMaster  = DMA_SRCMASTER_1;
+    hdma->Init.DestMaster = DMA_DESTMASTER_1;
+    hdma->Init.Lock       = 0;
+    hdma->Init.NextMaster = 0;
+}
+
+static rt_err_t acm32_spi_dma_init(struct acm32_spi *spi_drv)
+{
+    __HAL_RCC_DMA2_CLK_ENABLE();
+
+    acm32_spi_dma_fill(&spi_drv->dma_tx, &spi1_dma_tx, DMA_DATAFLOW_M2P);
+    if (HAL_DMA_Init(&spi_drv->dma_tx) != HAL_OK)
+        return -RT_EIO;
+
+    acm32_spi_dma_fill(&spi_drv->dma_rx, &spi1_dma_rx, DMA_DATAFLOW_P2M);
+    if (HAL_DMA_Init(&spi_drv->dma_rx) != HAL_OK)
+        return -RT_EIO;
+
+    spi_drv->handle.HDMA_Tx = &spi_drv->dma_tx;
+    spi_drv->handle.HDMA_Rx = &spi_drv->dma_rx;
+    spi_drv->spi_dma_flag = SPI_USING_TX_DMA_FLAG | SPI_USING_RX_DMA_FLAG;
+
+    /* SPI batch-done IRQ required for HAL DMA completion path */
+    NVIC_SetPriority(spi_drv->config->irq_type, 2);
+    NVIC_EnableIRQ(spi_drv->config->irq_type);
+
+    return RT_EOK;
+}
+#endif
+
 static rt_err_t acm32_spi_init(struct acm32_spi *spi_drv, struct rt_spi_configuration *cfg)
 {
     SPI_HandleTypeDef *hspi = &spi_drv->handle;
@@ -183,6 +259,11 @@ static rt_err_t acm32_spi_init(struct acm32_spi *spi_drv, struct rt_spi_configur
 
     if (HAL_SPI_Init(hspi) != HAL_OK)
         return -RT_EIO;
+
+#ifdef BSP_USING_SPI1_DMA
+    if (acm32_spi_dma_init(spi_drv) != RT_EOK)
+        return -RT_EIO;
+#endif
 
     spi_drv->cfg = cfg;
     return RT_EOK;
@@ -328,5 +409,14 @@ int rt_hw_spi_init(void)
     return RT_EOK;
 }
 INIT_BOARD_EXPORT(rt_hw_spi_init);
+
+#ifdef BSP_USING_SPI1
+void SPI1_IRQHandler(void)
+{
+    rt_interrupt_enter();
+    HAL_SPI_IRQHandler(&spi_bus_obj[SPI1_INDEX].handle);
+    rt_interrupt_leave();
+}
+#endif
 
 #endif /* BSP_USING_SPI1 */
