@@ -8,6 +8,7 @@
  * 2021-09-17     AisinoChip   the first version
  * 2026-06-04     AisinoChip   add ACM32P4xx support
  * 2026-07-13     AisinoChip   UART2 DMA echo test
+ * 2026-07-14     AisinoChip   SPI1 MOSI-MISO loopback test
  */
 
 #include <rthw.h>
@@ -15,6 +16,7 @@
 #include <rtdevice.h>
 #include <stdlib.h>
 #include "board.h"
+#include "spi_config.h"
 
 #define LED_PIN_NUM    0     /* PA0 - LED on ACM32P4xx Nucleo board */
 
@@ -87,10 +89,77 @@ int uart2_echo_test(int argc, char **argv)
 }
 MSH_CMD_EXPORT(uart2_echo_test, "UART2 DMA echo test [timeout_ms]");
 
+#ifdef BSP_USING_SPI1
+extern rt_err_t rt_hw_spi_device_attach(const char *bus_name, const char *device_name, rt_base_t cs_pin);
+
+int spi1_loopback_test(int argc, char **argv)
+{
+    struct rt_spi_device *dev;
+    struct rt_spi_configuration cfg;
+    rt_uint8_t tx[16];
+    rt_uint8_t rx[16];
+    rt_err_t ret;
+    int i;
+    int pass = 1;
+
+    RT_UNUSED(argc);
+    RT_UNUSED(argv);
+
+    ret = rt_hw_spi_device_attach("spi1", "spi10", SPI1_DEFAULT_CS_PIN_INDEX);
+    if (ret != RT_EOK)
+    {
+        /* 可能已 attach：继续 find */
+        rt_kprintf("attach ret=%d (may already exist)\n", ret);
+    }
+
+    dev = (struct rt_spi_device *)rt_device_find("spi10");
+    if (dev == RT_NULL)
+    {
+        rt_kprintf("spi10 not found\n");
+        return -1;
+    }
+
+    cfg.mode = RT_SPI_MASTER | RT_SPI_MODE_0 | RT_SPI_MSB;
+    cfg.data_width = 8;
+    cfg.max_hz = 1000000;
+    ret = rt_spi_configure(dev, &cfg);
+    if (ret != RT_EOK)
+    {
+        rt_kprintf("spi configure failed: %d\n", ret);
+        return -1;
+    }
+
+    for (i = 0; i < 16; i++)
+        tx[i] = (rt_uint8_t)(0xA0 + i);
+    rt_memset(rx, 0, sizeof(rx));
+
+    rt_kprintf("SPI1 loopback: short MOSI(PE11)-MISO(PE10), then check pattern\n");
+    if (rt_spi_transfer(dev, tx, rx, 16) != 16)
+    {
+        rt_kprintf("transfer failed\n");
+        return -1;
+    }
+
+    for (i = 0; i < 16; i++)
+    {
+        if (rx[i] != tx[i])
+        {
+            pass = 0;
+            rt_kprintf("mismatch @%d tx=%02X rx=%02X\n", i, tx[i], rx[i]);
+        }
+    }
+
+    rt_kprintf("SPI1 loopback %s\n", pass ? "PASS" : "FAIL");
+    return pass ? 0 : -1;
+}
+MSH_CMD_EXPORT(spi1_loopback_test, "SPI1 MOSI-MISO loopback test");
+#endif
+
 int main(void)
 {
     rt_kprintf("ACM32P4xx-Nucleo BSP boot success!\n");
     rt_kprintf("Run 'uart2_echo_test' to test UART2 DMA echo\n");
+    rt_kprintf("Run 'spi1_loopback_test' after shorting MOSI-MISO\n");
 
     rt_pin_mode(LED_PIN_NUM, PIN_MODE_OUTPUT);
 

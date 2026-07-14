@@ -152,6 +152,8 @@
 #define RT_USING_SERIAL_V2
 #define RT_SERIAL_BUF_STRATEGY_OVERWRITE
 #define RT_SERIAL_USING_DMA
+#define RT_USING_SPI
+#define RT_USING_SPI_ISR
 #define RT_USING_PIN
 /* end of Device Drivers */
 
@@ -269,6 +271,7 @@
 #define BSP_USING_UART1
 #define BSP_USING_UART2
 #define BSP_USING_UART2_DMA
+#define BSP_USING_SPI1
 #define BSP_USING_GPIO1
 #define BSP_USING_ETH
 #define LWIP_SUPPORT_CUSTOM_PBUF 1
