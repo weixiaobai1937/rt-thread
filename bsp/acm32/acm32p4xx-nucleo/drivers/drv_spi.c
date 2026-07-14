@@ -15,14 +15,15 @@
 #include "board.h"
 #include "spi_config.h"
 
-#ifdef BSP_USING_SPI1
+#if defined(BSP_USING_SPI1) || defined(BSP_USING_SPI2)
 
 #include "hal_spi.h"
 #include "hal_gpio.h"
 #include "hal_rcc.h"
 #include "system_accelerate.h"
-#ifdef BSP_USING_SPI1_DMA
+#if defined(BSP_USING_SPI1_DMA) || defined(BSP_USING_SPI2_DMA)
 #include "hal_dma.h"
+#define ACM32_SPI_USING_DMA
 #endif
 
 #define DBG_TAG "drv.spi"
@@ -31,7 +32,7 @@
 
 #define SPI_XFER_TIMEOUT_MS    1000U
 
-#ifdef BSP_USING_SPI1_DMA
+#ifdef ACM32_SPI_USING_DMA
 #define SPI_USING_RX_DMA_FLAG   (1U << 0)
 #define SPI_USING_TX_DMA_FLAG   (1U << 1)
 #endif
@@ -52,7 +53,7 @@ struct acm32_spi_config
     rt_uint32_t      miso_af;
 };
 
-#ifdef BSP_USING_SPI1_DMA
+#ifdef ACM32_SPI_USING_DMA
 struct acm32_spi_dma_config
 {
     DMA_Channel_TypeDef *Instance;
@@ -68,7 +69,7 @@ struct acm32_spi
     struct acm32_spi_config     *config;
     struct rt_spi_configuration *cfg;
     struct rt_spi_bus            spi_bus;
-#ifdef BSP_USING_SPI1_DMA
+#ifdef ACM32_SPI_USING_DMA
     DMA_HandleTypeDef            dma_tx;
     DMA_HandleTypeDef            dma_rx;
     rt_uint8_t                   spi_dma_flag;
@@ -77,20 +78,32 @@ struct acm32_spi
 
 enum
 {
+#ifdef BSP_USING_SPI1
     SPI1_INDEX,
+#endif
+#ifdef BSP_USING_SPI2
+    SPI2_INDEX,
+#endif
     SPI_MAX_INDEX
 };
 
 static struct acm32_spi_config spi_config[] =
 {
+#ifdef BSP_USING_SPI1
     SPI1_BUS_CONFIG,
+#endif
+#ifdef BSP_USING_SPI2
+    SPI2_BUS_CONFIG,
+#endif
 };
 
 static struct acm32_spi spi_bus_obj[SPI_MAX_INDEX] = {0};
 
+#ifdef ACM32_SPI_USING_DMA
 #ifdef BSP_USING_SPI1_DMA
 static const struct acm32_spi_dma_config spi1_dma_tx = SPI1_DMA_TX_CONFIG;
 static const struct acm32_spi_dma_config spi1_dma_rx = SPI1_DMA_RX_CONFIG;
+#endif
 #endif
 
 void HAL_SPI_MspInit(SPI_HandleTypeDef *hspi)
@@ -123,6 +136,13 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef *hspi)
         __HAL_RCC_GPIOE_CLK_ENABLE();
         __HAL_RCC_SPI1_CLK_ENABLE();
     }
+#ifdef BSP_USING_SPI2
+    else if (hspi->Instance == SPI2)
+    {
+        __HAL_RCC_GPIOB_CLK_ENABLE();
+        __HAL_RCC_SPI2_CLK_ENABLE();
+    }
+#endif
     else
     {
         return;
@@ -169,7 +189,7 @@ static rt_uint32_t acm32_spi_baud_prescaler(rt_uint32_t max_hz)
     return 254;
 }
 
-#ifdef BSP_USING_SPI1_DMA
+#ifdef ACM32_SPI_USING_DMA
 static void acm32_spi_dma_fill(DMA_HandleTypeDef *hdma,
                                const struct acm32_spi_dma_config *cfg,
                                rt_uint32_t dataflow)
@@ -195,6 +215,10 @@ static void acm32_spi_dma_fill(DMA_HandleTypeDef *hdma,
 
 static rt_err_t acm32_spi_dma_init(struct acm32_spi *spi_drv)
 {
+#ifdef BSP_USING_SPI1_DMA
+    if (spi_drv->config->Instance != SPI1)
+        return RT_EOK;
+
     if (spi_drv->spi_dma_flag & (SPI_USING_TX_DMA_FLAG | SPI_USING_RX_DMA_FLAG))
         return RT_EOK;
 
@@ -217,6 +241,10 @@ static rt_err_t acm32_spi_dma_init(struct acm32_spi *spi_drv)
     NVIC_EnableIRQ(spi_drv->config->irq_type);
 
     return RT_EOK;
+#else
+    (void)spi_drv;
+    return RT_EOK;
+#endif
 }
 
 static rt_uint32_t acm32_spi_dma_spins(rt_size_t length)
@@ -300,7 +328,7 @@ static rt_err_t acm32_spi_init(struct acm32_spi *spi_drv, struct rt_spi_configur
     if (HAL_SPI_Init(hspi) != HAL_OK)
         return -RT_EIO;
 
-#ifdef BSP_USING_SPI1_DMA
+#ifdef ACM32_SPI_USING_DMA
     if (acm32_spi_dma_init(spi_drv) != RT_EOK)
         return -RT_EIO;
 #endif
@@ -350,7 +378,7 @@ static rt_ssize_t spixfer(struct rt_spi_device *device, struct rt_spi_message *m
 
     if (message->length > 0)
     {
-#ifdef BSP_USING_SPI1_DMA
+#ifdef ACM32_SPI_USING_DMA
         if ((spi_drv->spi_dma_flag & SPI_USING_TX_DMA_FLAG) &&
             send_buf && !recv_buf && message->length >= SPI_DMA_MIN_SIZE)
         {
@@ -472,4 +500,13 @@ void SPI1_IRQHandler(void)
 }
 #endif
 
-#endif /* BSP_USING_SPI1 */
+#ifdef BSP_USING_SPI2
+void SPI2_IRQHandler(void)
+{
+    rt_interrupt_enter();
+    HAL_SPI_IRQHandler(&spi_bus_obj[SPI2_INDEX].handle);
+    rt_interrupt_leave();
+}
+#endif
+
+#endif /* BSP_USING_SPI1 || BSP_USING_SPI2 */
