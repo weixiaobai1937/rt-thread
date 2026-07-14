@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2006-2024, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -6,6 +6,7 @@
  * Change Logs:
  * Date           Author       Notes
  * 2026-07-14     AisinoChip   ACM32P4xx-Nucleo SPI1 master poll + soft CS
+ * 2026-07-14     AisinoChip   SPI1 half-duplex TX DMA (>=32B)
  */
 
 #include <rthw.h>
@@ -19,6 +20,7 @@
 #include "hal_spi.h"
 #include "hal_gpio.h"
 #include "hal_rcc.h"
+#include "system_accelerate.h"
 #ifdef BSP_USING_SPI1_DMA
 #include "hal_dma.h"
 #endif
@@ -193,6 +195,9 @@ static void acm32_spi_dma_fill(DMA_HandleTypeDef *hdma,
 
 static rt_err_t acm32_spi_dma_init(struct acm32_spi *spi_drv)
 {
+    if (spi_drv->spi_dma_flag & (SPI_USING_TX_DMA_FLAG | SPI_USING_RX_DMA_FLAG))
+        return RT_EOK;
+
     __HAL_RCC_DMA2_CLK_ENABLE();
 
     acm32_spi_dma_fill(&spi_drv->dma_tx, &spi1_dma_tx, DMA_DATAFLOW_M2P);
@@ -214,52 +219,29 @@ static rt_err_t acm32_spi_dma_init(struct acm32_spi *spi_drv)
     return RT_EOK;
 }
 
-/* HAL Timeout 参数是忙等计数，不是 ms；按 length 放大 spin 上限 */
-static rt_bool_t acm32_spi_wait_tx_idle(SPI_HandleTypeDef *hspi, rt_uint32_t spins)
-{
-    while (spins--)
-    {
-        if (HAL_SPI_GetTxState(hspi) == SPI_TX_STATE_IDLE)
-            return RT_TRUE;
-    }
-    return RT_FALSE;
-}
-
-static rt_bool_t acm32_spi_wait_rx_idle(SPI_HandleTypeDef *hspi, rt_uint32_t spins)
-{
-    while (spins--)
-    {
-        if (HAL_SPI_GetRxState(hspi) == SPI_RX_STATE_IDLE)
-            return RT_TRUE;
-    }
-    return RT_FALSE;
-}
-
 static rt_uint32_t acm32_spi_dma_spins(rt_size_t length)
 {
-    /* 粗算：每字节大量循环 + 底数，避免极短超时 */
-    rt_uint32_t s = (rt_uint32_t)length * 4096U + 100000U;
-    return s;
+    /* HAL wait 鍙傛暟鏄繖绛夎鏁帮紝涓嶆槸 ms */
+    return (rt_uint32_t)length * 4096U + 100000U;
 }
 
 static HAL_StatusTypeDef acm32_spi_dma_tx(struct acm32_spi *spi_drv,
                                           const rt_uint8_t *buf, rt_size_t len)
 {
     SPI_HandleTypeDef *hspi = &spi_drv->handle;
+
+    /* DCache 鎵撳紑鏃?DMA 璇诲唴瀛樺墠闇€ clean */
+    System_CleanDAccelerate_by_Addr((volatile void *)buf, (int32_t)len);
+
     if (HAL_SPI_Transmit_DMA(hspi, (uint8_t *)buf, len) != HAL_OK)
         return HAL_ERROR;
-    if (!acm32_spi_wait_tx_idle(hspi, acm32_spi_dma_spins(len)))
-    {
-        if (hspi->HDMA_Tx)
-            HAL_DMA_Abort(hspi->HDMA_Tx);
-        hspi->TxState = SPI_TX_STATE_IDLE;
-        return HAL_TIMEOUT;
-    }
-    return HAL_OK;
+
+    /* 瓒呮椂璧?HAL 瀹屾暣 TX 鍏抽棴锛圓bort DMA + 娓?IE/FIFO/鐘舵€侊級 */
+    return HAL_SPI_WaitTxTimeout(hspi, acm32_spi_dma_spins(len));
 }
 #endif
 
-/* 静态 0xFF dummy，禁止按 length malloc */
+/* 闈欐€?0xFF dummy锛岀姝㈡寜 length malloc */
 #define SPI_DMA_DUMMY_CHUNK  64
 static rt_uint8_t spi_dma_dummy_ff[SPI_DMA_DUMMY_CHUNK];
 

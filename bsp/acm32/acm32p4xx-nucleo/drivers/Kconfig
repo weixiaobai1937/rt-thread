@@ -119,7 +119,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         help
           Half-duplex transfers >= 32 bytes use DMA.
           Full-duplex always polls (HAL has no TransmitReceive_DMA).
-          Avoid enabling with UART3 DMA RX (DMA2_CH3 conflict).
+          Avoid UART3 DMA RX (DMA2_CH3) and UART4 DMA TX (DMA2_CH1).
 
     config BSP_USING_GPIO1
         bool "Enable GPIO1"
