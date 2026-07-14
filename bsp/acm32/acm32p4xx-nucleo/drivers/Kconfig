@@ -121,6 +121,21 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
           Full-duplex always polls (HAL has no TransmitReceive_DMA).
           Avoid UART3 DMA RX (DMA2_CH3) and UART4 DMA TX (DMA2_CH1).
 
+    config BSP_USING_SPI2
+        bool "Enable SPI2 (PB13/PB15/PB14, soft CS PB12)"
+        select RT_USING_SPI
+        select RT_USING_PIN
+        default n
+
+    config BSP_USING_SPI2_DMA
+        bool "Enable SPI2 DMA (TX: DMA1_CH0, RX: DMA1_CH1)"
+        depends on BSP_USING_SPI2
+        default n
+        help
+          Same policy as SPI1 DMA: half-duplex TX >= 32 bytes.
+          TX DMA1_CH0 Req SPI2_TX(3), RX DMA1_CH1 Req SPI2_RX(4).
+          Avoid other DMA1_CH0/CH1 users (e.g. UART4 RX if using DMA1_CH0).
+
     config BSP_USING_GPIO1
         bool "Enable GPIO1"
         select RT_USING_PIN
