@@ -63,6 +63,7 @@ struct acm32_uart
     DMA_HandleTypeDef           dma_tx;
     DMA_HandleTypeDef           dma_rx;
     rt_bool_t                   dma_tx_ready;
+    volatile rt_bool_t          dma_tx_busy;
 #endif
 };
 
@@ -355,6 +356,32 @@ static void _dma_clk_enable(DMA_Channel_TypeDef *ch)
         __HAL_RCC_DMA2_CLK_ENABLE();
 }
 
+/* HTC/TC/IDLE 共用：按 HW 当前位置上报 RX_DMADONE */
+static void _dma_rx_report_tail(struct acm32_uart *uart)
+{
+    rt_uint16_t cur_pos;
+    rt_uint16_t tail;
+
+    if (uart->dma_rx.Instance == NULL || uart->rx_dma_bufsz == 0)
+        return;
+
+    cur_pos = uart->rx_dma_bufsz -
+        (rt_uint16_t)__HAL_DMA_GET_TRANSFER_SIZE(&uart->dma_rx);
+    __DSB();
+
+    if (cur_pos == uart->rx_dma_last_pos)
+        return;
+
+    if (cur_pos > uart->rx_dma_last_pos)
+        tail = cur_pos - uart->rx_dma_last_pos;
+    else
+        tail = (uart->rx_dma_bufsz - uart->rx_dma_last_pos) + cur_pos;
+
+    rt_hw_serial_isr(&uart->serial,
+        RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)tail << 8));
+    uart->rx_dma_last_pos = cur_pos;
+}
+
 static void _uart_dma_rx_stop(struct acm32_uart *uart)
 {
     struct acm32_uart_config *c = uart->config;
@@ -364,13 +391,17 @@ static void _uart_dma_rx_stop(struct acm32_uart *uart)
     if (uart->dma_rx.Instance == NULL)
         return;
 
+    /* 停前先上报剩余 tail，避免丢尾部数据 */
+    _dma_rx_report_tail(uart);
+
     uart_reg_ie_set(inst, type,
         uart_reg_ie(inst, type) & ~_BIT(type, U_IE_IDLEI, L_IE_IDLEI));
     uart->int_mask &= ~_BIT(type, U_IE_IDLEI, L_IE_IDLEI);
 
     if (type == UART_TYPE_USART)
         CLEAR_BIT(((USART_TypeDef *)inst)->CR1, USART_CR1_RXDMAE);
-    else
+    else if (!uart->dma_tx_busy)
+        /* LPUART DMA_EN 共享：TX 在途时不关 */
         CLEAR_BIT(((LPUART_TypeDef *)inst)->CR, LPUART_CR_DMA_EN);
 
     NVIC_DisableIRQ(c->rx_dma_irq);
@@ -393,7 +424,7 @@ static void _uart_dma_tx_stop(struct acm32_uart *uart)
 
     if (type == UART_TYPE_USART)
         CLEAR_BIT(((USART_TypeDef *)inst)->CR1, USART_CR1_TXDMAE);
-    /* LPUART DMA_EN 共享，仅在 RX 也停时由 _uart_dma_rx_stop 清除 */
+    /* LPUART DMA_EN 共享，仅在 RX 也停时由 _uart_dma_rx_stop / CLOSE 清除 */
 
     if (c->tx_dma_instance != UART_DMA_NONE)
         NVIC_DisableIRQ(c->tx_dma_irq);
@@ -405,6 +436,7 @@ static void _uart_dma_tx_stop(struct acm32_uart *uart)
         uart->dma_tx.Instance = NULL;
     }
     uart->dma_tx_ready = RT_FALSE;
+    uart->dma_tx_busy = RT_FALSE;
 }
 
 static rt_err_t _uart_dma_rx_start(struct acm32_uart *uart)
@@ -543,6 +575,18 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
     struct acm32_uart_config *c = uart->config;
     void *inst = c->Instance;
     int type = c->uart_type;
+#ifdef HAL_DMA_MODULE_ENABLED
+    rt_bool_t dma_rx_was_active = (uart->dma_rx.Instance != NULL) ? RT_TRUE : RT_FALSE;
+    rt_bool_t dma_tx_was_ready = uart->dma_tx_ready;
+#endif
+
+#ifdef HAL_DMA_MODULE_ENABLED
+    /* 运行期重配：先停 DMA，HAL 重置外设后再按原模式恢复 */
+    if (dma_rx_was_active)
+        _uart_dma_rx_stop(uart);
+    if (dma_tx_was_ready)
+        _uart_dma_tx_stop(uart);
+#endif
 
     /* 仅做硬件参数初始化；DMA 在 control(CONFIG) 且 serial_rx 就绪后启动 */
     if (type == UART_TYPE_USART)
@@ -588,13 +632,38 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
                    USART_RX_FIFO_1_16 | USART_TX_FIFO_1_16);
     }
 
-    /* 默认 INT RX；DMA 路径在 CONFIG 时关闭 RXI、打开 IDLE */
-    uart->int_mask = _BIT(type, U_IE_RXI, L_IE_RXI);
-    uart_reg_ie_set(inst, type,
-        uart_reg_ie(inst, type) | _BIT(type, U_IE_RXI, L_IE_RXI));
+#ifdef HAL_DMA_MODULE_ENABLED
+    if (dma_rx_was_active)
+    {
+        /* 恢复 DMA RX（不强制 RXI，避免与 DMA 双路径） */
+        if (_uart_dma_rx_start(uart) != RT_EOK)
+            return -RT_ERROR;
+    }
+    else
+#endif
+    {
+        /* INT RX：仅在设备已 open（serial_rx 存在）时使能 RXI */
+        if (serial->serial_rx != RT_NULL)
+        {
+            uart->int_mask = _BIT(type, U_IE_RXI, L_IE_RXI);
+            uart_reg_ie_set(inst, type,
+                uart_reg_ie(inst, type) | _BIT(type, U_IE_RXI, L_IE_RXI));
+            NVIC_SetPriority(c->irq_type, 2);
+            NVIC_EnableIRQ(c->irq_type);
+        }
+        else
+        {
+            uart->int_mask = 0;
+        }
+    }
 
-    NVIC_SetPriority(c->irq_type, 2);
-    NVIC_EnableIRQ(c->irq_type);
+#ifdef HAL_DMA_MODULE_ENABLED
+    if (dma_tx_was_ready)
+    {
+        if (_uart_dma_tx_prepare(uart) != RT_EOK)
+            return -RT_ERROR;
+    }
+#endif
 
     return RT_EOK;
 }
@@ -751,14 +820,25 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial,
     if ((uart->uart_dma_flag & RT_DEVICE_FLAG_DMA_TX) &&
         c->tx_dma_instance != UART_DMA_NONE)
     {
+        if (uart->dma_tx_busy)
+            return -RT_EBUSY;
+
         if (_uart_dma_tx_prepare(uart) != RT_EOK)
-            return 0;
+            return -RT_EIO;
+
+        /* 通道若仍 EN，先 abort 再启动，防止打断半包 */
+        if (uart->dma_tx.Instance &&
+            (uart->dma_tx.Instance->CXCONFIG & DMA_CXCONFIG_EN))
+        {
+            HAL_DMA_Abort(&uart->dma_tx);
+        }
 
         if (type == UART_TYPE_USART)
             SET_BIT(((USART_TypeDef *)inst)->CR1, USART_CR1_TXDMAE);
         else
             SET_BIT(((LPUART_TypeDef *)inst)->CR, LPUART_CR_DMA_EN);
 
+        uart->dma_tx_busy = RT_TRUE;
         if (HAL_DMA_Start_IT(&uart->dma_tx,
                 (rt_uint32_t)buf,
                 (rt_uint32_t)(type == UART_TYPE_USART ?
@@ -766,7 +846,8 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial,
                     &((LPUART_TypeDef *)inst)->TXDR),
                 size) != HAL_OK)
         {
-            return 0;
+            uart->dma_tx_busy = RT_FALSE;
+            return -RT_EIO;
         }
 
         return size;
@@ -884,27 +965,8 @@ static void uart_isr(struct acm32_uart *uart)
         uart_reg_isr_clear(inst, type, _BIT(type, U_ISR_IDLEI, L_ISR_IDLEI));
 
 #ifdef HAL_DMA_MODULE_ENABLED
-        /* circular DMA 运行中：只按 HW 当前位置上报 tail，禁止 CPU 写 ping buffer */
-        if (uart->dma_rx.Instance && uart->rx_dma_bufsz)
-        {
-            rt_uint16_t cur_pos = uart->rx_dma_bufsz -
-                (rt_uint16_t)__HAL_DMA_GET_TRANSFER_SIZE(&uart->dma_rx);
-
-            __DSB();
-
-            if (cur_pos != uart->rx_dma_last_pos)
-            {
-                rt_uint16_t tail;
-                if (cur_pos > uart->rx_dma_last_pos)
-                    tail = cur_pos - uart->rx_dma_last_pos;
-                else
-                    tail = (uart->rx_dma_bufsz - uart->rx_dma_last_pos) + cur_pos;
-
-                rt_hw_serial_isr(&uart->serial,
-                    RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)tail << 8));
-                uart->rx_dma_last_pos = cur_pos;
-            }
-        }
+        /* circular DMA：只按 HW 位置上报 tail，禁止 CPU 写 ping buffer */
+        _dma_rx_report_tail(uart);
 #endif
     }
 }
@@ -914,48 +976,12 @@ static void uart_isr(struct acm32_uart *uart)
 #ifdef HAL_DMA_MODULE_ENABLED
 static void _dma_rx_half_cplt(DMA_HandleTypeDef *hdma)
 {
-    struct acm32_uart *uart = (struct acm32_uart *)hdma->Parent;
-
-    rt_uint16_t cur_pos = uart->rx_dma_bufsz -
-        (rt_uint16_t)__HAL_DMA_GET_TRANSFER_SIZE(&uart->dma_rx);
-
-    __DSB();
-
-    if (cur_pos != uart->rx_dma_last_pos)
-    {
-        rt_uint16_t tail;
-        if (cur_pos > uart->rx_dma_last_pos)
-            tail = cur_pos - uart->rx_dma_last_pos;
-        else
-            tail = (uart->rx_dma_bufsz - uart->rx_dma_last_pos) + cur_pos;
-
-        rt_hw_serial_isr(&uart->serial,
-            RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)tail << 8));
-        uart->rx_dma_last_pos = cur_pos;
-    }
+    _dma_rx_report_tail((struct acm32_uart *)hdma->Parent);
 }
 
 static void _dma_rx_cplt(DMA_HandleTypeDef *hdma)
 {
-    struct acm32_uart *uart = (struct acm32_uart *)hdma->Parent;
-
-    rt_uint16_t cur_pos = uart->rx_dma_bufsz -
-        (rt_uint16_t)__HAL_DMA_GET_TRANSFER_SIZE(&uart->dma_rx);
-
-    __DSB();
-
-    if (cur_pos != uart->rx_dma_last_pos)
-    {
-        rt_uint16_t tail;
-        if (cur_pos > uart->rx_dma_last_pos)
-            tail = cur_pos - uart->rx_dma_last_pos;
-        else
-            tail = (uart->rx_dma_bufsz - uart->rx_dma_last_pos) + cur_pos;
-
-        rt_hw_serial_isr(&uart->serial,
-            RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)tail << 8));
-        uart->rx_dma_last_pos = cur_pos;
-    }
+    _dma_rx_report_tail((struct acm32_uart *)hdma->Parent);
 }
 
 static void _dma_rx_err(DMA_HandleTypeDef *hdma)
@@ -963,12 +989,19 @@ static void _dma_rx_err(DMA_HandleTypeDef *hdma)
     struct acm32_uart *uart = (struct acm32_uart *)hdma->Parent;
     void *inst = uart->config->Instance;
     int type = uart->config->uart_type;
+    rt_uint8_t *ping_buf;
+    rt_uint16_t ping_sz;
     rt_uint32_t src;
 
     if (uart->rx_dma_ping_buf == NULL || uart->rx_dma_bufsz == 0)
         return;
 
-    /* 清 UART 错误标志，abort 后重启 circular RX */
+    /* abort 前先上报已写入但未消费的 tail */
+    _dma_rx_report_tail(uart);
+
+    ping_buf = uart->rx_dma_ping_buf;
+    ping_sz = uart->rx_dma_bufsz;
+
     uart_reg_isr_clear(inst, type, _BIT(type, U_ERR_MASK, L_ERR_MASK));
     HAL_DMA_Abort(&uart->dma_rx);
 
@@ -982,8 +1015,7 @@ static void _dma_rx_err(DMA_HandleTypeDef *hdma)
         SET_BIT(((LPUART_TypeDef *)inst)->CR, LPUART_CR_DMA_EN);
 
     if (HAL_DMA_Start_IT(&uart->dma_rx, src,
-            (rt_uint32_t)uart->rx_dma_ping_buf,
-            uart->rx_dma_bufsz) == HAL_OK)
+            (rt_uint32_t)ping_buf, ping_sz) == HAL_OK)
     {
         uart->rx_dma_last_pos = 0;
     }
@@ -999,6 +1031,7 @@ static void _dma_tx_cplt(DMA_HandleTypeDef *hdma)
         CLEAR_BIT(((USART_TypeDef *)inst)->CR1, USART_CR1_TXDMAE);
     /* LPUART: DMA_EN 是共享位（TX+RX），TX 完成时不关闭 */
 
+    uart->dma_tx_busy = RT_FALSE;
     rt_hw_serial_isr(&uart->serial, RT_SERIAL_EVENT_TX_DMADONE);
 }
 #endif

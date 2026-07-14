@@ -66,12 +66,20 @@ int uart2_echo_test(int argc, char **argv)
             total_rx += (rt_uint32_t)n;
             if (w > 0)
                 total_tx += (rt_uint32_t)w;
-            rt_kprintf("echo %d bytes (rx=%u tx=%u)\n",
-                       (int)n, total_rx, total_tx);
         }
     }
 
     rt_device_close(dev);
+
+    /* 验证 close/reopen 生命周期 */
+    ret = rt_device_open(dev, RT_DEVICE_OFLAG_RDWR | RT_DEVICE_FLAG_RX_BLOCKING | RT_DEVICE_FLAG_TX_BLOCKING);
+    if (ret != RT_EOK)
+    {
+        rt_kprintf("uart2 reopen failed: %d\n", ret);
+        return -1;
+    }
+    rt_device_close(dev);
+
     rt_kprintf("UART2 echo done: rx=%u tx=%u %s\n",
                total_rx, total_tx,
                (total_rx > 0 && total_rx == total_tx) ? "PASS" : "FAIL/idle");
