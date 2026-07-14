@@ -20,6 +20,7 @@ HAL_Driver/Src/hal_lpuart.c
 HAL_Driver/Src/hal_pmu.c
 HAL_Driver/Src/hal_efuse.c
 HAL_Driver/Src/hal_eth.c
+HAL_Driver/Src/hal_spi.c
 """)
 
 if rtconfig.PLATFORM in ['gcc']:
