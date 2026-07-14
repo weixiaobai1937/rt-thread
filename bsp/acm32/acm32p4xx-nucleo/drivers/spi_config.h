@@ -30,7 +30,22 @@ extern "C" {
         .miso_port = GPIOE, .miso_pin = GPIO_PIN_10, .miso_af = GPIO_FUNCTION_3, \
     }
 #endif
+
+#ifdef BSP_USING_SPI1_DMA
+#ifndef SPI1_DMA_TX_CONFIG
+#define SPI1_DMA_TX_CONFIG \
+    { .Instance = DMA2_Channel1, .Channel = 1, \
+      .irq = DMA2_CH1_IRQn, .reqid = DMA2_REQ_SPI1_TX }
+#endif
+#ifndef SPI1_DMA_RX_CONFIG
+#define SPI1_DMA_RX_CONFIG \
+    { .Instance = DMA2_Channel3, .Channel = 3, \
+      .irq = DMA2_CH3_IRQn, .reqid = DMA2_REQ_SPI1_RX }
+#endif
+#endif /* BSP_USING_SPI1_DMA */
 #endif /* BSP_USING_SPI1 */
+
+#define SPI_DMA_MIN_SIZE    32
 
 /* 默认软 CS：PE13 在 pin 表中的 index（Task 2 扩展后：PortE base=64, pin13 → 77） */
 #define SPI1_DEFAULT_CS_PIN_INDEX   77

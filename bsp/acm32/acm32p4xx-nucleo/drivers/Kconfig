@@ -112,6 +112,15 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         select RT_USING_PIN
         default n
 
+    config BSP_USING_SPI1_DMA
+        bool "Enable SPI1 DMA (TX: DMA2_CH1, RX: DMA2_CH3)"
+        depends on BSP_USING_SPI1
+        default n
+        help
+          Half-duplex transfers >= 32 bytes use DMA.
+          Full-duplex always polls (HAL has no TransmitReceive_DMA).
+          Avoid enabling with UART3 DMA RX (DMA2_CH3 conflict).
+
     config BSP_USING_GPIO1
         bool "Enable GPIO1"
         select RT_USING_PIN
