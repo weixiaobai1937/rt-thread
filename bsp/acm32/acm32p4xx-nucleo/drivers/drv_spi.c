@@ -8,6 +8,8 @@
  * 2026-07-14     AisinoChip   ACM32P4xx-Nucleo SPI1 master poll + soft CS
  * 2026-07-14     AisinoChip   SPI1 half-duplex TX DMA (>=32B)
  * 2026-07-14     AisinoChip   table-driven SPI1/SPI2 multi-instance
+ * 2026-07-15     AisinoChip   DMA TX/RX abort on timeout; half-duplex RX DMA
+ * 2026-07-15     AisinoChip   SPI3/SPI4 multi-instance
  */
 
 #include <rthw.h>
@@ -16,13 +18,15 @@
 #include "board.h"
 #include "spi_config.h"
 
-#if defined(BSP_USING_SPI1) || defined(BSP_USING_SPI2)
+#if defined(BSP_USING_SPI1) || defined(BSP_USING_SPI2) || \
+    defined(BSP_USING_SPI3) || defined(BSP_USING_SPI4)
 
 #include "hal_spi.h"
 #include "hal_gpio.h"
 #include "hal_rcc.h"
 #include "system_accelerate.h"
-#if defined(BSP_USING_SPI1_DMA) || defined(BSP_USING_SPI2_DMA)
+#if defined(BSP_USING_SPI1_DMA) || defined(BSP_USING_SPI2_DMA) || \
+    defined(BSP_USING_SPI3_DMA) || defined(BSP_USING_SPI4_DMA)
 #include "hal_dma.h"
 #define ACM32_SPI_USING_DMA
 #endif
@@ -31,7 +35,8 @@
 #define DBG_LVL DBG_INFO
 #include <rtdbg.h>
 
-#define SPI_XFER_TIMEOUT_MS    1000U
+/* HAL poll timeout is busy-spin count, not milliseconds */
+#define SPI_XFER_TIMEOUT_SPINS  1000U
 
 #ifdef ACM32_SPI_USING_DMA
 #define SPI_USING_RX_DMA_FLAG   (1U << 0)
@@ -87,6 +92,12 @@ enum
 #ifdef BSP_USING_SPI2
     SPI2_INDEX,
 #endif
+#ifdef BSP_USING_SPI3
+    SPI3_INDEX,
+#endif
+#ifdef BSP_USING_SPI4
+    SPI4_INDEX,
+#endif
     SPI_MAX_INDEX
 };
 
@@ -97,6 +108,12 @@ static struct acm32_spi_config spi_config[] =
 #endif
 #ifdef BSP_USING_SPI2
     SPI2_BUS_CONFIG,
+#endif
+#ifdef BSP_USING_SPI3
+    SPI3_BUS_CONFIG,
+#endif
+#ifdef BSP_USING_SPI4
+    SPI4_BUS_CONFIG,
 #endif
 };
 
@@ -110,6 +127,14 @@ static const struct acm32_spi_dma_config spi1_dma_rx = SPI1_DMA_RX_CONFIG;
 #ifdef BSP_USING_SPI2_DMA
 static const struct acm32_spi_dma_config spi2_dma_tx = SPI2_DMA_TX_CONFIG;
 static const struct acm32_spi_dma_config spi2_dma_rx = SPI2_DMA_RX_CONFIG;
+#endif
+#ifdef BSP_USING_SPI3_DMA
+static const struct acm32_spi_dma_config spi3_dma_tx = SPI3_DMA_TX_CONFIG;
+static const struct acm32_spi_dma_config spi3_dma_rx = SPI3_DMA_RX_CONFIG;
+#endif
+#ifdef BSP_USING_SPI4_DMA
+static const struct acm32_spi_dma_config spi4_dma_tx = SPI4_DMA_TX_CONFIG;
+static const struct acm32_spi_dma_config spi4_dma_rx = SPI4_DMA_RX_CONFIG;
 #endif
 #endif
 
@@ -148,6 +173,20 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef *hspi)
     {
         __HAL_RCC_GPIOB_CLK_ENABLE();
         __HAL_RCC_SPI2_CLK_ENABLE();
+    }
+#endif
+#ifdef BSP_USING_SPI3
+    else if (hspi->Instance == SPI3)
+    {
+        __HAL_RCC_GPIOC_CLK_ENABLE();
+        __HAL_RCC_SPI3_CLK_ENABLE();
+    }
+#endif
+#ifdef BSP_USING_SPI4
+    else if (hspi->Instance == SPI4)
+    {
+        __HAL_RCC_GPIOE_CLK_ENABLE();
+        __HAL_RCC_SPI4_CLK_ENABLE();
     }
 #endif
     else
@@ -228,10 +267,12 @@ static rt_err_t acm32_spi_dma_init(struct acm32_spi *spi_drv)
     if (spi_drv->spi_dma_flag & (SPI_USING_TX_DMA_FLAG | SPI_USING_RX_DMA_FLAG))
         return RT_EOK;
 
-    /* SPI1 DMA on DMA2; SPI2 DMA on DMA1 */
-    if ((rt_uint32_t)spi_drv->dma_tx_cfg->Instance < (rt_uint32_t)DMA2_Channel0)
+    /* Enable clocks for TX/RX units (may differ when Kconfig picks mixed DMA) */
+    if ((rt_uint32_t)spi_drv->dma_tx_cfg->Instance < (rt_uint32_t)DMA2_Channel0 ||
+        (rt_uint32_t)spi_drv->dma_rx_cfg->Instance < (rt_uint32_t)DMA2_Channel0)
         __HAL_RCC_DMA1_CLK_ENABLE();
-    else
+    if ((rt_uint32_t)spi_drv->dma_tx_cfg->Instance >= (rt_uint32_t)DMA2_Channel0 ||
+        (rt_uint32_t)spi_drv->dma_rx_cfg->Instance >= (rt_uint32_t)DMA2_Channel0)
         __HAL_RCC_DMA2_CLK_ENABLE();
 
     acm32_spi_dma_fill(&spi_drv->dma_tx, spi_drv->dma_tx_cfg, DMA_DATAFLOW_M2P);
@@ -255,39 +296,92 @@ static rt_err_t acm32_spi_dma_init(struct acm32_spi *spi_drv)
 
 static rt_uint32_t acm32_spi_dma_spins(rt_size_t length)
 {
-    /* HAL wait 鍙傛暟鏄繖绛夎鏁帮紝涓嶆槸 ms */
+    /* HAL wait argument is spin count, not ms */
     return (rt_uint32_t)length * 4096U + 100000U;
+}
+
+/* HAL CloseTx/CloseRx do not Abort DMA or clear DMA_REQ_EN */
+static void acm32_spi_dma_tx_abort(struct acm32_spi *spi_drv)
+{
+    SPI_HandleTypeDef *hspi = &spi_drv->handle;
+
+    if (hspi->HDMA_Tx != RT_NULL)
+        (void)HAL_DMA_Abort(hspi->HDMA_Tx);
+
+    CLEAR_BIT(hspi->Instance->TX_CTL, SPI_TX_CTL_DMA_REQ_EN);
+    CLEAR_BIT(hspi->Instance->TX_CTL, SPI_TX_CTL_EN);
+    CLEAR_BIT(hspi->Instance->IE,
+              SPI_IE_TX_BATCH_DONE_EN | SPI_IE_TX_FIFO_HALF_EMPTY_EN);
+    __SPI_CLEAR_FLAG(hspi->Instance, SPI_STATUS_BATCH_DONE);
+    __SPI_TXFIFO_RESET(hspi->Instance);
+    hspi->TxState = SPI_TX_STATE_IDLE;
+}
+
+static void acm32_spi_dma_rx_abort(struct acm32_spi *spi_drv)
+{
+    SPI_HandleTypeDef *hspi = &spi_drv->handle;
+
+    if (hspi->HDMA_Rx != RT_NULL)
+        (void)HAL_DMA_Abort(hspi->HDMA_Rx);
+
+    CLEAR_BIT(hspi->Instance->RX_CTL, SPI_RX_CTL_DMA_REQ_EN);
+    CLEAR_BIT(hspi->Instance->RX_CTL, SPI_RX_CTL_EN);
+    CLEAR_BIT(hspi->Instance->IE,
+              SPI_IE_RX_BATCH_DONE_EN | SPI_IE_RX_FIFO_NOT_EMPTY_EN);
+    __SPI_CLEAR_FLAG(hspi->Instance, SPI_STATUS_BATCH_DONE);
+    __SPI_RXFIFO_RESET(hspi->Instance);
+    hspi->RxState = SPI_RX_STATE_IDLE;
 }
 
 static HAL_StatusTypeDef acm32_spi_dma_tx(struct acm32_spi *spi_drv,
                                           const rt_uint8_t *buf, rt_size_t len)
 {
     SPI_HandleTypeDef *hspi = &spi_drv->handle;
+    HAL_StatusTypeDef st;
 
-    /* DCache 鎵撳紑鏃?DMA 璇诲唴瀛樺墠闇€ clean */
+    /* Clean DCache before DMA reads source buffer */
     System_CleanDAccelerate_by_Addr((volatile void *)buf, (int32_t)len);
 
     if (HAL_SPI_Transmit_DMA(hspi, (uint8_t *)buf, len) != HAL_OK)
+    {
+        acm32_spi_dma_tx_abort(spi_drv);
         return HAL_ERROR;
+    }
 
-    /* 瓒呮椂璧?HAL 瀹屾暣 TX 鍏抽棴锛圓bort DMA + 娓?IE/FIFO/鐘舵€侊級 */
-    return HAL_SPI_WaitTxTimeout(hspi, acm32_spi_dma_spins(len));
+    st = HAL_SPI_WaitTxTimeout(hspi, acm32_spi_dma_spins(len));
+    if (st != HAL_OK)
+        acm32_spi_dma_tx_abort(spi_drv);
+
+    return st;
+}
+
+static HAL_StatusTypeDef acm32_spi_dma_rx(struct acm32_spi *spi_drv,
+                                          rt_uint8_t *buf, rt_size_t len)
+{
+    SPI_HandleTypeDef *hspi = &spi_drv->handle;
+    HAL_StatusTypeDef st;
+
+    /* Master HAL_SPI_Receive_DMA starts clock without dummy TX DMA.
+     * Invalidate DCache after DMA writes destination buffer. */
+    System_InvalidateDAccelerate_by_Addr((volatile void *)buf, (int32_t)len);
+
+    if (HAL_SPI_Receive_DMA(hspi, buf, len) != HAL_OK)
+    {
+        acm32_spi_dma_rx_abort(spi_drv);
+        return HAL_ERROR;
+    }
+
+    st = HAL_SPI_WaitRxTimeout(hspi, acm32_spi_dma_spins(len));
+    if (st != HAL_OK)
+    {
+        acm32_spi_dma_rx_abort(spi_drv);
+        return st;
+    }
+
+    System_InvalidateDAccelerate_by_Addr((volatile void *)buf, (int32_t)len);
+    return st;
 }
 #endif
-
-/* 闈欐€?0xFF dummy锛岀姝㈡寜 length malloc */
-#define SPI_DMA_DUMMY_CHUNK  64
-static rt_uint8_t spi_dma_dummy_ff[SPI_DMA_DUMMY_CHUNK];
-
-static void acm32_spi_dummy_ff_init_once(void)
-{
-    static rt_uint8_t inited;
-    if (!inited)
-    {
-        rt_memset(spi_dma_dummy_ff, 0xFF, sizeof(spi_dma_dummy_ff));
-        inited = 1;
-    }
-}
 
 static rt_err_t acm32_spi_init(struct acm32_spi *spi_drv, struct rt_spi_configuration *cfg)
 {
@@ -390,39 +484,30 @@ static rt_ssize_t spixfer(struct rt_spi_device *device, struct rt_spi_message *m
         {
             state = acm32_spi_dma_tx(spi_drv, send_buf, message->length);
         }
+        else if ((spi_drv->spi_dma_flag & SPI_USING_RX_DMA_FLAG) &&
+                 recv_buf && !send_buf && message->length >= SPI_DMA_MIN_SIZE)
+        {
+            state = acm32_spi_dma_rx(spi_drv, recv_buf, message->length);
+        }
         else
 #endif
         if (send_buf && recv_buf)
         {
-            /* full-duplex: always poll */
+            /* full-duplex: always poll (HAL has no TransmitReceive_DMA) */
             state = HAL_SPI_TransmitReceive(hspi, (uint8_t *)send_buf, recv_buf,
-                                            message->length, SPI_XFER_TIMEOUT_MS);
+                                            message->length, SPI_XFER_TIMEOUT_SPINS);
         }
         else if (send_buf)
         {
             /* length < SPI_DMA_MIN_SIZE or no DMA */
             state = HAL_SPI_Transmit(hspi, (uint8_t *)send_buf,
-                                     message->length, SPI_XFER_TIMEOUT_MS);
+                                     message->length, SPI_XFER_TIMEOUT_SPINS);
         }
         else if (recv_buf)
         {
-            /* RX: chunked static dummy + TransmitReceive, no malloc.
-             * RX DMA deferred: HAL has no TransmitReceive_DMA; master needs
-             * clock via dummy TX, so keep poll path for correctness. */
-            acm32_spi_dummy_ff_init_once();
-            {
-                rt_size_t left = message->length;
-                rt_uint8_t *p = recv_buf;
-                state = HAL_OK;
-                while (left && state == HAL_OK)
-                {
-                    rt_size_t n = left > SPI_DMA_DUMMY_CHUNK ? SPI_DMA_DUMMY_CHUNK : left;
-                    state = HAL_SPI_TransmitReceive(hspi, spi_dma_dummy_ff, p, n,
-                                                    SPI_XFER_TIMEOUT_MS);
-                    p += n;
-                    left -= n;
-                }
-            }
+            /* short RX poll: master HAL clocks without dummy TX buffer */
+            state = HAL_SPI_Receive(hspi, recv_buf, message->length,
+                                    SPI_XFER_TIMEOUT_SPINS);
         }
     }
 
@@ -505,6 +590,20 @@ int rt_hw_spi_init(void)
             spi_bus_obj[i].dma_rx_cfg = &spi2_dma_rx;
         }
 #endif
+#ifdef BSP_USING_SPI3_DMA
+        if (spi_config[i].Instance == SPI3)
+        {
+            spi_bus_obj[i].dma_tx_cfg = &spi3_dma_tx;
+            spi_bus_obj[i].dma_rx_cfg = &spi3_dma_rx;
+        }
+#endif
+#ifdef BSP_USING_SPI4_DMA
+        if (spi_config[i].Instance == SPI4)
+        {
+            spi_bus_obj[i].dma_tx_cfg = &spi4_dma_tx;
+            spi_bus_obj[i].dma_rx_cfg = &spi4_dma_rx;
+        }
+#endif
 #endif
 
         result = rt_spi_bus_register(&spi_bus_obj[i].spi_bus,
@@ -535,4 +634,22 @@ void SPI2_IRQHandler(void)
 }
 #endif
 
-#endif /* BSP_USING_SPI1 || BSP_USING_SPI2 */
+#ifdef BSP_USING_SPI3
+void SPI3_IRQHandler(void)
+{
+    rt_interrupt_enter();
+    HAL_SPI_IRQHandler(&spi_bus_obj[SPI3_INDEX].handle);
+    rt_interrupt_leave();
+}
+#endif
+
+#ifdef BSP_USING_SPI4
+void SPI4_IRQHandler(void)
+{
+    rt_interrupt_enter();
+    HAL_SPI_IRQHandler(&spi_bus_obj[SPI4_INDEX].handle);
+    rt_interrupt_leave();
+}
+#endif
+
+#endif /* BSP_USING_SPI1 || SPI2 || SPI3 || SPI4 */

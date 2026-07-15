@@ -98,14 +98,17 @@ static struct rt_spi_device *spi1_test_prepare(void)
     struct rt_spi_configuration cfg;
     rt_err_t ret;
 
-    ret = rt_hw_spi_device_attach("spi1", "spi10", SPI1_DEFAULT_CS_PIN_INDEX);
-    if (ret != RT_EOK)
-    {
-        /* 可能已 attach：继续 find */
-        rt_kprintf("attach ret=%d (may already exist)\n", ret);
-    }
-
     dev = (struct rt_spi_device *)rt_device_find("spi10");
+    if (dev == RT_NULL)
+    {
+        ret = rt_hw_spi_device_attach("spi1", "spi10", SPI1_DEFAULT_CS_PIN_INDEX);
+        if (ret != RT_EOK)
+        {
+            rt_kprintf("spi10 attach failed: %d\n", ret);
+            return RT_NULL;
+        }
+        dev = (struct rt_spi_device *)rt_device_find("spi10");
+    }
     if (dev == RT_NULL)
     {
         rt_kprintf("spi10 not found\n");
@@ -196,12 +199,12 @@ int spi1_dma_test(int argc, char **argv)
 
     rt_kprintf("SPI1 dma test len=%d\n", len);
 #ifdef BSP_USING_SPI1_DMA
-    rt_kprintf("DMA enabled, half-duplex TX>=32 uses DMA\n");
+    rt_kprintf("DMA enabled, half-duplex TX/RX>=32 uses DMA\n");
 #else
     rt_kprintf("DMA not enabled (poll path)\n");
 #endif
 
-    /* full-duplex 环回：轮询路径仍应 PASS */
+    /* full-duplex loopback: always poll path */
     if (rt_spi_transfer(dev, tx, rx, (rt_size_t)len) != len)
     {
         rt_kprintf("transfer failed\n");
@@ -216,7 +219,7 @@ int spi1_dma_test(int argc, char **argv)
         }
     }
 
-    /* half-duplex TX：length>=32 时走 DMA */
+    /* half-duplex TX: length>=32 uses DMA */
     n = rt_spi_send(dev, tx, (rt_size_t)len);
     if (n != (rt_size_t)len)
     {
@@ -224,7 +227,20 @@ int spi1_dma_test(int argc, char **argv)
         rt_kprintf("rt_spi_send failed: %d\n", (int)n);
     }
 
-    /* 短包 transfer 再校验环回通路 */
+    /* half-duplex RX: length>=32 uses DMA (MOSI-MISO short reads 0xFF/noise) */
+    rt_memset(rx, 0xA5, (rt_size_t)len);
+    n = rt_spi_recv(dev, rx, (rt_size_t)len);
+    if (n != (rt_size_t)len)
+    {
+        pass = 0;
+        rt_kprintf("rt_spi_recv failed: %d\n", (int)n);
+    }
+    else
+    {
+        rt_kprintf("rt_spi_recv ok (first=%02X last=%02X)\n", rx[0], rx[len - 1]);
+    }
+
+    /* short transfer after DMA */
     for (i = 0; i < 16; i++)
         tx[i] = (rt_uint8_t)(0xA0 + i);
     rt_memset(rx, 0, 16);
@@ -248,7 +264,7 @@ int spi1_dma_test(int argc, char **argv)
     rt_kprintf("SPI1 dma test %s\n", pass ? "PASS" : "FAIL");
     return pass ? 0 : -1;
 }
-MSH_CMD_EXPORT(spi1_dma_test, "SPI1 long xfer test [len]");
+MSH_CMD_EXPORT(spi1_dma_test, "SPI1 long TX/RX DMA test [len]");
 #endif
 
 #ifdef BSP_USING_SPI2
@@ -262,13 +278,17 @@ static struct rt_spi_device *spi2_test_prepare(void)
     struct rt_spi_configuration cfg;
     rt_err_t ret;
 
-    ret = rt_hw_spi_device_attach("spi2", "spi20", SPI2_DEFAULT_CS_PIN_INDEX);
-    if (ret != RT_EOK)
-    {
-        rt_kprintf("attach ret=%d (may already exist)\n", ret);
-    }
-
     dev = (struct rt_spi_device *)rt_device_find("spi20");
+    if (dev == RT_NULL)
+    {
+        ret = rt_hw_spi_device_attach("spi2", "spi20", SPI2_DEFAULT_CS_PIN_INDEX);
+        if (ret != RT_EOK)
+        {
+            rt_kprintf("spi20 attach failed: %d\n", ret);
+            return RT_NULL;
+        }
+        dev = (struct rt_spi_device *)rt_device_find("spi20");
+    }
     if (dev == RT_NULL)
     {
         rt_kprintf("spi20 not found\n");

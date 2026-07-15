@@ -42,9 +42,38 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         default y
 
     config BSP_USING_UART1_DMA
-        bool "Enable UART1 DMA (TX: DMA1_CH1, RX: DMA1_CH2)"
+        bool "Enable UART1 DMA"
         depends on BSP_USING_UART1
         default n
+        help
+          Configure DMA unit/channel below (each unit has CH0~CH3 only).
+          WARNING: do not share the same DMA unit+channel with UART2/3/4 or SPI.
+          Conflict is detected at compile time (dma_channel_check.h).
+          Default map: UART1 TX DMA1_CH1, RX DMA1_CH2.
+
+    config BSP_UART1_TX_DMA_UNIT
+        int "UART1 TX DMA unit (1=DMA1, 2=DMA2)"
+        depends on BSP_USING_UART1_DMA
+        range 1 2
+        default 1
+
+    config BSP_UART1_TX_DMA_CH
+        int "UART1 TX DMA channel (0~3)"
+        depends on BSP_USING_UART1_DMA
+        range 0 3
+        default 1
+
+    config BSP_UART1_RX_DMA_UNIT
+        int "UART1 RX DMA unit (1=DMA1, 2=DMA2)"
+        depends on BSP_USING_UART1_DMA
+        range 1 2
+        default 1
+
+    config BSP_UART1_RX_DMA_CH
+        int "UART1 RX DMA channel (0~3)"
+        depends on BSP_USING_UART1_DMA
+        range 0 3
+        default 2
 
     config BSP_USING_UART2
         bool "Enable UART2 (PD5/PD6)"
@@ -52,9 +81,38 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         default n
 
     config BSP_USING_UART2_DMA
-        bool "Enable UART2 DMA (TX: DMA1_CH3, RX: DMA2_CH0)"
+        bool "Enable UART2 DMA"
         depends on BSP_USING_UART2
         default n
+        help
+          Configure DMA unit/channel below (each unit has CH0~CH3 only).
+          WARNING: unit+channel must be unique across all UART/SPI DMA users.
+          Compile-time check in dma_channel_check.h.
+          Default map: UART2 TX DMA1_CH3, RX DMA2_CH0.
+
+    config BSP_UART2_TX_DMA_UNIT
+        int "UART2 TX DMA unit (1=DMA1, 2=DMA2)"
+        depends on BSP_USING_UART2_DMA
+        range 1 2
+        default 1
+
+    config BSP_UART2_TX_DMA_CH
+        int "UART2 TX DMA channel (0~3)"
+        depends on BSP_USING_UART2_DMA
+        range 0 3
+        default 3
+
+    config BSP_UART2_RX_DMA_UNIT
+        int "UART2 RX DMA unit (1=DMA1, 2=DMA2)"
+        depends on BSP_USING_UART2_DMA
+        range 1 2
+        default 2
+
+    config BSP_UART2_RX_DMA_CH
+        int "UART2 RX DMA channel (0~3)"
+        depends on BSP_USING_UART2_DMA
+        range 0 3
+        default 0
 
     config BSP_USING_UART3
         bool "Enable UART3 (PB10/PB11)"
@@ -62,9 +120,38 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         default n
 
     config BSP_USING_UART3_DMA
-        bool "Enable UART3 DMA (TX: DMA2_CH2, RX: DMA2_CH3)"
+        bool "Enable UART3 DMA"
         depends on BSP_USING_UART3
         default n
+        help
+          Configure DMA unit/channel below (each unit has CH0~CH3 only).
+          WARNING: unit+channel must be unique across all UART/SPI DMA users.
+          Compile-time check in dma_channel_check.h.
+          Default map: UART3 TX DMA2_CH2, RX DMA2_CH3.
+
+    config BSP_UART3_TX_DMA_UNIT
+        int "UART3 TX DMA unit (1=DMA1, 2=DMA2)"
+        depends on BSP_USING_UART3_DMA
+        range 1 2
+        default 2
+
+    config BSP_UART3_TX_DMA_CH
+        int "UART3 TX DMA channel (0~3)"
+        depends on BSP_USING_UART3_DMA
+        range 0 3
+        default 2
+
+    config BSP_UART3_RX_DMA_UNIT
+        int "UART3 RX DMA unit (1=DMA1, 2=DMA2)"
+        depends on BSP_USING_UART3_DMA
+        range 1 2
+        default 2
+
+    config BSP_UART3_RX_DMA_CH
+        int "UART3 RX DMA channel (0~3)"
+        depends on BSP_USING_UART3_DMA
+        range 0 3
+        default 3
 
     config BSP_USING_UART4
         bool "Enable UART4 (PC10/PC11)"
@@ -72,9 +159,38 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         default n
 
     config BSP_USING_UART4_DMA
-        bool "Enable UART4 DMA (TX: DMA2_CH1, RX: DMA1_CH0)"
+        bool "Enable UART4 DMA"
         depends on BSP_USING_UART4
         default n
+        help
+          Configure DMA unit/channel below (each unit has CH0~CH3 only).
+          WARNING: unit+channel must be unique across all UART/SPI DMA users.
+          Compile-time check in dma_channel_check.h.
+          Default map: UART4 TX DMA2_CH1, RX DMA1_CH0.
+
+    config BSP_UART4_TX_DMA_UNIT
+        int "UART4 TX DMA unit (1=DMA1, 2=DMA2)"
+        depends on BSP_USING_UART4_DMA
+        range 1 2
+        default 2
+
+    config BSP_UART4_TX_DMA_CH
+        int "UART4 TX DMA channel (0~3)"
+        depends on BSP_USING_UART4_DMA
+        range 0 3
+        default 1
+
+    config BSP_UART4_RX_DMA_UNIT
+        int "UART4 RX DMA unit (1=DMA1, 2=DMA2)"
+        depends on BSP_USING_UART4_DMA
+        range 1 2
+        default 1
+
+    config BSP_UART4_RX_DMA_CH
+        int "UART4 RX DMA channel (0~3)"
+        depends on BSP_USING_UART4_DMA
+        range 0 3
+        default 0
 
     config BSP_USING_UART5
         bool "Enable UART5"
@@ -113,13 +229,43 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         default n
 
     config BSP_USING_SPI1_DMA
-        bool "Enable SPI1 DMA (TX: DMA2_CH1, RX: DMA2_CH3)"
+        bool "Enable SPI1 DMA"
         depends on BSP_USING_SPI1
         default n
         help
-          Half-duplex transfers >= 32 bytes use DMA.
+          Half-duplex TX/RX >= 32 bytes use DMA.
           Full-duplex always polls (HAL has no TransmitReceive_DMA).
-          Avoid UART3 DMA RX (DMA2_CH3) and UART4 DMA TX (DMA2_CH1).
+          Configure DMA unit/channel below (each unit has CH0~CH3 only).
+          WARNING: unit+channel must be unique across all UART/SPI DMA users.
+          Compile-time check in dma_channel_check.h.
+          Default map: SPI1 TX DMA2_CH1, RX DMA2_CH3
+          (conflicts default UART4 TX / UART3 RX if those DMA are enabled).
+
+    config BSP_SPI1_TX_DMA_UNIT
+        int "SPI1 TX DMA unit (1=DMA1, 2=DMA2)"
+        depends on BSP_USING_SPI1_DMA
+        range 1 2
+        default 2
+
+    config BSP_SPI1_TX_DMA_CH
+        int "SPI1 TX DMA channel (0~3)"
+        depends on BSP_USING_SPI1_DMA
+        range 0 3
+        default 1
+
+    config BSP_SPI1_RX_DMA_UNIT
+        int "SPI1 RX DMA unit (1=DMA1, 2=DMA2)"
+        depends on BSP_USING_SPI1_DMA
+        range 1 2
+        default 2
+
+    config BSP_SPI1_RX_DMA_CH
+        int "SPI1 RX DMA channel (0~3)"
+        depends on BSP_USING_SPI1_DMA
+        range 0 3
+        default 3
+        help
+          Must differ from TX when TX/RX use the same DMA unit.
 
     config BSP_USING_SPI2
         bool "Enable SPI2 (PB13/PB15/PB14, soft CS PB12)"
@@ -132,13 +278,125 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
           Disable Ethernet when enabling SPI2 on this pin mux.
 
     config BSP_USING_SPI2_DMA
-        bool "Enable SPI2 DMA (TX: DMA1_CH0, RX: DMA1_CH1)"
+        bool "Enable SPI2 DMA"
         depends on BSP_USING_SPI2
         default n
         help
-          Same policy as SPI1 DMA: half-duplex TX >= 32 bytes.
-          TX DMA1_CH0 Req SPI2_TX(3), RX DMA1_CH1 Req SPI2_RX(4).
-          Avoid other DMA1_CH0/CH1 users (e.g. UART4 RX if using DMA1_CH0).
+          Same policy as SPI1 DMA: half-duplex TX/RX >= 32 bytes.
+          WARNING: unit+channel must be unique across all UART/SPI DMA users.
+          Compile-time check in dma_channel_check.h.
+          Default map: SPI2 TX DMA1_CH0, RX DMA1_CH1
+          (conflicts default UART4 RX if UART4 DMA is enabled).
+
+    config BSP_SPI2_TX_DMA_UNIT
+        int "SPI2 TX DMA unit (1=DMA1, 2=DMA2)"
+        depends on BSP_USING_SPI2_DMA
+        range 1 2
+        default 1
+
+    config BSP_SPI2_TX_DMA_CH
+        int "SPI2 TX DMA channel (0~3)"
+        depends on BSP_USING_SPI2_DMA
+        range 0 3
+        default 0
+
+    config BSP_SPI2_RX_DMA_UNIT
+        int "SPI2 RX DMA unit (1=DMA1, 2=DMA2)"
+        depends on BSP_USING_SPI2_DMA
+        range 1 2
+        default 1
+
+    config BSP_SPI2_RX_DMA_CH
+        int "SPI2 RX DMA channel (0~3)"
+        depends on BSP_USING_SPI2_DMA
+        range 0 3
+        default 1
+        help
+          Must differ from TX when TX/RX use the same DMA unit.
+
+    config BSP_USING_SPI3
+        bool "Enable SPI3 (PC10/PC12/PC11, soft CS PC9)"
+        select RT_USING_SPI
+        select RT_USING_PIN
+        default n
+        help
+          SPI3 pins AF2: SCK=PC10, MOSI=PC12, MISO=PC11.
+          Soft CS default PC9. Conflicts with UART4 on PC10/PC11 if both used.
+
+    config BSP_USING_SPI3_DMA
+        bool "Enable SPI3 DMA"
+        depends on BSP_USING_SPI3
+        default n
+        help
+          Same policy as SPI1 DMA: half-duplex TX/RX >= 32 bytes.
+          WARNING: unit+channel must be unique across all UART/SPI DMA users.
+          Default map: SPI3 TX DMA2_CH0, RX DMA2_CH2.
+
+    config BSP_SPI3_TX_DMA_UNIT
+        int "SPI3 TX DMA unit (1=DMA1, 2=DMA2)"
+        depends on BSP_USING_SPI3_DMA
+        range 1 2
+        default 2
+
+    config BSP_SPI3_TX_DMA_CH
+        int "SPI3 TX DMA channel (0~3)"
+        depends on BSP_USING_SPI3_DMA
+        range 0 3
+        default 0
+
+    config BSP_SPI3_RX_DMA_UNIT
+        int "SPI3 RX DMA unit (1=DMA1, 2=DMA2)"
+        depends on BSP_USING_SPI3_DMA
+        range 1 2
+        default 2
+
+    config BSP_SPI3_RX_DMA_CH
+        int "SPI3 RX DMA channel (0~3)"
+        depends on BSP_USING_SPI3_DMA
+        range 0 3
+        default 2
+
+    config BSP_USING_SPI4
+        bool "Enable SPI4 (PE2/PE6/PE5, soft CS PE4)"
+        select RT_USING_SPI
+        select RT_USING_PIN
+        default n
+        help
+          SPI4 pins AF4: SCK=PE2, MOSI=PE6, MISO=PE5 (avoids SPI1 PE10-13).
+          Soft CS default PE4.
+
+    config BSP_USING_SPI4_DMA
+        bool "Enable SPI4 DMA"
+        depends on BSP_USING_SPI4
+        default n
+        help
+          Same policy as SPI1 DMA: half-duplex TX/RX >= 32 bytes.
+          WARNING: unit+channel must be unique across all UART/SPI DMA users.
+          Default map: SPI4 TX DMA1_CH2, RX DMA1_CH3.
+
+    config BSP_SPI4_TX_DMA_UNIT
+        int "SPI4 TX DMA unit (1=DMA1, 2=DMA2)"
+        depends on BSP_USING_SPI4_DMA
+        range 1 2
+        default 1
+
+    config BSP_SPI4_TX_DMA_CH
+        int "SPI4 TX DMA channel (0~3)"
+        depends on BSP_USING_SPI4_DMA
+        range 0 3
+        default 2
+
+    config BSP_SPI4_RX_DMA_UNIT
+        int "SPI4 RX DMA unit (1=DMA1, 2=DMA2)"
+        depends on BSP_USING_SPI4_DMA
+        range 1 2
+        default 1
+
+    config BSP_SPI4_RX_DMA_CH
+        int "SPI4 RX DMA channel (0~3)"
+        depends on BSP_USING_SPI4_DMA
+        range 0 3
+        default 3
 
     config BSP_USING_GPIO1
         bool "Enable GPIO1"
@@ -155,6 +413,15 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
             Enable ETH driver for ACM32P4xx-Nucleo.
             PHY: LAN8720A, Interface: RMII, Pins: all AF6.
             Enables lwIP protocol stack with DHCP.
+
+    config BSP_USING_IPERF
+        bool "Enable iperf MSH command (TCP, port 5001)"
+        depends on BSP_USING_ETH
+        default n
+        help
+          Board-side iperf2-compatible TCP server/client (applications/iperf_cmd.c).
+          board:  iperf -s
+          host:   iperf -c 192.168.16.50 -p 5001 -t 10
 
     config LWIP_SUPPORT_CUSTOM_PBUF
         int

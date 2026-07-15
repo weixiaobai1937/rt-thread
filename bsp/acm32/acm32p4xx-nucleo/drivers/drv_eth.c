@@ -143,13 +143,13 @@ void HAL_ETH_MspInit(ETH_HandleTypeDef *heth)
         GPIO_InitStruct.Alternate = GPIO_FUNCTION_6;
         HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-        /* PC0(RST) -- GPIO output for PHY hardware reset */
-        GPIO_InitStruct.Pin = GPIO_PIN_0;
+        /* PB14(RST) -- GPIO output for PHY hardware reset */
+        GPIO_InitStruct.Pin = GPIO_PIN_14;
         GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
         GPIO_InitStruct.Pull = GPIO_NOPULL;
         GPIO_InitStruct.Drive = GPIO_DRIVE_LEVEL3;
         GPIO_InitStruct.Alternate = GPIO_FUNCTION_0;
-        HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+        HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
         /* PC1(MDC), PC4(RXD0), PC5(RXD1) -- AF6 */
         GPIO_InitStruct.Pin = GPIO_PIN_1 | GPIO_PIN_4 | GPIO_PIN_5;
@@ -160,9 +160,9 @@ void HAL_ETH_MspInit(ETH_HandleTypeDef *heth)
         HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
         /* PHY hardware reset: low 15ms -> high -> wait 20ms */
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
         HAL_Delay(15);
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
         HAL_Delay(20);
     }
 
