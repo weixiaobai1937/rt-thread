@@ -1,10 +1,16 @@
 Import('RTT_ROOT')
 Import('rtconfig')
 from building import *
+import os
 
 cwd = GetCurrentDir()
 src = Glob('*.c')
 CPPPATH = [cwd]
+
+# lwIP official lwiperf (raw API); not linked by default in components SConscript
+if GetDepend(['BSP_USING_IPERF']):
+    src += [os.path.join(RTT_ROOT, 'components', 'net', 'lwip',
+                         'lwip-2.1.2', 'src', 'apps', 'lwiperf', 'lwiperf.c')]
 
 group = DefineGroup('Applications', src, depend = [''], CPPPATH = CPPPATH)
 

@@ -414,14 +414,30 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
             PHY: LAN8720A, Interface: RMII, Pins: all AF6.
             Enables lwIP protocol stack with DHCP.
 
+    choice
+        prompt "ETH PHY hardware reset pin"
+        depends on BSP_USING_ETH
+        default BSP_ETH_PHY_RST_PB14
+        help
+          LAN8720A nRST pin routing on this board.
+          PB14 conflicts with SPI2 MISO (PB14) if SPI2 is enabled.
+          PC0 is free on default Nucleo pinout.
+
+        config BSP_ETH_PHY_RST_PB14
+            bool "PB14"
+
+        config BSP_ETH_PHY_RST_PC0
+            bool "PC0"
+    endchoice
+
     config BSP_USING_IPERF
-        bool "Enable iperf MSH command (TCP, port 5001)"
+        bool "Enable iperf MSH command (lwIP lwiperf, TCP port 5001)"
         depends on BSP_USING_ETH
         default n
         help
-          Board-side iperf2-compatible TCP server/client (applications/iperf_cmd.c).
+          Uses lwIP official lwiperf raw-API app (same as ACM32 HAL LwIP_iperf demo).
           board:  iperf -s
-          host:   iperf -c 192.168.16.50 -p 5001 -t 10
+          host:   iperf -c 192.168.16.50 -p 5001 -t 10  (iperf2, not iperf3)
 
     config LWIP_SUPPORT_CUSTOM_PBUF
         int

@@ -30,5 +30,12 @@ Export('rtconfig')
 # prepare building environment
 objs = PrepareBuilding(env, RTT_ROOT, has_libcpu=False)
 
+# ETH/iperf: lwIP heap from RT-Thread heap (default MEM_SIZE=1600 is too small).
+if GetDepend(['BSP_USING_ETH']):
+    env.AppendUnique(CPPDEFINES = [
+        'MEM_LIBC_MALLOC=1',
+        'MEMP_NUM_TCPIP_MSG_INPKT=16',
+    ])
+
 # make a building
 DoBuilding(TARGET, objs)

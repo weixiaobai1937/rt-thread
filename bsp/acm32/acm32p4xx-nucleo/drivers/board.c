@@ -13,6 +13,9 @@
 #include <rtthread.h>
 #include "board.h"
 #include <rtdevice.h>
+#if defined(BSP_USING_ETH)
+#include "drv_eth.h"
+#endif
 
 #define SOC_SRAM_END_ADDR   (SOC_SRAM_START_ADDR + SOC_SRAM_SIZE * 1024)
 
@@ -53,12 +56,21 @@ void rt_hw_board_init(void)
     /* HAL initialization (priority grouping, system clock read) */
     HAL_Init();
 
-    /* SystemInit() is already called from startup_acm32p4xx.S */
+    /* SystemInit() is already called from startup_acm32p4xx.S
+     * (incl. SystemInit_ExtMemCtl for OSPI PSRAM when DATA_IN_ExtSRAM). */
     /* Configure system clock to desired frequency */
     SystemClock_Config(SYSCLK_180M_SRC_RCH, PCLK1_DIV_SELECT, PCLK2_DIV_SELECT);
 
     /* Update SystemCoreClock */
     SystemCoreClockUpdate();
+
+#ifdef DATA_IN_ExtSRAM
+    /* Full OSPI PSRAM init after HCLK is final (not only BAUD retune) */
+    {
+        extern void system_ospi_psram_reclock(void);
+        system_ospi_psram_reclock();
+    }
+#endif
 
     /* Re-configure SysTick for RT-Thread (overriding HAL_InitTick) */
     SysTick_Config(SystemCoreClock / RT_TICK_PER_SECOND);
@@ -66,9 +78,8 @@ void rt_hw_board_init(void)
 #ifdef RT_USING_HEAP
 #if defined(__ARMCC_VERSION)
 #if defined(BSP_USING_ETH)
-    /* Reserve 0x20016800-0x2001FFFF for ETH DMA buffers (~39KB).
-     * ETH DMA can only access SRAM in 0x20010000-0x2001FFFF range. */
-    rt_system_heap_init((void *)&Image$$RW_IRAM1$$ZI$$Limit, (void *)0x20016800U);
+    /* Heap ends before SRAM1 ETH desc/TX bounce reserve (see ETH_DMA_HEAP_END) */
+    rt_system_heap_init((void *)&Image$$RW_IRAM1$$ZI$$Limit, (void *)ETH_DMA_HEAP_END);
 #else
     rt_system_heap_init((void *)&Image$$RW_IRAM1$$ZI$$Limit, (void *)SOC_SRAM_END_ADDR);
 #endif

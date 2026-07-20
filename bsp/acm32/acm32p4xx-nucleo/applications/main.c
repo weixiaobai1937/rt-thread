@@ -366,6 +366,9 @@ int main(void)
 #ifdef BSP_USING_SPI2
     rt_kprintf("Run 'spi2_loopback_test' after shorting MOSI(PB15)-MISO(PB14)\n");
 #endif
+#ifdef DATA_IN_ExtSRAM
+    rt_kprintf("Run 'psram_info' / 'psram_test' / 'psram_speed' for OSPI PSRAM\n");
+#endif
 
     rt_pin_mode(LED_PIN_NUM, PIN_MODE_OUTPUT);
 

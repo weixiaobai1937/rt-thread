@@ -30,8 +30,8 @@
 #endif
 
  /******* config data if or not in extern sram *******************************/
-
-//#define DATA_IN_ExtSRAM
+/* Enable early OSPI1 PSRAM init via SystemInit_ExtMemCtl() (drivers/system_extmem.c) */
+#define DATA_IN_ExtSRAM
 
 /* Configure the Vector Table location add offset address ------------------*/
 

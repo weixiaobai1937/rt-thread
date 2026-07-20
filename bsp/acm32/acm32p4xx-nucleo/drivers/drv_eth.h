@@ -10,6 +10,18 @@ extern "C" {
 /* ========== PHY Address ========== */
 #define ETH_PHY_ADDR                0x00U   /* LAN8720A, PHYAD0=GND */
 
+/* PHY nRST pin (Kconfig: BSP_ETH_PHY_RST_PB14 / BSP_ETH_PHY_RST_PC0) */
+#if 1
+#define ETH_PHY_RST_PORT            GPIOC
+#define ETH_PHY_RST_PIN             GPIO_PIN_0
+#define ETH_PHY_RST_CLK_ENABLE()    __HAL_RCC_GPIOC_CLK_ENABLE()
+#else
+/* default / BSP_ETH_PHY_RST_PB14 */
+#define ETH_PHY_RST_PORT            GPIOB
+#define ETH_PHY_RST_PIN             GPIO_PIN_14
+#define ETH_PHY_RST_CLK_ENABLE()    __HAL_RCC_GPIOB_CLK_ENABLE()
+#endif
+
 /* ========== IEEE 802.3 Standard Registers ========== */
 #define PHY_REG_BCR                 0x00U   /* Basic Control */
 #define PHY_REG_BSR                 0x01U   /* Basic Status */
@@ -40,17 +52,23 @@ extern "C" {
 #define PHY_BSR_REMOTE_FAULT        (1U << 4)
 #define PHY_BSR_LINK_UP             (1U << 2)
 
-/* ========== LAN8720A PHY ID ========== */
+/* ========== Common PHY IDs (OUI in ID1/ID2) ========== */
 #define LAN8720_PHY_ID1             0x0007U
 #define LAN8720_PHY_ID2_MASK        0xFFF0U
 #define LAN8720_PHY_ID2_VAL         0xC0F0U
 
-/* ========== SCSR Speed/Duplex Indication ========== */
+/* ========== SCSR (LAN8720 vendor reg 0x1F) ========== */
 #define PHY_SCSR_SPEED_MASK         (0x7U << 2)
-#define PHY_SCSR_10HD               (0x1U << 2)   /* 10M Half Duplex */
-#define PHY_SCSR_100HD              (0x2U << 2)   /* 100M Half Duplex */
-#define PHY_SCSR_10FD               (0x5U << 2)   /* 10M Full Duplex */
-#define PHY_SCSR_100FD              (0x6U << 2)   /* 100M Full Duplex */
+#define PHY_SCSR_10HD               (0x1U << 2)
+#define PHY_SCSR_100HD              (0x2U << 2)
+#define PHY_SCSR_10FD               (0x5U << 2)
+#define PHY_SCSR_100FD              (0x6U << 2)
+
+/* IEEE ANAR / ANLPAR ability bits (regs 4/5) */
+#define PHY_ANAR_10HD               (1U << 5)
+#define PHY_ANAR_10FD               (1U << 6)
+#define PHY_ANAR_100HD              (1U << 7)
+#define PHY_ANAR_100FD              (1U << 8)
 
 /* ========== PHY Status Enum ========== */
 enum acm32_phy_link_state
@@ -64,14 +82,56 @@ enum acm32_phy_link_state
 };
 
 /* ========== Constants for ETH driver ========== */
+/*
+ * Bus masters (ETH/SDMMC/...) can access SRAM1 and OSPI external memory.
+ * They cannot access DTCM (0x20000000-0x2000FFFF).
+ *
+ * Hybrid layout (stable under load):
+ *   - TX/RX descriptors + TX bounce: internal SRAM1 (low latency, OWN bits)
+ *   - RX data pool: PSRAM (large, zero-copy RX)
+ * Requires DATA_IN_ExtSRAM + system_ospi_psram_reclock() before eth init.
+ */
+#define ETH_DMA_SRAM_START          0x20010000U
+#define ETH_DMA_SRAM_END            0x20020000U
+
+/*
+ * Pool item holds pbuf_custom header + DMA payload.
+ * Max Ethernet frame with FCS is 1518; RxBuffLen must be >= that so a frame
+ * never spans two descriptors (HAL only has valid FL on last descriptor).
+ * Item size 1600 => payload room after pbuf_custom (~20B) still >= 1536.
+ */
 #define ETH_RX_BUFFER_SIZE          1600U
-#define ETH_RX_BUFFER_CNT           24U
+#define ETH_RX_BUFFER_CNT           12U
 #define ETH_RX_BUF_ITEM_SIZE        ((ETH_RX_BUFFER_SIZE + 31) & ~31)
 #define ETH_RX_POOL_SIZE            (ETH_RX_BUFFER_CNT * ETH_RX_BUF_ITEM_SIZE)
 #undef ETH_TX_DESC_CNT
-#define ETH_TX_DESC_CNT             8U
-#define ETH_RX_DESC_CNT             4U
+#define ETH_TX_DESC_CNT             4U
+#undef ETH_RX_DESC_CNT
+#define ETH_RX_DESC_CNT             8U
+#define ETH_TX_BOUNCE_SIZE          1536U
+#define ETH_TX_BOUNCE_CNT           ETH_TX_DESC_CNT
 #define ETHIF_TX_TIMEOUT            2000U
+
+/*
+ * RMII RX delay taps (ETH_DLYB). HAL_ETH_Init defaults to (10,15).
+ * LAN8720A often needs the alternate (1,5); other PHYs keep HAL default.
+ * Override at runtime with MSH: eth_rx_dly <unit> <sel>
+ */
+#define ETH_RX_DLY_HAL_UNIT         10U
+#define ETH_RX_DLY_HAL_SEL          15U
+#define ETH_RX_DLY_LAN8720_UNIT     1U
+#define ETH_RX_DLY_LAN8720_SEL      5U
+
+/* Internal SRAM1 reserved at top for desc + TX bounce ring.
+ * desc: (4+8)*40 ≈ 480; bounce: 4*1536 = 6144; total ≈ 7KB. */
+#define ETH_SRAM1_RESERVE           0x2000U
+#define ETH_DMA_HEAP_END            (ETH_DMA_SRAM_END - ETH_SRAM1_RESERVE)
+#define ETH_SRAM1_DESC_BASE         ETH_DMA_HEAP_END
+
+/* RX pool in PSRAM (skip nothing else; tests skip this window) */
+#define ETH_DMA_BUF_BASE            0x80000000U
+#define ETH_DMA_BUF_SIZE            0x8000U     /* 32KB reserved for RX pool */
+#define ETH_DMA_BUF_END             (ETH_DMA_BUF_BASE + ETH_DMA_BUF_SIZE)
 
 #ifdef __cplusplus
 }
