@@ -11,7 +11,7 @@ menu "Hardware Drivers Config"
             select BSP_START_SECONDARY_CORE
             select PKG_USING_RPMSG_LITE
             if BSP_USING_RPMSG
-                choice
+                choice BSP_RPMSG_LITE_SEL
                 prompt "choice rpmsg-lite method"
                 default BSP_USING_RPMSG_LITE
                 config BSP_USING_RPMSG_LITE
@@ -248,7 +248,7 @@ menu "Hardware Drivers Config"
                     bool "Enable SCI0"
                     default n
                     if BSP_USING_SCI0
-                        choice
+                        choice BSP_SCI0_SEL
                         prompt "choice sci mode"
                         default BSP_USING_SCI0_SPI
                         config BSP_USING_SCI0_SPI
@@ -279,7 +279,7 @@ menu "Hardware Drivers Config"
                     bool "Enable SCI1"
                     default n
                     if BSP_USING_SCI1
-                        choice
+                        choice BSP_SCI1_SEL
                         prompt "choice sci mode"
                         default BSP_USING_SCI1_SPI
                         config BSP_USING_SCI1_SPI
@@ -310,7 +310,7 @@ menu "Hardware Drivers Config"
                     bool "Enable SCI2"
                     default n
                     if BSP_USING_SCI2
-                        choice
+                        choice BSP_SCI2_SEL
                         prompt "choice sci mode"
                         default BSP_USING_SCI2_SPI
                         config BSP_USING_SCI2_SPI
@@ -341,7 +341,7 @@ menu "Hardware Drivers Config"
                     bool "Enable SCI3"
                     default n
                     if BSP_USING_SCI3
-                        choice
+                        choice BSP_SCI3_SEL
                         prompt "choice sci mode"
                         default BSP_USING_SCI3_SPI
                         config BSP_USING_SCI3_SPI
@@ -372,7 +372,7 @@ menu "Hardware Drivers Config"
                     bool "Enable SCI4"
                     default n
                     if BSP_USING_SCI4
-                        choice
+                        choice BSP_SCI4_SEL
                         prompt "choice sci mode"
                         default BSP_USING_SCI4_SPI
                         config BSP_USING_SCI4_SPI
@@ -403,7 +403,7 @@ menu "Hardware Drivers Config"
                     bool "Enable SCI5"
                     default n
                     if BSP_USING_SCI5
-                        choice
+                        choice BSP_SCI5_SEL
                         prompt "choice sci mode"
                         default BSP_USING_SCI5_SPI
                         config BSP_USING_SCI5_SPI
@@ -434,7 +434,7 @@ menu "Hardware Drivers Config"
                     bool "Enable SCI6"
                     default n
                     if BSP_USING_SCI6
-                        choice
+                        choice BSP_SCI6_SEL
                         prompt "choice sci mode"
                         default BSP_USING_SCI6_SPI
                         config BSP_USING_SCI6_SPI
@@ -465,7 +465,7 @@ menu "Hardware Drivers Config"
                     bool "Enable SCI7"
                     default n
                     if BSP_USING_SCI7
-                        choice
+                        choice BSP_SCI7_SEL
                         prompt "choice sci mode"
                         default BSP_USING_SCI7_SPI
                         config BSP_USING_SCI7_SPI
@@ -496,7 +496,7 @@ menu "Hardware Drivers Config"
                     bool "Enable SCI8"
                     default n
                     if BSP_USING_SCI8
-                        choice
+                        choice BSP_SCI8_SEL
                         prompt "choice sci mode"
                         default BSP_USING_SCI8_SPI
                         config BSP_USING_SCI8_SPI
@@ -527,7 +527,7 @@ menu "Hardware Drivers Config"
                     bool "Enable SCI9"
                     default n
                     if BSP_USING_SCI9
-                        choice
+                        choice BSP_SCI9_SEL
                         prompt "choice sci mode"
                         default BSP_USING_SCI9_SPI
                         config BSP_USING_SCI9_SPI
@@ -586,28 +586,24 @@ menu "Hardware Drivers Config"
             endif
 
         menuconfig BSP_USING_SOFT_I2C
-            bool "Enable software I2C bus"
-            select RT_USING_I2C
-            select RT_USING_I2C_BITOPS
-            select RT_USING_PIN
+            bool "Enable software I2C (swi2c)"
             default n
+            select RT_USING_I2C
+            select RT_USING_SOFT_I2C
             if BSP_USING_SOFT_I2C
-                menuconfig BSP_USING_I2C1
-                    bool "Enable I2C1 Bus (software simulation)"
-                    default n
-                    if BSP_USING_I2C1
-                        comment "Please refer to the 'bsp_io.h' file to configure the pins"
-                        config BSP_I2C1_SCL_PIN
-                            hex "i2c1 scl pin number (hex)"
-                            range 0x0000 0xFFFF
-                            default 0x050C
-                        config BSP_I2C1_SDA_PIN
-                            hex "i2c1 sda pin number (hex)"
-                            range 0x0000 0xFFFF
-                            default 0x050B
-                    endif
+            menuconfig BSP_USING_SOFT_I2C1
+                bool "Enable software I2C1 Bus (swi2c1)"
+                default n
+                select RT_USING_SOFT_I2C1
+                if BSP_USING_SOFT_I2C1
+                    config RT_SOFT_I2C1_SCL_PIN
+                        int "swi2c1 SCL pin number"
+                        default 1292
+                    config RT_SOFT_I2C1_SDA_PIN
+                        int "swi2c1 SDA pin number"
+                        default 1291
+                endif
             endif
-
         menuconfig BSP_USING_SDHI
             bool "Enable SDHI"
             default n
@@ -750,8 +746,8 @@ menu "Hardware Drivers Config"
             bool "Enable ceu camera driver"
             default n
             select RT_USING_I2C
-            select BSP_USING_I2C
-            select BSP_USING_I2C1
+            select BSP_USING_SOFT_I2C
+            select BSP_USING_SOFT_I2C1
 
             if BSP_USING_CEU_CAMERA
                 menu "Camera Pins Configure"
@@ -766,7 +762,7 @@ menu "Hardware Drivers Config"
                 config SENSOR_BUS_NAME
                     string "Sensor I2C Bus Name"
                     depends on RT_USING_I2C
-                    default "i2c1"
+                    default "swi2c1"
 
                 config SENSOR_MT9V034
                     int "Sensor support MT9V034"
@@ -801,6 +797,18 @@ menu "Hardware Drivers Config"
                     range 0 1
                     default 0
             endif
+
+        config RT_SOFT_I2C1_HAS_PIN_DEFAULT
+            bool
+            default y if RT_USING_SOFT_I2C1
+
+        config RT_SOFT_I2C1_SCL_PIN_DEFAULT
+            int
+            default 1292 if RT_USING_SOFT_I2C1
+
+        config RT_SOFT_I2C1_SDA_PIN_DEFAULT
+            int
+            default 1291 if RT_USING_SOFT_I2C1
 
         config BSP_USING_G2D
             bool
@@ -851,4 +859,5 @@ menu "Hardware Drivers Config"
                     default 0x0303
             endif
     endmenu
+
 endmenu

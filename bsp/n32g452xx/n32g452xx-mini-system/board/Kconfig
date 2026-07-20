@@ -19,7 +19,7 @@ endmenu
 
 menu "On-chip Peripheral Drivers"
 
-            choice
+            choice N32G45X_PIN_NUMS_SEL
                 prompt "Package of N32G45NXX chip:"
                 default N32G45X_PIN_NUMBERS_64
                 config N32G45X_PIN_NUMBERS_48
@@ -48,7 +48,7 @@ menu "On-chip Peripheral Drivers"
         if BSP_USING_GPIO
 
             menu "Remap JTAG Port"
-                choice
+                choice BSP_RMP_SW_JTAG_SEL
                     prompt "Remap JTAG Port"
                         default BSP_RMP_SW_JTAG_SW_ENABLE
                         config BSP_RMP_SW_JTAG_FULL_ENABLE
@@ -81,7 +81,7 @@ menu "On-chip Peripheral Drivers"
                 bool "Enable USART1"
                 default y
                 if BSP_USING_UART1
-                    choice
+                    choice BSP_UART1_SEL
                         prompt "Select TX/RX Pin of USART1"
                         default BSP_USING_UART1_NO_RMP
                         config BSP_USING_UART1_PIN_RMP
@@ -95,7 +95,7 @@ menu "On-chip Peripheral Drivers"
                 bool "Enable USART2"
                 default n
                 if BSP_USING_UART2
-                    choice
+                    choice BSP_UART2_SEL
                         prompt "Select TX/RX Pin of USART2"
                         default BSP_USING_UART2_NO_RMP
                         config BSP_USING_UART2_NO_RMP
@@ -114,7 +114,7 @@ menu "On-chip Peripheral Drivers"
                 bool "Enable USART3"
                 default n
                 if BSP_USING_UART3
-                    choice
+                    choice BSP_UART3_PIN_SEL
                         prompt "Select TX/RX Pin of USART3"
                         default BSP_USING_UART3_PIN_NO_RMP
                         config BSP_USING_UART3_PIN_NO_RMP
@@ -130,7 +130,7 @@ menu "On-chip Peripheral Drivers"
                 bool "Enable UART4"
                 default n
                 if BSP_USING_UART4
-                    choice
+                    choice BSP_UART4_PIN_SEL
                         prompt "Select TX/RX Pin of UART4"
                         default BSP_USING_UART4_PIN_NORMP
                         config BSP_USING_UART4_PIN_NORMP
@@ -148,7 +148,7 @@ menu "On-chip Peripheral Drivers"
                 bool "Enable UART5"
                 default n
                 if BSP_USING_UART5
-                    choice
+                    choice BSP_UART5_PIN_SEL
                         prompt "Select TX/RX Pin of UART5"
                         default BSP_USING_UART5_PIN_NORMP
                         config BSP_USING_UART5_PIN_NORMP
@@ -166,7 +166,7 @@ menu "On-chip Peripheral Drivers"
                 bool "Enable UART6"
                 default n
                 if BSP_USING_UART6
-                    choice
+                    choice BSP_UART6_PIN_SEL
                         prompt "Select TX/RX Pin of UART6"
                         default BSP_USING_UART6_PIN_NORMP
                         config BSP_USING_UART6_PIN_NORMP
@@ -182,7 +182,7 @@ menu "On-chip Peripheral Drivers"
                 bool "Enable UART7"
                 default n
                 if BSP_USING_UART7
-                    choice
+                    choice BSP_UART7_PIN_SEL
                         prompt "Select TX/RX Pin of UART7"
                         default BSP_USING_UART7_PIN_NORMP
                         config BSP_USING_UART7_PIN_NORMP
@@ -340,23 +340,25 @@ menu "On-chip Peripheral Drivers"
                 default n
         endif
 
-    menuconfig BSP_USING_I2C1
-        bool "Enable I2C1 BUS (software simulation)"
+    menuconfig BSP_USING_SOFT_I2C
+        bool "Enable software I2C (swi2c)"
         default n
         select RT_USING_I2C
-        select RT_USING_I2C_BITOPS
-        select RT_USING_PIN
-        if BSP_USING_I2C1
-            config BSP_I2C1_SCL_PIN
-                int "I2C1 scl pin number"
-                range 1 N32G45X_PIN_NUMBERS
-                default 29
-            config BSP_I2C1_SDA_PIN
-                int "I2C1 sda pin number"
-                range 1 N32G45X_PIN_NUMBERS
-                default 30
+        select RT_USING_SOFT_I2C
+        if BSP_USING_SOFT_I2C
+        menuconfig BSP_USING_SOFT_I2C1
+            bool "Enable software I2C1 Bus (swi2c1)"
+            default n
+            select RT_USING_SOFT_I2C1
+            if BSP_USING_SOFT_I2C1
+                config RT_SOFT_I2C1_SCL_PIN
+                    int "swi2c1 SCL pin number"
+                    default 29
+                config RT_SOFT_I2C1_SDA_PIN
+                    int "swi2c1 SDA pin number"
+                    default 30
+            endif
         endif
-
     menuconfig BSP_USING_ADC
         bool "Enable ADC"
         default n
@@ -393,5 +395,17 @@ menu "On-chip Peripheral Drivers"
                 default n
         endif
 endmenu
+
+    config RT_SOFT_I2C1_HAS_PIN_DEFAULT
+        bool
+        default y if RT_USING_SOFT_I2C1
+
+    config RT_SOFT_I2C1_SCL_PIN_DEFAULT
+        int
+        default 29 if RT_USING_SOFT_I2C1
+
+    config RT_SOFT_I2C1_SDA_PIN_DEFAULT
+        int
+        default 30 if RT_USING_SOFT_I2C1
 
 endmenu
