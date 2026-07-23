@@ -12,6 +12,10 @@ from building import *
 
 TARGET = 'rtthread_acm32p4xx.' + rtconfig.TARGET_EXT
 
+# DMA / pin conflict check: print map + conflicts, inject #warning into
+# rtconfig.h, then continue build (no SCons abort).
+rtconfig.check_bsp_resources(os.path.join(os.getcwd(), 'rtconfig.h'), fatal=False)
+
 env = Environment(tools = ['mingw'],
     AS = rtconfig.AS, ASFLAGS = rtconfig.AFLAGS,
     CC = rtconfig.CC, CFLAGS = rtconfig.CFLAGS,

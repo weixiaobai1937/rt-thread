@@ -123,7 +123,7 @@ typedef struct _lwiperf_state_tcp {
   /* 1=start server when client is closed */
   u8_t client_tradeoff_mode;
   u32_t bytes_transferred;
-  lwiperf_settings_t settings;
+  lwiperf_settings_t settings;   
   u8_t have_settings_buf;
   u8_t specific_remote;
   ip_addr_t remote_addr;

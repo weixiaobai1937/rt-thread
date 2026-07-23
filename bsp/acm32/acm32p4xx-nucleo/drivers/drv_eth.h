@@ -10,17 +10,21 @@ extern "C" {
 /* ========== PHY Address ========== */
 #define ETH_PHY_ADDR                0x00U   /* LAN8720A, PHYAD0=GND */
 
-/* PHY nRST pin (Kconfig: BSP_ETH_PHY_RST_PB14 / BSP_ETH_PHY_RST_PC0) */
-#if 1
-#define ETH_PHY_RST_PORT            GPIOC
-#define ETH_PHY_RST_PIN             GPIO_PIN_0
-#define ETH_PHY_RST_CLK_ENABLE()    __HAL_RCC_GPIOC_CLK_ENABLE()
-#else
-/* default / BSP_ETH_PHY_RST_PB14 */
-#define ETH_PHY_RST_PORT            GPIOB
-#define ETH_PHY_RST_PIN             GPIO_PIN_14
-#define ETH_PHY_RST_CLK_ENABLE()    __HAL_RCC_GPIOB_CLK_ENABLE()
+/*
+ * PHY nRST: any GPIO via Kconfig BSP_ETH_PHY_RST_PIN (RT-Thread pin index).
+ *   PXn = port*16 + n  (PA0=0 .. PB14=30, PC0=32, ...)
+ * Decode to HAL port/pin; clock enable in drv_eth.c.
+ */
+#ifndef BSP_ETH_PHY_RST_PIN
+#define BSP_ETH_PHY_RST_PIN         30  /* PB14 default */
 #endif
+
+#define ETH_PHY_RST_PORT_IDX        ((BSP_ETH_PHY_RST_PIN) / 16)
+#define ETH_PHY_RST_PIN_NUM         ((BSP_ETH_PHY_RST_PIN) % 16)
+#define ETH_PHY_RST_PIN             ((uint32_t)(1UL << ETH_PHY_RST_PIN_NUM))
+/* GPIOA..H are 0x400 apart on ACM32P4 */
+#define ETH_PHY_RST_PORT            ((GPIO_TypeDef *)(GPIOA_BASE_ADDR + \
+                                    (0x400UL * (uint32_t)ETH_PHY_RST_PORT_IDX)))
 
 /* ========== IEEE 802.3 Standard Registers ========== */
 #define PHY_REG_BCR                 0x00U   /* Basic Control */
@@ -89,7 +93,7 @@ enum acm32_phy_link_state
  * Hybrid layout (stable under load):
  *   - TX/RX descriptors + TX bounce: internal SRAM1 (low latency, OWN bits)
  *   - RX data pool: PSRAM (large, zero-copy RX)
- * Requires DATA_IN_ExtSRAM + system_ospi_psram_reclock() before eth init.
+ * Requires DATA_IN_ExtSRAM + System_OSPI_PSRAM_Reclock() before eth init.
  */
 #define ETH_DMA_SRAM_START          0x20010000U
 #define ETH_DMA_SRAM_END            0x20020000U

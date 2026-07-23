@@ -10,6 +10,7 @@
  * 2026-07-06     AisinoChip   rewrite: HAL init + custom ISR, FIFO,
  *                              interrupt TX/RX, DMA RX with IDLE,
  *                              DMA TX, V2 ringbuffer integration
+ * 2026-07-23     AisinoChip   pin/DMA from uart_config (Kconfig groups)
  */
 
 #include <rthw.h>
@@ -189,107 +190,76 @@ rt_inline rt_uint32_t uart_reg_isr(void *inst, int type)
 #define U_ERR_MASK   (USART_ISR_OEI | USART_ISR_BEI | USART_ISR_PEI | USART_ISR_FEI)
 #define L_ERR_MASK   (LPUART_SR_RXOVIF | LPUART_SR_FEIF | LPUART_SR_PEIF)
 
-/* ==================== 引脚映射表（MspInit 驱动） ==================== */
+/* ==================== 引脚 / 时钟（来自 uart_config Kconfig 组） ==================== */
 
-typedef struct {
-    void         *instance;
-    GPIO_TypeDef *tx_port;   rt_uint32_t tx_pin;
-    GPIO_TypeDef *rx_port;   rt_uint32_t rx_pin;
-    rt_uint32_t   af;
-} uart_pin_t;
-
-static const uart_pin_t g_pin_map[] = {
-#ifdef BSP_USING_UART1
-    /* USART1: PA9(TX) PA10(RX) AF1 */
-    { USART1, GPIOA, GPIO_PIN_9,  GPIOA, GPIO_PIN_10, GPIO_FUNCTION_1 },
-#endif
-#ifdef BSP_USING_UART2
-    /* USART2: PD5(TX) PD6(RX) AF3 */
-    { USART2, GPIOD, GPIO_PIN_5,  GPIOD, GPIO_PIN_6,  GPIO_FUNCTION_3 },
-#endif
-#ifdef BSP_USING_UART3
-    /* USART3: PB10(TX) PB11(RX) AF1 */
-    { USART3, GPIOB, GPIO_PIN_10, GPIOB, GPIO_PIN_11, GPIO_FUNCTION_1 },
-#endif
-#ifdef BSP_USING_UART4
-    /* USART4: PC10(TX) PC11(RX) AF4 */
-    { USART4, GPIOC, GPIO_PIN_10, GPIOC, GPIO_PIN_11, GPIO_FUNCTION_4 },
-#endif
-#ifdef BSP_USING_UART5
-    { USART5, GPIOA, GPIO_PIN_0,  GPIOA, GPIO_PIN_1,  GPIO_FUNCTION_1 },
-#endif
-#ifdef BSP_USING_UART6
-    { USART6, GPIOB, GPIO_PIN_0,  GPIOB, GPIO_PIN_1,  GPIO_FUNCTION_1 },
-#endif
-#ifdef BSP_USING_UART7
-    { USART7, GPIOC, GPIO_PIN_0,  GPIOC, GPIO_PIN_1,  GPIO_FUNCTION_1 },
-#endif
-#ifdef BSP_USING_UART8
-    { USART8, GPIOD, GPIO_PIN_0,  GPIOD, GPIO_PIN_1,  GPIO_FUNCTION_1 },
-#endif
-#ifdef BSP_USING_LPUART1
-    /* LPUART1: PA2(TX) PA3(RX) AF3 */
-    { LPUART1, GPIOA, GPIO_PIN_2,  GPIOA, GPIO_PIN_3,  GPIO_FUNCTION_3 },
-#endif
-#ifdef BSP_USING_LPUART2
-    /* LPUART2: PB10(TX) PB11(RX) AF3 */
-    { LPUART2, GPIOB, GPIO_PIN_10, GPIOB, GPIO_PIN_11, GPIO_FUNCTION_3 },
-#endif
-};
-
-static const uart_pin_t *pin_find(void *instance)
+static void acm32_uart_gpio_clk_enable(GPIO_TypeDef *port)
 {
-    int n = sizeof(g_pin_map) / sizeof(g_pin_map[0]);
-    for (int i = 0; i < n; i++)
-    {
-        if (g_pin_map[i].instance == instance)
-            return &g_pin_map[i];
-    }
-    return NULL;
+    if (port == GPIOA)
+        __HAL_RCC_GPIOA_CLK_ENABLE();
+    else if (port == GPIOB)
+        __HAL_RCC_GPIOB_CLK_ENABLE();
+    else if (port == GPIOC)
+        __HAL_RCC_GPIOC_CLK_ENABLE();
+    else if (port == GPIOD)
+        __HAL_RCC_GPIOD_CLK_ENABLE();
+    else if (port == GPIOE)
+        __HAL_RCC_GPIOE_CLK_ENABLE();
+    else if (port == GPIOF)
+        __HAL_RCC_GPIOF_CLK_ENABLE();
+    else if (port == GPIOG)
+        __HAL_RCC_GPIOG_CLK_ENABLE();
 }
 
-/* 时钟使能辅助函数 */
-static void rcc_enable_by_instance(void *inst)
+static void acm32_uart_periph_clk_enable(void *inst)
 {
-    if (inst == USART1) {
-        __HAL_RCC_GPIOA_CLK_ENABLE();
+    if (inst == USART1)
         __HAL_RCC_USART1_CLK_ENABLE();
-    }
-    else if (inst == USART2) {
-        __HAL_RCC_GPIOD_CLK_ENABLE();
+    else if (inst == USART2)
         __HAL_RCC_USART2_CLK_ENABLE();
-    }
-    else if (inst == USART3) {
-        __HAL_RCC_GPIOB_CLK_ENABLE();
+    else if (inst == USART3)
         __HAL_RCC_USART3_CLK_ENABLE();
-    }
-    else if (inst == USART4) {
-        __HAL_RCC_GPIOC_CLK_ENABLE();
+    else if (inst == USART4)
         __HAL_RCC_USART4_CLK_ENABLE();
-    }
-    else if (inst == USART5) {
-        __HAL_RCC_GPIOA_CLK_ENABLE();
+    else if (inst == USART5)
         __HAL_RCC_USART5_CLK_ENABLE();
-    }
-    else if (inst == USART6) {
-        __HAL_RCC_GPIOB_CLK_ENABLE();
+    else if (inst == USART6)
         __HAL_RCC_USART6_CLK_ENABLE();
-    }
-    else if (inst == USART7) {
-        __HAL_RCC_GPIOC_CLK_ENABLE();
+    else if (inst == USART7)
         __HAL_RCC_USART7_CLK_ENABLE();
-    }
-    else if (inst == USART8) {
-        __HAL_RCC_GPIOD_CLK_ENABLE();
+    else if (inst == USART8)
         __HAL_RCC_USART8_CLK_ENABLE();
-    }
-    else if (inst == LPUART1) {
-        __HAL_RCC_GPIOA_CLK_ENABLE();
+    else if (inst == LPUART1)
         __HAL_RCC_LPUART1_CLK_ENABLE();
-    }
-    else if (inst == LPUART2) {
-        __HAL_RCC_GPIOB_CLK_ENABLE();
+    else if (inst == LPUART2)
         __HAL_RCC_LPUART2_CLK_ENABLE();
+}
+
+static void acm32_uart_msp_pins(struct acm32_uart_config *c)
+{
+    GPIO_InitTypeDef g = {0};
+
+    if (c == NULL)
+        return;
+
+    acm32_uart_periph_clk_enable(c->Instance);
+    acm32_uart_gpio_clk_enable(c->tx_port);
+    acm32_uart_gpio_clk_enable(c->rx_port);
+
+    g.Mode = GPIO_MODE_AF_PP;
+    g.Pull = GPIO_PULLUP;
+    g.Drive = GPIO_DRIVE_LEVEL3;
+
+    if (c->tx_pin)
+    {
+        g.Pin = c->tx_pin;
+        g.Alternate = c->tx_af;
+        HAL_GPIO_Init(c->tx_port, &g);
+    }
+    if (c->rx_pin)
+    {
+        g.Pin = c->rx_pin;
+        g.Alternate = c->rx_af;
+        HAL_GPIO_Init(c->rx_port, &g);
     }
 }
 
@@ -297,52 +267,22 @@ static void rcc_enable_by_instance(void *inst)
 
 void HAL_UART_MspInit(UART_HandleTypeDef *huart)
 {
-    const uart_pin_t *pin = pin_find(huart->Instance);
-    if (pin == NULL) return;
+    struct acm32_uart *uart = uart_find(huart->Instance);
 
-    rcc_enable_by_instance(huart->Instance);
+    if (uart == NULL || uart->config == NULL)
+        return;
 
-    GPIO_InitTypeDef g = {0};
-    g.Mode = GPIO_MODE_AF_PP;
-    g.Pull = GPIO_PULLUP;
-    g.Drive = GPIO_DRIVE_LEVEL3;
-    g.Alternate = pin->af;
-
-    if (pin->tx_pin)
-    {
-        g.Pin = pin->tx_pin;
-        HAL_GPIO_Init(pin->tx_port, &g);
-    }
-    if (pin->rx_pin)
-    {
-        g.Pin = pin->rx_pin;
-        HAL_GPIO_Init(pin->rx_port, &g);
-    }
+    acm32_uart_msp_pins(uart->config);
 }
 
 void HAL_LPUART_MspInit(LPUART_HandleTypeDef *hlpuart)
 {
-    const uart_pin_t *pin = pin_find(hlpuart->Instance);
-    if (pin == NULL) return;
+    struct acm32_uart *uart = uart_find(hlpuart->Instance);
 
-    rcc_enable_by_instance(hlpuart->Instance);
+    if (uart == NULL || uart->config == NULL)
+        return;
 
-    GPIO_InitTypeDef g = {0};
-    g.Mode = GPIO_MODE_AF_PP;
-    g.Pull = GPIO_PULLUP;
-    g.Drive = GPIO_DRIVE_LEVEL3;
-    g.Alternate = pin->af;
-
-    if (pin->tx_pin)
-    {
-        g.Pin = pin->tx_pin;
-        HAL_GPIO_Init(pin->tx_port, &g);
-    }
-    if (pin->rx_pin)
-    {
-        g.Pin = pin->rx_pin;
-        HAL_GPIO_Init(pin->rx_port, &g);
-    }
+    acm32_uart_msp_pins(uart->config);
 }
 
 /* ==================== DMA 启停（V2: control CONFIG 时启动） ==================== */

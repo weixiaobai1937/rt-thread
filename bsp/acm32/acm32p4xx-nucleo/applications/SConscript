@@ -7,11 +7,13 @@ cwd = GetCurrentDir()
 src = Glob('*.c')
 CPPPATH = [cwd]
 
-# lwIP official lwiperf (raw API); not linked by default in components SConscript
-if GetDepend(['BSP_USING_IPERF']):
-    src += [os.path.join(RTT_ROOT, 'components', 'net', 'lwip',
-                         'lwip-2.1.2', 'src', 'apps', 'lwiperf', 'lwiperf.c')]
-
 group = DefineGroup('Applications', src, depend = [''], CPPPATH = CPPPATH)
+
+# lwIP official lwiperf (raw API); not linked by default in components SConscript.
+# Keep under group name 'lwIP' so scons --target=mdk5 places it in lwIP, not Applications.
+if GetDepend(['BSP_USING_IPERF']):
+    lwiperf = os.path.join(RTT_ROOT, 'components', 'net', 'lwip',
+                           'lwip-2.1.2', 'src', 'apps', 'lwiperf', 'lwiperf.c')
+    group = group + DefineGroup('lwIP', [lwiperf], depend = ['BSP_USING_IPERF'])
 
 Return('group')

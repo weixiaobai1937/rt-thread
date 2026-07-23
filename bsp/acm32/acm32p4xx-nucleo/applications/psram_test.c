@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * OSPI1 PSRAM (0x80000000, 8MB) MSH tests.
- * Requires DATA_IN_ExtSRAM + system_ospi_psram_reclock() after clock init.
+ * Requires DATA_IN_ExtSRAM + System_OSPI_PSRAM_Reclock() after clock init.
  */
 
 #include <rtthread.h>
@@ -254,19 +254,15 @@ static int psram_info(int argc, char **argv)
     rt_uint32_t v;
     uint16_t mr0 = 0, mr1 = 0;
     int mr_ok = 0;
-    extern int system_ospi_psram_ready(void);
-    extern void system_ospi_psram_get_mr(uint16_t *mr0, uint16_t *mr1, int *mr_ok);
-    extern void system_ospi_psram_reclock(void);
-
     rt_kprintf("psram_info enter\n");
 
     if (argc >= 2 && !strcmp(argv[1], "reinit"))
     {
-        system_ospi_psram_reclock();
+        System_OSPI_PSRAM_Reclock();
         rt_kprintf("PSRAM reinit done\n");
     }
 
-    system_ospi_psram_get_mr(&mr0, &mr1, &mr_ok);
+    System_OSPI_PSRAM_GetMR(&mr0, &mr1, &mr_ok);
 
     rt_kprintf("PSRAM base=0x%08X size=%u MB\n",
                PSRAM_BASE, (unsigned)(PSRAM_SIZE / (1024U * 1024U)));
@@ -279,7 +275,7 @@ static int psram_info(int argc, char **argv)
                PSRAM_TEST_BASE, PSRAM_BASE + PSRAM_SIZE - 1U);
 #endif
     rt_kprintf("  init: %s  MR: %s  MR0=0x%04X MR1=0x%04X (expect ID 0x930D)\n",
-               system_ospi_psram_ready() ? "OK" : "FAIL",
+               System_OSPI_PSRAM_Ready() ? "OK" : "FAIL",
                mr_ok ? "OK" : "FAIL",
                (unsigned)mr0, (unsigned)mr1);
     rt_kprintf("  OSPI1 BAUD=0x%08X CTL=0x%08X ACC1=0x%08X ACC2=0x%08X\n",

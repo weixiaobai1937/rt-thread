@@ -269,21 +269,27 @@
 /* ACM32P4xx Onboard Peripheral Drivers */
 
 #define BSP_USING_UART1
+#define BSP_UART1_PINS_PA9
 #define BSP_USING_UART2
+#define BSP_UART2_PINS_PD5
 #define BSP_USING_UART2_DMA
+#define BSP_UART2_DMA_MAP_DEFAULT
 #define BSP_UART2_TX_DMA_UNIT 1
 #define BSP_UART2_TX_DMA_CH 3
 #define BSP_UART2_RX_DMA_UNIT 2
 #define BSP_UART2_RX_DMA_CH 0
 #define BSP_USING_SPI1
+#define BSP_SPI1_PINS_PE
+#define BSP_SPI1_CS_PIN 77
 #define BSP_USING_SPI1_DMA
+#define BSP_SPI1_DMA_MAP_DEFAULT
 #define BSP_SPI1_TX_DMA_UNIT 2
 #define BSP_SPI1_TX_DMA_CH 1
 #define BSP_SPI1_RX_DMA_UNIT 2
 #define BSP_SPI1_RX_DMA_CH 3
 #define BSP_USING_GPIO1
 #define BSP_USING_ETH
-#define BSP_ETH_PHY_RST_PB14
+#define BSP_ETH_PHY_RST_PIN 30
 #define BSP_USING_IPERF
 #define LWIP_SUPPORT_CUSTOM_PBUF 1
 #define BSP_ETH_STATIC_IP
@@ -302,4 +308,19 @@
 /* end of ACM32P4xx Onboard Peripheral Drivers */
 /* end of Hardware Drivers Config */
 
+/* BEGIN_BSP_RESOURCE_CHECK - auto by SCons, do not edit */
+/* ---- resource map ----
+ *   DMA map:
+ *     UART2_TX   -> DMA1_CH3
+ *     UART2_RX   -> DMA2_CH0
+ *     SPI1_TX    -> DMA2_CH1
+ *     SPI1_RX    -> DMA2_CH3
+ *   Pin groups:
+ *     UART1    PA9 PA10
+ *     UART2    PD5 PD6
+ *     SPI1     PE12 PE11 PE10 PE13
+ *     ETH      (RMII board pins)
+ */
+/* BSP resource check OK (no DMA / pin conflicts) */
+/* END_BSP_RESOURCE_CHECK */
 #endif

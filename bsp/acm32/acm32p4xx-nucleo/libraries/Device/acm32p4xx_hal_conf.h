@@ -6,6 +6,11 @@
 #ifndef __ACM32P4XX_HAL_CONF_H
 #define __ACM32P4XX_HAL_CONF_H
 
+/******* config data if or not in extern sram *******************************/
+/* Must be before acm32p4xx.h / system_acm32p4xx.h so ExtMem APIs are declared.
+ * Enables SystemInit_ExtMemCtl() in system_acm32p4xx.c */
+#define DATA_IN_ExtSRAM
+
 #include "hal_def.h"
 #include "acm32p4xx.h"
 #include "hal.h"
@@ -28,10 +33,6 @@
 #else
   #define assert_param(expr) ((void)0U)
 #endif
-
- /******* config data if or not in extern sram *******************************/
-/* Enable early OSPI1 PSRAM init via SystemInit_ExtMemCtl() (drivers/system_extmem.c) */
-#define DATA_IN_ExtSRAM
 
 /* Configure the Vector Table location add offset address ------------------*/
 

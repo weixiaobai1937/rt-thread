@@ -37,165 +37,298 @@ endmenu
 menu "ACM32P4xx Onboard Peripheral Drivers"
 
     config BSP_USING_UART1
-        bool "Enable UART1 (PA9/PA10)"
+        bool "Enable UART1"
         select RT_USING_SERIAL_V2
         default y
+        help
+          Pin group and DMA map selectable below (ACM32P4xx AF table).
+
+    choice
+        prompt "UART1 pin group"
+        depends on BSP_USING_UART1
+        default BSP_UART1_PINS_PA9
+        help
+          TX/RX mux groups from the AF table.
+
+        config BSP_UART1_PINS_PA9
+            bool "PA9(TX)/PA10(RX) AF1 (default, console)"
+        config BSP_UART1_PINS_PB6
+            bool "PB6(TX)/PB7(RX) AF1"
+    endchoice
 
     config BSP_USING_UART1_DMA
         bool "Enable UART1 DMA"
         depends on BSP_USING_UART1
         default n
         help
-          Configure DMA unit/channel below (each unit has CH0~CH3 only).
-          WARNING: do not share the same DMA unit+channel with UART2/3/4 or SPI.
-          Conflict is detected at compile time (dma_channel_check.h).
-          Default map: UART1 TX DMA1_CH1, RX DMA1_CH2.
+          DMA unit/channel: pick a preset map or Custom.
+          WARNING: unit+channel must be unique across UART/SPI DMA users.
+          Compile-time check in dma_channel_check.h.
+
+    choice
+        prompt "UART1 DMA channel map"
+        depends on BSP_USING_UART1_DMA
+        default BSP_UART1_DMA_MAP_DEFAULT
+
+        config BSP_UART1_DMA_MAP_DEFAULT
+            bool "TX=DMA1_CH1, RX=DMA1_CH2 (default)"
+        config BSP_UART1_DMA_MAP_DMA2
+            bool "TX=DMA2_CH1, RX=DMA2_CH2"
+        config BSP_UART1_DMA_MAP_CUSTOM
+            bool "Custom TX/RX unit + channel"
+    endchoice
 
     config BSP_UART1_TX_DMA_UNIT
-        int "UART1 TX DMA unit (1=DMA1, 2=DMA2)"
+        int "UART1 TX DMA unit (1=DMA1, 2=DMA2)" if BSP_UART1_DMA_MAP_CUSTOM
         depends on BSP_USING_UART1_DMA
         range 1 2
+        default 1 if BSP_UART1_DMA_MAP_DEFAULT
+        default 2 if BSP_UART1_DMA_MAP_DMA2
         default 1
 
     config BSP_UART1_TX_DMA_CH
-        int "UART1 TX DMA channel (0~3)"
+        int "UART1 TX DMA channel (0~3)" if BSP_UART1_DMA_MAP_CUSTOM
         depends on BSP_USING_UART1_DMA
         range 0 3
+        default 1 if BSP_UART1_DMA_MAP_DEFAULT
+        default 1 if BSP_UART1_DMA_MAP_DMA2
         default 1
 
     config BSP_UART1_RX_DMA_UNIT
-        int "UART1 RX DMA unit (1=DMA1, 2=DMA2)"
+        int "UART1 RX DMA unit (1=DMA1, 2=DMA2)" if BSP_UART1_DMA_MAP_CUSTOM
         depends on BSP_USING_UART1_DMA
         range 1 2
+        default 1 if BSP_UART1_DMA_MAP_DEFAULT
+        default 2 if BSP_UART1_DMA_MAP_DMA2
         default 1
 
     config BSP_UART1_RX_DMA_CH
-        int "UART1 RX DMA channel (0~3)"
+        int "UART1 RX DMA channel (0~3)" if BSP_UART1_DMA_MAP_CUSTOM
         depends on BSP_USING_UART1_DMA
         range 0 3
+        default 2 if BSP_UART1_DMA_MAP_DEFAULT
+        default 2 if BSP_UART1_DMA_MAP_DMA2
         default 2
 
     config BSP_USING_UART2
-        bool "Enable UART2 (PD5/PD6)"
+        bool "Enable UART2"
         select RT_USING_SERIAL_V2
         default n
+        help
+          Pin group and DMA map selectable below.
+
+    choice
+        prompt "UART2 pin group"
+        depends on BSP_USING_UART2
+        default BSP_UART2_PINS_PD5
+
+        config BSP_UART2_PINS_PD5
+            bool "PD5(TX)/PD6(RX) AF3 (default)"
+        config BSP_UART2_PINS_PA2
+            bool "PA2(TX)/PA3(RX) AF1"
+            help
+              Conflicts with default LPUART1 PA2/PA3 if both enabled.
+    endchoice
 
     config BSP_USING_UART2_DMA
         bool "Enable UART2 DMA"
         depends on BSP_USING_UART2
         default n
         help
-          Configure DMA unit/channel below (each unit has CH0~CH3 only).
-          WARNING: unit+channel must be unique across all UART/SPI DMA users.
-          Compile-time check in dma_channel_check.h.
-          Default map: UART2 TX DMA1_CH3, RX DMA2_CH0.
+          DMA unit/channel: pick a preset map or Custom.
+          WARNING: unit+channel must be unique across UART/SPI DMA users.
+
+    choice
+        prompt "UART2 DMA channel map"
+        depends on BSP_USING_UART2_DMA
+        default BSP_UART2_DMA_MAP_DEFAULT
+
+        config BSP_UART2_DMA_MAP_DEFAULT
+            bool "TX=DMA1_CH3, RX=DMA2_CH0 (default)"
+        config BSP_UART2_DMA_MAP_DMA1
+            bool "TX=DMA1_CH0, RX=DMA1_CH1"
+        config BSP_UART2_DMA_MAP_CUSTOM
+            bool "Custom TX/RX unit + channel"
+    endchoice
 
     config BSP_UART2_TX_DMA_UNIT
-        int "UART2 TX DMA unit (1=DMA1, 2=DMA2)"
+        int "UART2 TX DMA unit (1=DMA1, 2=DMA2)" if BSP_UART2_DMA_MAP_CUSTOM
         depends on BSP_USING_UART2_DMA
         range 1 2
+        default 1 if BSP_UART2_DMA_MAP_DEFAULT
+        default 1 if BSP_UART2_DMA_MAP_DMA1
         default 1
 
     config BSP_UART2_TX_DMA_CH
-        int "UART2 TX DMA channel (0~3)"
+        int "UART2 TX DMA channel (0~3)" if BSP_UART2_DMA_MAP_CUSTOM
         depends on BSP_USING_UART2_DMA
         range 0 3
+        default 3 if BSP_UART2_DMA_MAP_DEFAULT
+        default 0 if BSP_UART2_DMA_MAP_DMA1
         default 3
 
     config BSP_UART2_RX_DMA_UNIT
-        int "UART2 RX DMA unit (1=DMA1, 2=DMA2)"
+        int "UART2 RX DMA unit (1=DMA1, 2=DMA2)" if BSP_UART2_DMA_MAP_CUSTOM
         depends on BSP_USING_UART2_DMA
         range 1 2
+        default 2 if BSP_UART2_DMA_MAP_DEFAULT
+        default 1 if BSP_UART2_DMA_MAP_DMA1
         default 2
 
     config BSP_UART2_RX_DMA_CH
-        int "UART2 RX DMA channel (0~3)"
+        int "UART2 RX DMA channel (0~3)" if BSP_UART2_DMA_MAP_CUSTOM
         depends on BSP_USING_UART2_DMA
         range 0 3
+        default 0 if BSP_UART2_DMA_MAP_DEFAULT
+        default 1 if BSP_UART2_DMA_MAP_DMA1
         default 0
 
     config BSP_USING_UART3
-        bool "Enable UART3 (PB10/PB11)"
+        bool "Enable UART3"
         select RT_USING_SERIAL_V2
         default n
+
+    choice
+        prompt "UART3 pin group"
+        depends on BSP_USING_UART3
+        default BSP_UART3_PINS_PB10
+
+        config BSP_UART3_PINS_PB10
+            bool "PB10(TX)/PB11(RX) AF1 (default)"
+            help
+              Conflicts with default LPUART2 / ETH on PB10/PB11 if those are used.
+        config BSP_UART3_PINS_PD8
+            bool "PD8(TX)/PD9(RX) AF3"
+    endchoice
 
     config BSP_USING_UART3_DMA
         bool "Enable UART3 DMA"
         depends on BSP_USING_UART3
         default n
-        help
-          Configure DMA unit/channel below (each unit has CH0~CH3 only).
-          WARNING: unit+channel must be unique across all UART/SPI DMA users.
-          Compile-time check in dma_channel_check.h.
-          Default map: UART3 TX DMA2_CH2, RX DMA2_CH3.
+
+    choice
+        prompt "UART3 DMA channel map"
+        depends on BSP_USING_UART3_DMA
+        default BSP_UART3_DMA_MAP_DEFAULT
+
+        config BSP_UART3_DMA_MAP_DEFAULT
+            bool "TX=DMA2_CH2, RX=DMA2_CH3 (default)"
+        config BSP_UART3_DMA_MAP_DMA1
+            bool "TX=DMA1_CH2, RX=DMA1_CH3"
+        config BSP_UART3_DMA_MAP_CUSTOM
+            bool "Custom TX/RX unit + channel"
+    endchoice
 
     config BSP_UART3_TX_DMA_UNIT
-        int "UART3 TX DMA unit (1=DMA1, 2=DMA2)"
+        int "UART3 TX DMA unit (1=DMA1, 2=DMA2)" if BSP_UART3_DMA_MAP_CUSTOM
         depends on BSP_USING_UART3_DMA
         range 1 2
+        default 2 if BSP_UART3_DMA_MAP_DEFAULT
+        default 1 if BSP_UART3_DMA_MAP_DMA1
         default 2
 
     config BSP_UART3_TX_DMA_CH
-        int "UART3 TX DMA channel (0~3)"
+        int "UART3 TX DMA channel (0~3)" if BSP_UART3_DMA_MAP_CUSTOM
         depends on BSP_USING_UART3_DMA
         range 0 3
+        default 2 if BSP_UART3_DMA_MAP_DEFAULT
+        default 2 if BSP_UART3_DMA_MAP_DMA1
         default 2
 
     config BSP_UART3_RX_DMA_UNIT
-        int "UART3 RX DMA unit (1=DMA1, 2=DMA2)"
+        int "UART3 RX DMA unit (1=DMA1, 2=DMA2)" if BSP_UART3_DMA_MAP_CUSTOM
         depends on BSP_USING_UART3_DMA
         range 1 2
+        default 2 if BSP_UART3_DMA_MAP_DEFAULT
+        default 1 if BSP_UART3_DMA_MAP_DMA1
         default 2
 
     config BSP_UART3_RX_DMA_CH
-        int "UART3 RX DMA channel (0~3)"
+        int "UART3 RX DMA channel (0~3)" if BSP_UART3_DMA_MAP_CUSTOM
         depends on BSP_USING_UART3_DMA
         range 0 3
+        default 3 if BSP_UART3_DMA_MAP_DEFAULT
+        default 3 if BSP_UART3_DMA_MAP_DMA1
         default 3
 
     config BSP_USING_UART4
-        bool "Enable UART4 (PC10/PC11)"
+        bool "Enable UART4"
         select RT_USING_SERIAL_V2
         default n
+        help
+          PC10/PC11 group conflicts with SPI3 default pins.
+
+    choice
+        prompt "UART4 pin group"
+        depends on BSP_USING_UART4
+        default BSP_UART4_PINS_PC10
+
+        config BSP_UART4_PINS_PC10
+            bool "PC10(TX)/PC11(RX) AF4 (default)"
+            help
+              Conflicts with SPI3 PC10/PC11 if SPI3 uses PC group.
+        config BSP_UART4_PINS_PA0
+            bool "PA0(TX)/PA1(RX) AF3"
+    endchoice
 
     config BSP_USING_UART4_DMA
         bool "Enable UART4 DMA"
         depends on BSP_USING_UART4
         default n
-        help
-          Configure DMA unit/channel below (each unit has CH0~CH3 only).
-          WARNING: unit+channel must be unique across all UART/SPI DMA users.
-          Compile-time check in dma_channel_check.h.
-          Default map: UART4 TX DMA2_CH1, RX DMA1_CH0.
+
+    choice
+        prompt "UART4 DMA channel map"
+        depends on BSP_USING_UART4_DMA
+        default BSP_UART4_DMA_MAP_DEFAULT
+
+        config BSP_UART4_DMA_MAP_DEFAULT
+            bool "TX=DMA2_CH1, RX=DMA1_CH0 (default)"
+            help
+              Conflicts SPI1 default TX (DMA2_CH1) if SPI1 DMA is on.
+        config BSP_UART4_DMA_MAP_DMA1
+            bool "TX=DMA1_CH2, RX=DMA1_CH3"
+        config BSP_UART4_DMA_MAP_CUSTOM
+            bool "Custom TX/RX unit + channel"
+    endchoice
 
     config BSP_UART4_TX_DMA_UNIT
-        int "UART4 TX DMA unit (1=DMA1, 2=DMA2)"
+        int "UART4 TX DMA unit (1=DMA1, 2=DMA2)" if BSP_UART4_DMA_MAP_CUSTOM
         depends on BSP_USING_UART4_DMA
         range 1 2
+        default 2 if BSP_UART4_DMA_MAP_DEFAULT
+        default 1 if BSP_UART4_DMA_MAP_DMA1
         default 2
 
     config BSP_UART4_TX_DMA_CH
-        int "UART4 TX DMA channel (0~3)"
+        int "UART4 TX DMA channel (0~3)" if BSP_UART4_DMA_MAP_CUSTOM
         depends on BSP_USING_UART4_DMA
         range 0 3
+        default 1 if BSP_UART4_DMA_MAP_DEFAULT
+        default 2 if BSP_UART4_DMA_MAP_DMA1
         default 1
 
     config BSP_UART4_RX_DMA_UNIT
-        int "UART4 RX DMA unit (1=DMA1, 2=DMA2)"
+        int "UART4 RX DMA unit (1=DMA1, 2=DMA2)" if BSP_UART4_DMA_MAP_CUSTOM
         depends on BSP_USING_UART4_DMA
         range 1 2
+        default 1 if BSP_UART4_DMA_MAP_DEFAULT
+        default 1 if BSP_UART4_DMA_MAP_DMA1
         default 1
 
     config BSP_UART4_RX_DMA_CH
-        int "UART4 RX DMA channel (0~3)"
+        int "UART4 RX DMA channel (0~3)" if BSP_UART4_DMA_MAP_CUSTOM
         depends on BSP_USING_UART4_DMA
         range 0 3
+        default 0 if BSP_UART4_DMA_MAP_DEFAULT
+        default 3 if BSP_UART4_DMA_MAP_DMA1
         default 0
 
     config BSP_USING_UART5
         bool "Enable UART5"
         select RT_USING_SERIAL_V2
         default n
+        help
+          Placeholder: fixed pins in drv_uart (extend like UART1-4 if needed).
 
     config BSP_USING_UART6
         bool "Enable UART6"
@@ -213,20 +346,84 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         default n
 
     config BSP_USING_LPUART1
-        bool "Enable LPUART1 (PA2/PA3)"
+        bool "Enable LPUART1"
         select RT_USING_SERIAL_V2
         default n
+
+    choice
+        prompt "LPUART1 pin group"
+        depends on BSP_USING_LPUART1
+        default BSP_LPUART1_PINS_PA2
+
+        config BSP_LPUART1_PINS_PA2
+            bool "PA2(TX)/PA3(RX) AF3 (board default)"
+        config BSP_LPUART1_PINS_PB6
+            bool "PB6(TX)/PB7(RX) AF0"
+        config BSP_LPUART1_PINS_PA9
+            bool "PA9(TX)/PA10(RX) AF0"
+            help
+              Conflicts with default UART1 PA9/PA10 if both enabled.
+    endchoice
 
     config BSP_USING_LPUART2
-        bool "Enable LPUART2 (PB10/PB11)"
+        bool "Enable LPUART2"
         select RT_USING_SERIAL_V2
         default n
 
+    choice
+        prompt "LPUART2 pin group"
+        depends on BSP_USING_LPUART2
+        default BSP_LPUART2_PINS_PB10
+
+        config BSP_LPUART2_PINS_PB10
+            bool "PB10(TX)/PB11(RX) AF3 (default)"
+        config BSP_LPUART2_PINS_PE3
+            bool "PE3(TX)/PE4(RX) AF0"
+    endchoice
+
     config BSP_USING_SPI1
-        bool "Enable SPI1 (PE12/PE11/PE10, soft CS PE13)"
+        bool "Enable SPI1"
         select RT_USING_SPI
         select RT_USING_PIN
         default n
+        help
+          Pin group selectable below (SCK/MOSI/MISO + default soft CS).
+          From ACM32P4xx GPIO AF table; CS is soft GPIO by default.
+
+    choice
+        prompt "SPI1 pin group"
+        depends on BSP_USING_SPI1
+        default BSP_SPI1_PINS_PE
+        help
+          Complete SCK/MOSI/MISO mux groups from the AF table.
+
+        config BSP_SPI1_PINS_PE
+            bool "PE12/PE11/PE10 AF3, soft CS PE13"
+            help
+              SCK=PE12 MOSI=PE11 MISO=PE10 (AF3). Default soft CS PE13.
+
+        config BSP_SPI1_PINS_PA
+            bool "PA5/PA7/PA6 AF0, soft CS PA4"
+            help
+              SCK=PA5 MOSI=PA7 MISO=PA6 (AF0). Default soft CS PA4.
+
+        config BSP_SPI1_PINS_PB
+            bool "PB3/PB5/PB4, soft CS PA15"
+            help
+              SCK=PB3(AF4) MOSI=PB5(AF0) MISO=PB4(AF4). Soft CS PA15.
+    endchoice
+
+    config BSP_SPI1_CS_PIN
+        int "SPI1 soft CS pin index (A=0..15, B=16..31, C=32.., D=48.., E=64..)"
+        depends on BSP_USING_SPI1
+        range -1 127
+        default 77 if BSP_SPI1_PINS_PE
+        default 4 if BSP_SPI1_PINS_PA
+        default 15 if BSP_SPI1_PINS_PB
+        default 77
+        help
+          Soft CS GPIO index for rt_hw_spi_device_attach / SPI1_DEFAULT_CS_PIN_INDEX.
+          Set -1 for no hardware CS pin (RT_SPI_NO_CS).
 
     config BSP_USING_SPI1_DMA
         bool "Enable SPI1 DMA"
@@ -235,47 +432,115 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         help
           Half-duplex TX/RX >= 32 bytes use DMA.
           Full-duplex always polls (HAL has no TransmitReceive_DMA).
-          Configure DMA unit/channel below (each unit has CH0~CH3 only).
+          DMA unit/channel: pick a preset map or Custom below.
           WARNING: unit+channel must be unique across all UART/SPI DMA users.
           Compile-time check in dma_channel_check.h.
-          Default map: SPI1 TX DMA2_CH1, RX DMA2_CH3
-          (conflicts default UART4 TX / UART3 RX if those DMA are enabled).
+
+    choice
+        prompt "SPI1 DMA channel map"
+        depends on BSP_USING_SPI1_DMA
+        default BSP_SPI1_DMA_MAP_DEFAULT
+        help
+          DMA1/DMA2 each have CH0~CH3 only. Maps set TX/RX unit+channel.
+          Choose Custom to edit unit/channel manually.
+
+        config BSP_SPI1_DMA_MAP_DEFAULT
+            bool "TX=DMA2_CH1, RX=DMA2_CH3 (default)"
+            help
+              Recommended default. Avoids UART2 DMA defaults.
+
+        config BSP_SPI1_DMA_MAP_DMA1
+            bool "TX=DMA1_CH0, RX=DMA1_CH1"
+            help
+              Alternate on DMA1. Conflicts SPI2 default map if both use DMA.
+
+        config BSP_SPI1_DMA_MAP_CUSTOM
+            bool "Custom TX/RX unit + channel"
+            help
+              Configure the four int options below.
+    endchoice
 
     config BSP_SPI1_TX_DMA_UNIT
-        int "SPI1 TX DMA unit (1=DMA1, 2=DMA2)"
+        int "SPI1 TX DMA unit (1=DMA1, 2=DMA2)" if BSP_SPI1_DMA_MAP_CUSTOM
         depends on BSP_USING_SPI1_DMA
         range 1 2
+        default 2 if BSP_SPI1_DMA_MAP_DEFAULT
+        default 1 if BSP_SPI1_DMA_MAP_DMA1
         default 2
 
     config BSP_SPI1_TX_DMA_CH
-        int "SPI1 TX DMA channel (0~3)"
+        int "SPI1 TX DMA channel (0~3)" if BSP_SPI1_DMA_MAP_CUSTOM
         depends on BSP_USING_SPI1_DMA
         range 0 3
+        default 1 if BSP_SPI1_DMA_MAP_DEFAULT
+        default 0 if BSP_SPI1_DMA_MAP_DMA1
         default 1
 
     config BSP_SPI1_RX_DMA_UNIT
-        int "SPI1 RX DMA unit (1=DMA1, 2=DMA2)"
+        int "SPI1 RX DMA unit (1=DMA1, 2=DMA2)" if BSP_SPI1_DMA_MAP_CUSTOM
         depends on BSP_USING_SPI1_DMA
         range 1 2
+        default 2 if BSP_SPI1_DMA_MAP_DEFAULT
+        default 1 if BSP_SPI1_DMA_MAP_DMA1
         default 2
 
     config BSP_SPI1_RX_DMA_CH
-        int "SPI1 RX DMA channel (0~3)"
+        int "SPI1 RX DMA channel (0~3)" if BSP_SPI1_DMA_MAP_CUSTOM
         depends on BSP_USING_SPI1_DMA
         range 0 3
+        default 3 if BSP_SPI1_DMA_MAP_DEFAULT
+        default 1 if BSP_SPI1_DMA_MAP_DMA1
         default 3
         help
           Must differ from TX when TX/RX use the same DMA unit.
 
     config BSP_USING_SPI2
-        bool "Enable SPI2 (PB13/PB15/PB14, soft CS PB12)"
+        bool "Enable SPI2"
         select RT_USING_SPI
         select RT_USING_PIN
-        depends on !BSP_USING_ETH
         default n
         help
-          SPI2 uses PB12/PB13 which conflict with ETH RMII TXD0/TXD1.
-          Disable Ethernet when enabling SPI2 on this pin mux.
+          Pin group selectable below. PB13 group conflicts with ETH RMII TXD0/TXD1;
+          use PC group when Ethernet is enabled.
+
+    choice
+        prompt "SPI2 pin group"
+        depends on BSP_USING_SPI2
+        default BSP_SPI2_PINS_PB13 if !BSP_USING_ETH
+        default BSP_SPI2_PINS_PC if BSP_USING_ETH
+        help
+          Complete SCK/MOSI/MISO mux groups from the AF table.
+
+        config BSP_SPI2_PINS_PB13
+            bool "PB13/PB15/PB14 AF3, soft CS PB12 (conflicts ETH)"
+            depends on !BSP_USING_ETH
+            help
+              SCK=PB13 MOSI=PB15 MISO=PB14 (AF3). Soft CS PB12.
+              Conflicts with ETH RMII TXD0/TXD1 on PB12/PB13.
+
+        config BSP_SPI2_PINS_PC
+            bool "PC7/PC9/PC8 AF6, soft CS PC6"
+            help
+              SCK=PC7 MOSI=PC9 MISO=PC8 (AF6). Soft CS PC6.
+              Safe to use with Ethernet.
+
+        config BSP_SPI2_PINS_PB10
+            bool "PB10/PB15/PB14 AF3, soft CS PB9"
+            help
+              SCK=PB10 MOSI=PB15 MISO=PB14 (AF3). Soft CS PB9.
+              Note: PB14 may conflict with ETH PHY reset if that uses PB14.
+    endchoice
+
+    config BSP_SPI2_CS_PIN
+        int "SPI2 soft CS pin index (A=0..15, B=16..31, C=32.., D=48.., E=64..)"
+        depends on BSP_USING_SPI2
+        range -1 127
+        default 28 if BSP_SPI2_PINS_PB13
+        default 38 if BSP_SPI2_PINS_PC
+        default 25 if BSP_SPI2_PINS_PB10
+        default 28
+        help
+          Soft CS GPIO index. -1 means no CS pin.
 
     config BSP_USING_SPI2_DMA
         bool "Enable SPI2 DMA"
@@ -283,45 +548,99 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         default n
         help
           Same policy as SPI1 DMA: half-duplex TX/RX >= 32 bytes.
+          DMA unit/channel: pick a preset map or Custom below.
           WARNING: unit+channel must be unique across all UART/SPI DMA users.
           Compile-time check in dma_channel_check.h.
-          Default map: SPI2 TX DMA1_CH0, RX DMA1_CH1
-          (conflicts default UART4 RX if UART4 DMA is enabled).
+
+    choice
+        prompt "SPI2 DMA channel map"
+        depends on BSP_USING_SPI2_DMA
+        default BSP_SPI2_DMA_MAP_DEFAULT
+        help
+          DMA1/DMA2 each have CH0~CH3 only.
+
+        config BSP_SPI2_DMA_MAP_DEFAULT
+            bool "TX=DMA1_CH0, RX=DMA1_CH1 (default)"
+
+        config BSP_SPI2_DMA_MAP_DMA2
+            bool "TX=DMA2_CH0, RX=DMA2_CH1"
+            help
+              Alternate on DMA2. May conflict SPI3 default TX (DMA2_CH0).
+
+        config BSP_SPI2_DMA_MAP_CUSTOM
+            bool "Custom TX/RX unit + channel"
+    endchoice
 
     config BSP_SPI2_TX_DMA_UNIT
-        int "SPI2 TX DMA unit (1=DMA1, 2=DMA2)"
+        int "SPI2 TX DMA unit (1=DMA1, 2=DMA2)" if BSP_SPI2_DMA_MAP_CUSTOM
         depends on BSP_USING_SPI2_DMA
         range 1 2
+        default 1 if BSP_SPI2_DMA_MAP_DEFAULT
+        default 2 if BSP_SPI2_DMA_MAP_DMA2
         default 1
 
     config BSP_SPI2_TX_DMA_CH
-        int "SPI2 TX DMA channel (0~3)"
+        int "SPI2 TX DMA channel (0~3)" if BSP_SPI2_DMA_MAP_CUSTOM
         depends on BSP_USING_SPI2_DMA
         range 0 3
+        default 0 if BSP_SPI2_DMA_MAP_DEFAULT
+        default 0 if BSP_SPI2_DMA_MAP_DMA2
         default 0
 
     config BSP_SPI2_RX_DMA_UNIT
-        int "SPI2 RX DMA unit (1=DMA1, 2=DMA2)"
+        int "SPI2 RX DMA unit (1=DMA1, 2=DMA2)" if BSP_SPI2_DMA_MAP_CUSTOM
         depends on BSP_USING_SPI2_DMA
         range 1 2
+        default 1 if BSP_SPI2_DMA_MAP_DEFAULT
+        default 2 if BSP_SPI2_DMA_MAP_DMA2
         default 1
 
     config BSP_SPI2_RX_DMA_CH
-        int "SPI2 RX DMA channel (0~3)"
+        int "SPI2 RX DMA channel (0~3)" if BSP_SPI2_DMA_MAP_CUSTOM
         depends on BSP_USING_SPI2_DMA
         range 0 3
+        default 1 if BSP_SPI2_DMA_MAP_DEFAULT
+        default 1 if BSP_SPI2_DMA_MAP_DMA2
         default 1
         help
           Must differ from TX when TX/RX use the same DMA unit.
 
     config BSP_USING_SPI3
-        bool "Enable SPI3 (PC10/PC12/PC11, soft CS PC9)"
+        bool "Enable SPI3"
         select RT_USING_SPI
         select RT_USING_PIN
         default n
         help
-          SPI3 pins AF2: SCK=PC10, MOSI=PC12, MISO=PC11.
-          Soft CS default PC9. Conflicts with UART4 on PC10/PC11 if both used.
+          Pin group selectable below. PC group may conflict with UART4 on PC10/PC11.
+
+    choice
+        prompt "SPI3 pin group"
+        depends on BSP_USING_SPI3
+        default BSP_SPI3_PINS_PC
+        help
+          Complete SCK/MOSI/MISO mux groups from the AF table.
+
+        config BSP_SPI3_PINS_PC
+            bool "PC10/PC12/PC11 AF2, soft CS PC9"
+            help
+              SCK=PC10 MOSI=PC12 MISO=PC11 (AF2). Soft CS PC9 (GPIO).
+              Conflicts with UART4 AF4 on PC10/PC11 if UART4 uses those pins.
+
+        config BSP_SPI3_PINS_PB
+            bool "PB3/PB5/PB4 AF3, soft CS PA15"
+            help
+              SCK=PB3 MOSI=PB5 MISO=PB4 (AF3). Soft CS PA15.
+    endchoice
+
+    config BSP_SPI3_CS_PIN
+        int "SPI3 soft CS pin index (A=0..15, B=16..31, C=32.., D=48.., E=64..)"
+        depends on BSP_USING_SPI3
+        range -1 127
+        default 41 if BSP_SPI3_PINS_PC
+        default 15 if BSP_SPI3_PINS_PB
+        default 41
+        help
+          Soft CS GPIO index. -1 means no CS pin.
 
     config BSP_USING_SPI3_DMA
         bool "Enable SPI3 DMA"
@@ -329,41 +648,98 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         default n
         help
           Same policy as SPI1 DMA: half-duplex TX/RX >= 32 bytes.
+          DMA unit/channel: pick a preset map or Custom below.
           WARNING: unit+channel must be unique across all UART/SPI DMA users.
-          Default map: SPI3 TX DMA2_CH0, RX DMA2_CH2.
+          Compile-time check in dma_channel_check.h.
+
+    choice
+        prompt "SPI3 DMA channel map"
+        depends on BSP_USING_SPI3_DMA
+        default BSP_SPI3_DMA_MAP_DEFAULT
+        help
+          DMA1/DMA2 each have CH0~CH3 only.
+
+        config BSP_SPI3_DMA_MAP_DEFAULT
+            bool "TX=DMA2_CH0, RX=DMA2_CH2 (default)"
+            help
+              Note: UART2 default RX is DMA2_CH0 — conflict if UART2 DMA is on.
+
+        config BSP_SPI3_DMA_MAP_DMA1
+            bool "TX=DMA1_CH2, RX=DMA1_CH3"
+            help
+              Alternate on DMA1. Conflicts SPI4 default map if both use DMA.
+
+        config BSP_SPI3_DMA_MAP_CUSTOM
+            bool "Custom TX/RX unit + channel"
+    endchoice
 
     config BSP_SPI3_TX_DMA_UNIT
-        int "SPI3 TX DMA unit (1=DMA1, 2=DMA2)"
+        int "SPI3 TX DMA unit (1=DMA1, 2=DMA2)" if BSP_SPI3_DMA_MAP_CUSTOM
         depends on BSP_USING_SPI3_DMA
         range 1 2
+        default 2 if BSP_SPI3_DMA_MAP_DEFAULT
+        default 1 if BSP_SPI3_DMA_MAP_DMA1
         default 2
 
     config BSP_SPI3_TX_DMA_CH
-        int "SPI3 TX DMA channel (0~3)"
+        int "SPI3 TX DMA channel (0~3)" if BSP_SPI3_DMA_MAP_CUSTOM
         depends on BSP_USING_SPI3_DMA
         range 0 3
+        default 0 if BSP_SPI3_DMA_MAP_DEFAULT
+        default 2 if BSP_SPI3_DMA_MAP_DMA1
         default 0
 
     config BSP_SPI3_RX_DMA_UNIT
-        int "SPI3 RX DMA unit (1=DMA1, 2=DMA2)"
+        int "SPI3 RX DMA unit (1=DMA1, 2=DMA2)" if BSP_SPI3_DMA_MAP_CUSTOM
         depends on BSP_USING_SPI3_DMA
         range 1 2
+        default 2 if BSP_SPI3_DMA_MAP_DEFAULT
+        default 1 if BSP_SPI3_DMA_MAP_DMA1
         default 2
 
     config BSP_SPI3_RX_DMA_CH
-        int "SPI3 RX DMA channel (0~3)"
+        int "SPI3 RX DMA channel (0~3)" if BSP_SPI3_DMA_MAP_CUSTOM
         depends on BSP_USING_SPI3_DMA
         range 0 3
+        default 2 if BSP_SPI3_DMA_MAP_DEFAULT
+        default 3 if BSP_SPI3_DMA_MAP_DMA1
         default 2
 
     config BSP_USING_SPI4
-        bool "Enable SPI4 (PE2/PE6/PE5, soft CS PE4)"
+        bool "Enable SPI4"
         select RT_USING_SPI
         select RT_USING_PIN
         default n
         help
-          SPI4 pins AF4: SCK=PE2, MOSI=PE6, MISO=PE5 (avoids SPI1 PE10-13).
-          Soft CS default PE4.
+          Pin group selectable below. PE group avoids SPI1 PE10-13.
+
+    choice
+        prompt "SPI4 pin group"
+        depends on BSP_USING_SPI4
+        default BSP_SPI4_PINS_PE
+        help
+          Complete SCK/MOSI/MISO mux groups from the AF table.
+
+        config BSP_SPI4_PINS_PE
+            bool "PE2/PE6/PE5 AF4, soft CS PE4"
+            help
+              SCK=PE2 MOSI=PE6 MISO=PE5 (AF4). Soft CS PE4.
+
+        config BSP_SPI4_PINS_PB
+            bool "PB2/PB1/PB6, soft CS PE4"
+            help
+              SCK=PB2(AF1) MOSI=PB1(AF0) MISO=PB6(AF3). Soft CS PE4.
+    endchoice
+
+    config BSP_SPI4_CS_PIN
+        int "SPI4 soft CS pin index (A=0..15, B=16..31, C=32.., D=48.., E=64..)"
+        depends on BSP_USING_SPI4
+        range -1 127
+        default 68 if BSP_SPI4_PINS_PE
+        default 68 if BSP_SPI4_PINS_PB
+        default 68
+        help
+          Soft CS GPIO index. -1 means no CS pin.
 
     config BSP_USING_SPI4_DMA
         bool "Enable SPI4 DMA"
@@ -371,31 +747,59 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         default n
         help
           Same policy as SPI1 DMA: half-duplex TX/RX >= 32 bytes.
+          DMA unit/channel: pick a preset map or Custom below.
           WARNING: unit+channel must be unique across all UART/SPI DMA users.
-          Default map: SPI4 TX DMA1_CH2, RX DMA1_CH3.
+          Compile-time check in dma_channel_check.h.
+
+    choice
+        prompt "SPI4 DMA channel map"
+        depends on BSP_USING_SPI4_DMA
+        default BSP_SPI4_DMA_MAP_DEFAULT
+        help
+          DMA1/DMA2 each have CH0~CH3 only.
+
+        config BSP_SPI4_DMA_MAP_DEFAULT
+            bool "TX=DMA1_CH2, RX=DMA1_CH3 (default)"
+
+        config BSP_SPI4_DMA_MAP_DMA2
+            bool "TX=DMA2_CH2, RX=DMA2_CH0"
+            help
+              Alternate on DMA2. Check conflicts with SPI1/SPI3/UART2 defaults.
+
+        config BSP_SPI4_DMA_MAP_CUSTOM
+            bool "Custom TX/RX unit + channel"
+    endchoice
 
     config BSP_SPI4_TX_DMA_UNIT
-        int "SPI4 TX DMA unit (1=DMA1, 2=DMA2)"
+        int "SPI4 TX DMA unit (1=DMA1, 2=DMA2)" if BSP_SPI4_DMA_MAP_CUSTOM
         depends on BSP_USING_SPI4_DMA
         range 1 2
+        default 1 if BSP_SPI4_DMA_MAP_DEFAULT
+        default 2 if BSP_SPI4_DMA_MAP_DMA2
         default 1
 
     config BSP_SPI4_TX_DMA_CH
-        int "SPI4 TX DMA channel (0~3)"
+        int "SPI4 TX DMA channel (0~3)" if BSP_SPI4_DMA_MAP_CUSTOM
         depends on BSP_USING_SPI4_DMA
         range 0 3
+        default 2 if BSP_SPI4_DMA_MAP_DEFAULT
+        default 2 if BSP_SPI4_DMA_MAP_DMA2
         default 2
 
     config BSP_SPI4_RX_DMA_UNIT
-        int "SPI4 RX DMA unit (1=DMA1, 2=DMA2)"
+        int "SPI4 RX DMA unit (1=DMA1, 2=DMA2)" if BSP_SPI4_DMA_MAP_CUSTOM
         depends on BSP_USING_SPI4_DMA
         range 1 2
+        default 1 if BSP_SPI4_DMA_MAP_DEFAULT
+        default 2 if BSP_SPI4_DMA_MAP_DMA2
         default 1
 
     config BSP_SPI4_RX_DMA_CH
-        int "SPI4 RX DMA channel (0~3)"
+        int "SPI4 RX DMA channel (0~3)" if BSP_SPI4_DMA_MAP_CUSTOM
         depends on BSP_USING_SPI4_DMA
         range 0 3
+        default 3 if BSP_SPI4_DMA_MAP_DEFAULT
+        default 0 if BSP_SPI4_DMA_MAP_DMA2
         default 3
 
     config BSP_USING_GPIO1
@@ -414,21 +818,15 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
             PHY: LAN8720A, Interface: RMII, Pins: all AF6.
             Enables lwIP protocol stack with DHCP.
 
-    choice
-        prompt "ETH PHY hardware reset pin"
+    config BSP_ETH_PHY_RST_PIN
+        int "ETH PHY nRST pin index"
         depends on BSP_USING_ETH
-        default BSP_ETH_PHY_RST_PB14
+        range 0 127
+        default 30
         help
-          LAN8720A nRST pin routing on this board.
-          PB14 conflicts with SPI2 MISO (PB14) if SPI2 is enabled.
-          PC0 is free on default Nucleo pinout.
-
-        config BSP_ETH_PHY_RST_PB14
-            bool "PB14"
-
-        config BSP_ETH_PHY_RST_PC0
-            bool "PC0"
-    endchoice
+          RT-Thread pin index for LAN8720A nRST (any GPIO).
+          Formula: PXn = port*16 + n  (PA0=0, PB0=16, PC0=32, PD0=48, PE0=64).
+          Common: PB14=30, PC0=32. PB14 conflicts with SPI2 MISO if SPI2 on.
 
     config BSP_USING_IPERF
         bool "Enable iperf MSH command (lwIP lwiperf, TCP port 5001)"

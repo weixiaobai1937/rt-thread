@@ -158,6 +158,24 @@ static void rx_buf_free_custom(struct pbuf *p)
     }
 }
 
+/* ===== PHY nRST GPIO clock (BSP_ETH_PHY_RST_PIN -> port) ===== */
+
+static void eth_phy_rst_clk_enable(void)
+{
+    switch (ETH_PHY_RST_PORT_IDX)
+    {
+    case 0: __HAL_RCC_GPIOA_CLK_ENABLE(); break;
+    case 1: __HAL_RCC_GPIOB_CLK_ENABLE(); break;
+    case 2: __HAL_RCC_GPIOC_CLK_ENABLE(); break;
+    case 3: __HAL_RCC_GPIOD_CLK_ENABLE(); break;
+    case 4: __HAL_RCC_GPIOE_CLK_ENABLE(); break;
+    case 5: __HAL_RCC_GPIOF_CLK_ENABLE(); break;
+    case 6: __HAL_RCC_GPIOG_CLK_ENABLE(); break;
+    case 7: __HAL_RCC_GPIOH_CLK_ENABLE(); break;
+    default: break;
+    }
+}
+
 /* ===== HAL_ETH_MspInit: GPIO, Clock, NVIC ===== */
 
 void HAL_ETH_MspInit(ETH_HandleTypeDef *heth)
@@ -166,10 +184,11 @@ void HAL_ETH_MspInit(ETH_HandleTypeDef *heth)
 
     if (heth->Init.MediaInterface == HAL_ETH_RMII_MODE)
     {
-        /* Enable GPIO clocks */
+        /* Enable GPIO clocks (RMII fixed pins + configurable PHY nRST) */
         __HAL_RCC_GPIOA_CLK_ENABLE();
         __HAL_RCC_GPIOB_CLK_ENABLE();
         __HAL_RCC_GPIOC_CLK_ENABLE();
+        eth_phy_rst_clk_enable();
 
         /* PA1(REF_CLK), PA2(MDIO), PA7(CRS_DV) -- AF6, Drive Level 3 */
         GPIO_InitStruct.Pin = GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_7;
@@ -187,8 +206,7 @@ void HAL_ETH_MspInit(ETH_HandleTypeDef *heth)
         GPIO_InitStruct.Alternate = GPIO_FUNCTION_6;
         HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-        /* PHY nRST: PB14 or PC0 (Kconfig BSP_ETH_PHY_RST_*) */
-        ETH_PHY_RST_CLK_ENABLE();
+        /* PHY nRST: any GPIO via BSP_ETH_PHY_RST_PIN (pin index) */
         GPIO_InitStruct.Pin = ETH_PHY_RST_PIN;
         GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
         GPIO_InitStruct.Pull = GPIO_NOPULL;

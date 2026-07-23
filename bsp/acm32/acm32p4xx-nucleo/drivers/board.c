@@ -66,10 +66,7 @@ void rt_hw_board_init(void)
 
 #ifdef DATA_IN_ExtSRAM
     /* Full OSPI PSRAM init after HCLK is final (not only BAUD retune) */
-    {
-        extern void system_ospi_psram_reclock(void);
-        system_ospi_psram_reclock();
-    }
+    System_OSPI_PSRAM_Reclock();
 #endif
 
     /* Re-configure SysTick for RT-Thread (overriding HAL_InitTick) */

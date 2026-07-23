@@ -92,6 +92,13 @@ extern volatile uint32_t SystemCoreClock; /*!< System Clock Frequency (Core Cloc
 void SystemInit(void);
 void SystemCoreClockUpdate(void);
 HAL_StatusTypeDef SystemClock_Config(uint32_t sysclkSel, uint32_t pclk1Div, uint32_t pclk2Div);
-HAL_StatusTypeDef System_Get_ChipSN(uint8_t *pSN);  
+HAL_StatusTypeDef System_Get_ChipSN(uint8_t *pSN);
+
+#ifdef DATA_IN_ExtSRAM
+void SystemInit_ExtMemCtl(void);
+void System_OSPI_PSRAM_Reclock(void);
+int  System_OSPI_PSRAM_Ready(void);
+void System_OSPI_PSRAM_GetMR(uint16_t *mr0, uint16_t *mr1, int *mr_ok);
+#endif
 
 #endif /* __SYSTEM_ACM32P4XX_H */

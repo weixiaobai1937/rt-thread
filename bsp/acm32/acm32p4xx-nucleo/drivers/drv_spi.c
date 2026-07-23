@@ -10,6 +10,7 @@
  * 2026-07-14     AisinoChip   table-driven SPI1/SPI2 multi-instance
  * 2026-07-15     AisinoChip   DMA TX/RX abort on timeout; half-duplex RX DMA
  * 2026-07-15     AisinoChip   SPI3/SPI4 multi-instance
+ * 2026-07-23     AisinoChip   Kconfig pin groups; multi-port GPIO clock
  */
 
 #include <rthw.h>
@@ -138,6 +139,42 @@ static const struct acm32_spi_dma_config spi4_dma_rx = SPI4_DMA_RX_CONFIG;
 #endif
 #endif
 
+static void acm32_spi_gpio_clk_enable(GPIO_TypeDef *port)
+{
+    if (port == GPIOA)
+        __HAL_RCC_GPIOA_CLK_ENABLE();
+    else if (port == GPIOB)
+        __HAL_RCC_GPIOB_CLK_ENABLE();
+    else if (port == GPIOC)
+        __HAL_RCC_GPIOC_CLK_ENABLE();
+    else if (port == GPIOD)
+        __HAL_RCC_GPIOD_CLK_ENABLE();
+    else if (port == GPIOE)
+        __HAL_RCC_GPIOE_CLK_ENABLE();
+    else if (port == GPIOF)
+        __HAL_RCC_GPIOF_CLK_ENABLE();
+    else if (port == GPIOG)
+        __HAL_RCC_GPIOG_CLK_ENABLE();
+}
+
+static void acm32_spi_periph_clk_enable(SPI_TypeDef *inst)
+{
+    if (inst == SPI1)
+        __HAL_RCC_SPI1_CLK_ENABLE();
+#ifdef BSP_USING_SPI2
+    else if (inst == SPI2)
+        __HAL_RCC_SPI2_CLK_ENABLE();
+#endif
+#ifdef BSP_USING_SPI3
+    else if (inst == SPI3)
+        __HAL_RCC_SPI3_CLK_ENABLE();
+#endif
+#ifdef BSP_USING_SPI4
+    else if (inst == SPI4)
+        __HAL_RCC_SPI4_CLK_ENABLE();
+#endif
+}
+
 void HAL_SPI_MspInit(SPI_HandleTypeDef *hspi)
 {
     GPIO_InitTypeDef gpio = {0};
@@ -163,36 +200,11 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef *hspi)
 
     c = spi->config ? spi->config : &spi_config[i];
 
-    if (hspi->Instance == SPI1)
-    {
-        __HAL_RCC_GPIOE_CLK_ENABLE();
-        __HAL_RCC_SPI1_CLK_ENABLE();
-    }
-#ifdef BSP_USING_SPI2
-    else if (hspi->Instance == SPI2)
-    {
-        __HAL_RCC_GPIOB_CLK_ENABLE();
-        __HAL_RCC_SPI2_CLK_ENABLE();
-    }
-#endif
-#ifdef BSP_USING_SPI3
-    else if (hspi->Instance == SPI3)
-    {
-        __HAL_RCC_GPIOC_CLK_ENABLE();
-        __HAL_RCC_SPI3_CLK_ENABLE();
-    }
-#endif
-#ifdef BSP_USING_SPI4
-    else if (hspi->Instance == SPI4)
-    {
-        __HAL_RCC_GPIOE_CLK_ENABLE();
-        __HAL_RCC_SPI4_CLK_ENABLE();
-    }
-#endif
-    else
-    {
-        return;
-    }
+    /* Peripheral + pin ports may differ across Kconfig pin groups */
+    acm32_spi_periph_clk_enable(hspi->Instance);
+    acm32_spi_gpio_clk_enable(c->sck_port);
+    acm32_spi_gpio_clk_enable(c->mosi_port);
+    acm32_spi_gpio_clk_enable(c->miso_port);
 
     gpio.Mode = GPIO_MODE_AF_PP;
     gpio.Pull = GPIO_PULLUP;
@@ -539,6 +551,10 @@ rt_err_t rt_hw_spi_device_attach(const char *bus_name, const char *device_name, 
 
     RT_ASSERT(bus_name != RT_NULL);
     RT_ASSERT(device_name != RT_NULL);
+
+    /* Kconfig may use -1 as "no CS" */
+    if (cs_pin < 0)
+        cs_pin = PIN_NONE;
 
     spi_device = (struct rt_spi_device *)rt_malloc(sizeof(struct rt_spi_device));
     if (spi_device == RT_NULL)
