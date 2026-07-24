@@ -54,7 +54,7 @@ static const struct spi_test_unit g_spi_units[] =
         .bus_name = "spi1",
         .dev_name = "spi10",
         .cs_pin = SPI1_DEFAULT_CS_PIN_INDEX,
-        .pins_hint = SPI1_PINS_HINT, /* from spi_config.h, follows pin group */
+        .pins_hint = "SCK/MOSI/MISO/CS (Kconfig pin)",
 #ifdef BSP_USING_SPI1_DMA
         .dma_en = RT_TRUE,
 #else
@@ -68,7 +68,7 @@ static const struct spi_test_unit g_spi_units[] =
         .bus_name = "spi2",
         .dev_name = "spi20",
         .cs_pin = SPI2_DEFAULT_CS_PIN_INDEX,
-        .pins_hint = SPI2_PINS_HINT,
+        .pins_hint = "SCK/MOSI/MISO/CS (Kconfig pin)",
 #ifdef BSP_USING_SPI2_DMA
         .dma_en = RT_TRUE,
 #else
@@ -82,7 +82,7 @@ static const struct spi_test_unit g_spi_units[] =
         .bus_name = "spi3",
         .dev_name = "spi30",
         .cs_pin = SPI3_DEFAULT_CS_PIN_INDEX,
-        .pins_hint = SPI3_PINS_HINT,
+        .pins_hint = "SCK/MOSI/MISO/CS (Kconfig pin)",
 #ifdef BSP_USING_SPI3_DMA
         .dma_en = RT_TRUE,
 #else
@@ -96,7 +96,7 @@ static const struct spi_test_unit g_spi_units[] =
         .bus_name = "spi4",
         .dev_name = "spi40",
         .cs_pin = SPI4_DEFAULT_CS_PIN_INDEX,
-        .pins_hint = SPI4_PINS_HINT,
+        .pins_hint = "SCK/MOSI/MISO/CS (Kconfig pin)",
 #ifdef BSP_USING_SPI4_DMA
         .dma_en = RT_TRUE,
 #else

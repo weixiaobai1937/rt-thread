@@ -46,7 +46,7 @@ static const struct uart_test_unit g_uart_units[] =
 #ifdef BSP_USING_UART1
     {
         .name = "uart1",
-        .pins_hint = UART1_PINS_HINT, /* from uart_config.h, follows pin group */
+        .pins_hint = "TX/RX (Kconfig pin)",
 #ifdef BSP_USING_UART1_DMA
         .dma_en = RT_TRUE,
 #else
@@ -58,7 +58,7 @@ static const struct uart_test_unit g_uart_units[] =
 #ifdef BSP_USING_UART2
     {
         .name = "uart2",
-        .pins_hint = UART2_PINS_HINT,
+        .pins_hint = "TX/RX (Kconfig pin)",
 #ifdef BSP_USING_UART2_DMA
         .dma_en = RT_TRUE,
 #else
@@ -70,7 +70,7 @@ static const struct uart_test_unit g_uart_units[] =
 #ifdef BSP_USING_UART3
     {
         .name = "uart3",
-        .pins_hint = UART3_PINS_HINT,
+        .pins_hint = "TX/RX (Kconfig pin)",
 #ifdef BSP_USING_UART3_DMA
         .dma_en = RT_TRUE,
 #else
@@ -82,7 +82,7 @@ static const struct uart_test_unit g_uart_units[] =
 #ifdef BSP_USING_UART4
     {
         .name = "uart4",
-        .pins_hint = UART4_PINS_HINT,
+        .pins_hint = "TX/RX (Kconfig pin)",
 #ifdef BSP_USING_UART4_DMA
         .dma_en = RT_TRUE,
 #else
@@ -94,7 +94,7 @@ static const struct uart_test_unit g_uart_units[] =
 #ifdef BSP_USING_LPUART1
     {
         .name = "lpuart1",
-        .pins_hint = LPUART1_PINS_HINT,
+        .pins_hint = "TX/RX (Kconfig pin)",
         .dma_en = RT_FALSE,
         .is_console_hint = RT_FALSE,
     },
@@ -102,7 +102,7 @@ static const struct uart_test_unit g_uart_units[] =
 #ifdef BSP_USING_LPUART2
     {
         .name = "lpuart2",
-        .pins_hint = LPUART2_PINS_HINT,
+        .pins_hint = "TX/RX (Kconfig pin)",
         .dma_en = RT_FALSE,
         .is_console_hint = RT_FALSE,
     },

@@ -13,6 +13,137 @@
 #include <rtdevice.h>
 #include "board.h"
 
+
+/*
+GPIO复用功能映射表
+| 引脚名称 | AF0          | AF1          | AF2          | AF3          | AF4       | AF5        | AF6                             | AF7         | 附加功能                       |
+| -------- | ------------ | ------------ | ------------ | ------------ | --------- | ---------- | ------------------------------- | ----------- | ------------------------------ |
+| PA0      | LPTIM1_OUT   | UART2_CTS    | TIM2_CH1_ETR | UART4_TX     | TIM5_CH1  | TIM8_ETR   | ETH_MII_CRS                     | —           | ADC_INP16, RTC_TAMP2, WKUP0    |
+| PA1      | SDMMC1_D6    | UART2_RTS_DE | TIM2_CH2     | UART4_RX     | TIM5_CH2  | OSPI2_DQS  | ETH_MII_RX_CLK/ETH_RMII_REF_CLK | I2C1_SDA    | ADC_INN16, ADC_INP17           |
+| PA2      | SDMMC1_D7    | UART2_TX     | TIM2_CH3     | TIM9_CH1     | TIM5_CH3  | —          | ETH_MDIO                        | I2C1_SCL    | ADC_INP14, WKUP1               |
+| PA3      | —            | UART2_RX     | TIM2_CH4     | TIM9_CH2     | TIM5_CH4  | OSPI2_CLK  | ETH_MII_COL                     | —           | ADC_INP19                      |
+| PA4      | SPI1_CS      | TIM10_CH1    | —            | SPI3_CS      | TIM5_ETR  | UART2_CK   | —                               | I2S1_WS     | ADC_INP3, DAC1_OUT1            |
+| PA5      | SPI1_SCK     | TIM1_CH4     | TIM2_CH1_ETR | —            | TIM8_CH1N | —          | —                               | I2S1_CK     | ADC_INN3, ADC_INP1, DAC1_OUT2  |
+| PA6      | SPI1_MISO    | TIM3_CH1     | TIM1_BKIN    | SPI1_IO3     | TIM8_BKIN | OSPI2_IO3  | UART4_RX                        | I2S1_SDI    | ADC_INP9                       |
+| PA7      | SPI1_MOSI    | TIM3_CH2     | TIM1_CH1N    | UART1_TX     | TIM8_CH1N | OSPI2_IO2  | ETH_MII_RX_DV/ETH_RMII_CRS_DV   | SDMMC1_D0   | ADC_INN9, ADC_INP7             |
+| PA8      | MCO1         | —            | TIM1_CH1     | —            | SPI4_IO3  | UART7_RX   | UART1_CK                        | —           | —                              |
+| PA9      | LPUART1_TX   | UART1_TX     | TIM1_CH2     | SPI2_SCK     | —         | UART4_CK   | ETH_TX_ER                       | —           | —                              |
+| PA10     | LPUART1_RX   | UART1_RX     | TIM1_CH3     | SPI1_IO2     | TIM8_BKIN | —          | —                               | —           | —                              |
+| PA11     | —            | UART1_CTS    | TIM1_CH4     | SPI2_CS      | CAN1_RX   | UART4_RX   | COMP1_OUT                       | I2S2_WS     | USBD_FS_DM                     |
+| PA12     | —            | UART1_RTS    | TIM1_ETR     | SPI2_SCK     | CAN1_TX   | UART4_TX   | —                               | I2S2_CK     | USBD_FS_DP                     |
+| PA13     | SWDIO_TMS    | UART1_RX     | —            | UART2_RTS    | I2C1_SCL  | —          | ETH_TX_ER                       | —           | —                              |
+| PA14     | SWCLK_TCK    | UART1_TX     | —            | —            | I2C1_SDA  | —          | —                               | —           | —                              |
+| PA15     | TDI          | UART4_RTS    | TIM2_CH1_ETR | SPI1_CS      | SPI3_CS   | OSPI2_DQS  | UART7_TX                        | I2S1_WS     | —                              |
+| PB0      | —            | TIM3_CH3     | TIM1_CH2N    | UART2_RX     | TIM8_CH2N | OSPI2_IO1  | ETH_MII_RXD2                    | UART4_CTS   | ADC_INN5, ADC_INP18, COMP1_INP |
+| PB1      | SPI4_MOSI    | TIM3_CH4     | TIM1_CH3N    | UART2_RTS    | TIM8_CH3N | OSPI2_IO0  | ETH_MII_RXD3                    | UART4_RTS   | ADC_INP5, COMP1_INM            |
+| PB2      | OSPI2_DQS    | SPI4_SCK     | —            | UART2_CK     | SPI3_MOSI | OSPI2_CLK  | ETH_TX_ER                       | UART7_CK    | COMP1_INP                      |
+| PB3      | TDO          | UART5_CK     | TIM2_CH2     | SPI3_SCK     | SPI1_SCK  | —          | UART7_RX                        | I2S1_CK     | —                              |
+| PB4      | TRST         | TIM3_CH1     | SPI2_CS      | SPI3_MISO    | SPI1_MISO | OSPI2_CLK  | UART7_TX                        | I2S1_SDI    | —                              |
+| PB5      | SPI1_MOSI    | TIM3_CH2     | —            | SPI3_MOSI    | UART5_RX  | OSPI2_NCLK | ETH_PPS_OUT                     | I2S1_SDO    | WKUP4                          |
+| PB6      | LPUART1_TX   | UART1_TX     | TIM4_CH1     | SPI4_MISO    | UART5_TX  | OSPI2_NCS  | —                               | I2C1_SCL    | —                              |
+| PB7      | LPUART1_RX   | UART1_RX     | TIM4_CH2     | —            | UART5_CK  | I2S2_MCK   | COMP1_OUT                       | I2C1_SDA    | —                              |
+| PB8      | TIM10_CH1    | UART4_RX     | TIM4_CH3     | —            | CAN1_RX   | I2C1_SCL   | ETH_MII_TXD3                    | SDMMC1_D4   | —                              |
+| PB9      | SDMMC1_CMD   | UART4_TX     | TIM4_CH4     | SPI2_CS      | CAN1_TX   | I2C1_SDA   | SDMMC1_D5                       | I2S2_WS     | —                              |
+| PB10     | I2C2_SCL     | UART3_TX     | TIM2_CH3     | SPI2_SCK     | CAN1_STBY | OSPI2_NCS  | ETH_MII_RX_ER                   | I2S2_CK     | —                              |
+| PB11     | I2C2_SDA     | UART3_RX     | TIM2_CH4     | —            | —         | —          | ETH_MII_TX_EN/ETH_RMII_TX_EN    | SDMMC1_D1   | —                              |
+| PB12     | SDMMC1_D2    | UART3_CK     | TIM1_BKIN    | SPI2_CS      | UART5_RX  | OSPI2_NCLK | ETH_MII_TXD0/ETH_RMII_TXD0      | I2S2_WS     | —                              |
+| PB13     | UART3_CTS    | SDMMC1_D3    | TIM1_CH1N    | SPI2_SCK     | UART5_TX  | —          | ETH_MII_TXD1/ETH_RMII_TXD1      | I2S2_CK     | —                              |
+| PB14     | UART3_RTS_DE | UART4_RTS    | TIM1_CH2N    | SPI2_MISO    | TIM8_CH2N | SPI4_MOSI  | UART1_TX                        | I2S2_SDI    | —                              |
+| PB15     | —            | UART4_CTS    | TIM1_CH3N    | SPI2_MOSI    | TIM8_CH3N | OSPI2_CLK  | UART1_RX                        | I2S2_SDO    | WKUP6                          |
+| PC0      | LPUART2_TX   | —            | —            | —            | TIM9_CH1  | —          | OSPI2_IO7                       | —           | ADC_INP10                      |
+| PC1      | LPUART2_RX   | SDMMC1_CK    | UART2_RX     | SPI2_MOSI    | —         | OSPI2_IO4  | ETH_MDC                         | I2S2_SDO    | ADC_INN10, ADC_INP11           |
+| PC2      | TIM9_CH2     | —            | UART2_TX     | SPI2_MISO    | OSPI2_IO2 | OSPI2_IO5  | ETH_MII_TXD2                    | I2S2_SDI    | ADC_INP2                       |
+| PC3      | —            | SPI1_MOSI    | UART2_TX     | SPI2_MOSI    | OSPI2_IO0 | OSPI2_IO6  | ETH_MII_TX_CLK                  | I2S2_SDO    | ADC_INN2, ADC_INP6             |
+| PC4      | IR_OUT       | SDMMC1_D4    | UART6_CTS    | UART1_RTS    | —         | —          | ETH_MII_RXD0/ETH_RMII_RXD0      | I2S1_MCK    | ADC_INP4, COMP1_INM            |
+| PC5      | IR_OUT       | SDMMC1_D5    | UART6_RTS    | UART1_CTS    | —         | OSPI2_DQS  | ETH_MII_RXD1/ETH_RMII_RXD1      | COMP1_OUT   | ADC_INN4, ADC_INP8, WKUP5      |
+| PC6      | TIM3_CH1     | SPI2_IO3     | SDMMC1_D6    | UART6_TX     | TIM8_CH1  | OSPI2_IO5  | SPI2_CS                         | I2S2_MCK    | —                              |
+| PC7      | TIM3_CH2     | SPI2_IO2     | SDMMC1_D7    | UART6_RX     | TIM8_CH2  | OSPI2_IO6  | SPI2_SCK                        | I2S1_MCK    | —                              |
+| PC8      | TIM3_CH3     | SPI2_CS3     | UART5_RTS    | UART6_CK     | TIM8_CH3  | —          | SPI2_MISO                       | SDMMC1_D0   | —                              |
+| PC9      | TIM3_CH4     | SPI2_CS4     | UART5_CTS    | MCO2         | TIM8_CH4  | OSPI2_IO0  | SPI2_MOSI                       | SDMMC1_D1   | —                              |
+| PC10     | TIM5_CH1     | SPI1_IO2     | SPI3_SCK     | UART3_TX     | UART4_TX  | OSPI2_IO1  | SDMMC1_D2                       | I2S1_CK     | —                              |
+| PC11     | TIM5_CH2     | IR_OUT       | SPI3_MISO    | UART3_RX     | UART4_RX  | OSPI2_NCS  | SDMMC1_D3                       | I2S1_SDI    | —                              |
+| PC12     | TIM5_CH3     | IR_OUT       | SPI3_MOSI    | UART3_CK     | UART5_TX  | OSPI2_NCLK | SDMMC1_CK                       | I2S1_SDO    | —                              |
+| PC13     | —            | RTC_OUT      | —            | —            | SPI4_CS   | —          | —                               | —           | RTC_TAMP1, RTC_TS, WKUP3       |
+| PC14     | —            | —            | —            | —            | —         | —          | —                               | —           | OSC32_IN                       |
+| PC15     | —            | —            | —            | —            | —         | —          | —                               | —           | OSC32_OUT                      |
+| PD0      | —            | —            | SPI3_IO3     | UART4_RX     | CAN1_RX   | OSPI2_IO0  | —                               | —           | OSC2_IN                        |
+| PD1      | —            | —            | —            | UART4_TX     | CAN1_TX   | OSPI2_IO1  | —                               | —           | OSC2_OUT                       |
+| PD2      | TIM5_CH4     | TIM3_ETR     | UART5_RX     | UART6_CK     | CAN1_STBY | OSPI2_IO2  | SPI4_IO2                        | SDMMC1_CMD  | —                              |
+| PD3      | —            | —            | SPI2_SCK     | UART2_CTS    | —         | OSPI2_IO3  | —                               | I2S2_CK     | —                              |
+| PD4      | —            | —            | —            | UART2_RTS_DE | —         | OSPI2_IO4  | —                               | I2S2_WS     | —                              |
+| PD5      | —            | —            | —            | UART2_TX     | —         | OSPI2_IO5  | —                               | —           | —                              |
+| PD6      | —            | —            | SPI3_MOSI    | UART2_RX     | —         | OSPI2_IO6  | —                               | —           | —                              |
+| PD7      | —            | —            | SPI1_MOSI    | UART2_CK     | —         | OSPI2_IO7  | —                               | I2S1_SDO    | —                              |
+| PD8      | —            | —            | —            | UART3_TX     | —         | UART8_CK   | —                               | UART7_RX    | —                              |
+| PD9      | —            | —            | —            | UART3_RX     | —         | OSPI2_DQS  | —                               | UART7_TX    | —                              |
+| PD10     | —            | —            | TIM1_CH4N    | UART6_TX     | —         | UART3_CK   | —                               | UART7_RTS   | —                              |
+| PD11     | —            | CAN2_RX      | SPI4_CS3     | UART3_CTS    | TIM8_CH4N | OSPI2_IO0  | —                               | UART7_CTS   | —                              |
+| PD12     | LPTIM1_IN1   | CAN2_TX      | TIM4_CH1     | UART3_RTS_DE | SPI4_CS4  | OSPI2_IO1  | —                               | UART7_CK    | —                              |
+| PD13     | LPTIM1_OUT   | CAN2_STBY    | TIM4_CH2     | SPI3_IO2     | —         | OSPI2_IO3  | —                               | —           | —                              |
+| PD14     | —            | UART8_CTS    | TIM4_CH3     | UART6_RX     | SPI4_IO3  | —          | —                               | —           | —                              |
+| PD15     | —            | UART8_RTS    | TIM4_CH4     | SPI3_IO2     | —         | —          | —                               | —           | —                              |
+| PE0      | LPTIM1_ETR   | UART8_RX     | TIM4_ETR     | SPI1_SCK     | —         | —          | —                               | I2C2_SDA    | —                              |
+| PE1      | LPTIM1_IN2   | UART8_TX     | —            | SPI1_CS      | SPI4_IO2  | —          | —                               | I2C2_SCL    | —                              |
+| PE2      | —            | UART8_CK     | —            | SPI1_CS3     | SPI4_SCK  | OSPI2_IO2  | ETH_MII_TXD3                    | —           | ANA_OUT                        |
+| PE3      | LPUART2_TX   | TIM10_CH1    | SPI2_SCK     | SPI1_CS4     | SPI4_IO3  | —          | —                               | —           | —                              |
+| PE4      | LPUART2_RX   | —            | —            | SPI3_IO3     | SPI4_CS   | —          | —                               | —           | —                              |
+| PE5      | —            | CAN2_RX      | TIM9_CH1     | —            | SPI4_MISO | —          | —                               | —           | —                              |
+| PE6      | —            | CAN2_TX      | TIM9_CH2     | —            | SPI4_MOSI | —          | —                               | UART7_CK    | WKUP2                          |
+| PE7      | —            | TIM1_ETR     | —            | —            | —         | OSPI2_IO4  | UART4_CTS                       | UART7_RX    | —                              |
+| PE8      | —            | TIM1_CH1N    | —            | —            | —         | OSPI2_IO5  | UART4_RTS                       | UART7_TX    | —                              |
+| PE9      | —            | TIM1_CH1     | —            | SPI3_IO3     | —         | OSPI2_IO6  | UART4_TX                        | UART7_RTS   | —                              |
+| PE10     | —            | TIM1_CH2N    | —            | SPI1_MISO    | —         | OSPI2_IO7  | UART4_RX                        | UART7_CTS   | —                              |
+| PE11     | —            | TIM1_CH2     | —            | SPI1_MOSI    | SPI4_CS   | OSPI2_NCS  | —                               | —           | —                              |
+| PE12     | —            | TIM1_CH3N    | —            | SPI1_SCK     | SPI4_SCK  | —          | —                               | COMP1_OUT   | —                              |
+| PE13     | —            | TIM1_CH3     | —            | SPI1_CS      | SPI4_MISO | —          | —                               | —           | —                              |
+| PE14     | —            | TIM1_CH4     | —            | SPI1_IO2     | SPI4_MOSI | —          | —                               | SDMMC1_CKIN | —                              |
+| PE15     | —            | TIM1_BKIN    | TIM1_CH4N    | SPI1_IO3     | SPI4_IO2  | —          | —                               | SDMMC1_CDIR | —                              |
+| PF0      | —            | —            | —            | SPI2_MOSI    | —         | —          | —                               | —           | —                              |
+| PF1      | TIM2_CH1_ETR | —            | —            | —            | TIM8_CH1N | —          | OSPI2_IO0                       | SPI7_MOSI   | —                              |
+| PF2      | —            | —            | —            | SPI2_IO2     | —         | —          | OSPI2_CLK                       | SPI7_SCK    | —                              |
+| PF3      | TIM9_CH2     | —            | —            | —            | TIM8_CH2N | —          | OSPI2_IO3                       | SPI7_IO3    | —                              |
+| PF4      | —            | —            | —            | SPI2_MISO    | —         | —          | —                               | —           | —                              |
+| PF5      | —            | —            | —            | —            | —         | UART7_CK   | —                               | —           | —                              |
+| PF6      | TIM9_CH1     | —            | —            | SPI2_CS      | —         | —          | —                               | —           | —                              |
+| PF7      | TIM10_CH1    | —            | —            | —            | UART7_RTS | —          | OSPI2_IO2                       | SPI7_IO2    | —                              |
+| PF8      | —            | —            | —            | SPI2_SCK     | —         | —          | —                               | —           | WKUP7                          |
+| PF9      | TIM2_CH2     | —            | —            | —            | UART7_CTS | —          | —                               | —           | —                              |
+| PF10     | —            | —            | —            | SPI2_IO3     | —         | —          | OSPI2_IO1                       | SPI7_MISO   | —                              |
+| PF11     | —            | —            | —            | —            | I2C1_SCL  | —          | OSPI2_NCS                       | SPI7_CS     | —                              |
+| PF12     | —            | —            | —            | —            | I2C1_SDA  | —          | —                               | —           | —                              |
+| PF13     | —            | —            | —            | —            | UART7_RX  | —          | —                               | —           | —                              |
+| PF14     | —            | —            | —            | —            | UART7_TX  | —          | —                               | —           | —                              |
+| PF15     | —            | —            | —            | SPI3_IO3     | —         | —          | —                               | —           | —                              |
+| PG0      | —            | —            | —            | SPI3_SCK     | —         | —          | —                               | —           | —                              |
+| PG1      | —            | —            | —            | —            | TIM8_CH3N | —          | —                               | —           | —                              |
+| PG2      | —            | —            | —            | SPI3_MOSI    | —         | —          | —                               | —           | —                              |
+| PG3      | —            | —            | —            | —            | UART5_RTS | —          | —                               | —           | —                              |
+| PG4      | —            | OSPI1_IO0    | OSPI1_NCS    | SPI3_CS      | —         | —          | OSPI1_NCLK                      | OSPI1_DQS   | —                              |
+| PG5      | —            | OSPI1_IO1    | OSPI1_IO0    | —            | UART5_CTS | OSPI1_NCS  | OSPI1_DQS                       | OSPI1_IO7   | —                              |
+| PG6      | —            | OSPI1_IO2    | OSPI1_IO1    | SPI3_MISO    | —         | OSPI1_CLK  | OSPI1_IO7                       | OSPI1_IO6   | —                              |
+| PG7      | —            | OSPI1_IO3    | OSPI1_IO2    | —            | UART5_CK  | OSPI1_DQS  | OSPI1_IO6                       | OSPI1_IO5   | —                              |
+| PG8      | —            | OSPI1_IO1    | OSPI1_IO3    | SPI3_IO2     | —         | OSPI1_IO7  | OSPI1_IO5                       | OSPI1_IO4   | —                              |
+| PG9      | —            | OSPI1_IO5    | OSPI1_NCS    | —            | UART5_RX  | OSPI1_IO6  | OSPI1_IO4                       | OSPI1_CLK   | —                              |
+| PG10     | I2C2_SCL     | OSPI1_IO6    | —            | —            | TIM8_CH1  | OSPI1_IO5  | OSPI1_CLK                       | OSPI1_NCS   | —                              |
+| PG11     | I2C2_SDA     | OSPI1_IO7    | —            | —            | TIM8_CH2  | OSPI1_IO4  | OSPI1_NCS                       | OSPI1_IO3   | —                              |
+| PG12     | —            | OSPI1_DQS    | OSPI1_IO5    | —            | TIM8_CH3  | OSPI1_IO3  | OSPI1_IO1                       | OSPI1_IO2   | —                              |
+| PG13     | —            | OSPI1_CLK    | OSPI1_IO6    | —            | TIM8_CH4  | OSPI1_IO2  | —                               | OSPI1_IO1   | —                              |
+| PG14     | —            | OSPI1_NCS    | OSPI1_IO7    | —            | UART5_TX  | OSPI1_IO1  | —                               | OSPI1_IO0   | —                              |
+| PG15     | TIM2_CH3     | OSPI1_IO3    | OSPI1_DQS    | —            | TIM8_BKIN | OSPI1_IO0  | —                               | —           | —                              |
+| PH0      | —            | —            | —            | —            | —         | —          | —                               | —           | OSC_IN                         |
+| PH1      | —            | —            | —            | —            | —         | —          | —                               | —           | OSC_OUT                        |
+| PH2      | —            | OSPI2_IO3    | SPI7_IO3     | —            | —         | —          | OSPI2_IO0                       | SPI7_MOSI   | —                              |
+| PH3      | —            | OSPI2_IO1    | SPI7_MISO    | —            | —         | —          | OSPI2_CLK                       | SPI7_SCK    | —                              |
+| PH4      | —            | OSPI2_IO0    | SPI7_MOSI    | —            | —         | —          | OSPI2_IO3                       | SPI7_IO3    | —                              |
+| PH5      | —            | OSPI2_NCS    | SPI7_CS      | —            | —         | —          | OSPI2_IO2                       | SPI7_IO2    | —                              |
+| PH6      | —            | OSPI2_CLK    | SPI7_SCK     | —            | —         | —          | OSPI2_IO1                       | SPI7_MISO   | —                              |
+| PH7      | —            | OSPI2_IO2    | SPI7_IO2     | —            | —         | —          | OSPI2_NCS                       | SPI7_CS     | —                              |
+*/
+
+
+
+
+
 #ifdef RT_USING_PIN
 
 #define __ACM32_PIN(index, gpio, gpio_index)                                \

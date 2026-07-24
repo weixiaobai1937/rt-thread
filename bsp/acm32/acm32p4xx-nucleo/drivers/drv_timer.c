@@ -1,0 +1,323 @@
+/*
+ * Copyright (c) 2006-2026, RT-Thread Development Team
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Change Logs:
+ * Date           Author       Notes
+ * 2026-07-23     AisinoChip   ACM32P4xx clock_timer driver
+ */
+
+#include <board.h>
+#include <rtthread.h>
+#include <rtdevice.h>
+
+#ifdef RT_USING_CLOCK_TIME
+#if defined(BSP_USING_TIM1) || defined(BSP_USING_TIM2) || defined(BSP_USING_TIM3) || \
+    defined(BSP_USING_TIM6) || defined(BSP_USING_TIM10)
+
+#include "tim_config.h"
+
+/*
+ * HAL_TIMER_MSP_Init 在 drv_pwm.c 中定义为非 static 函数，
+ * 通过 SConscript 隐式链接。如果需要显式声明，可创建共享头文件。
+ */
+
+enum
+{
+#ifdef BSP_USING_TIM1
+    TIM1_INDEX,
+#endif
+#ifdef BSP_USING_TIM2
+    TIM2_INDEX,
+#endif
+#ifdef BSP_USING_TIM3
+    TIM3_INDEX,
+#endif
+#ifdef BSP_USING_TIM6
+    TIM6_INDEX,
+#endif
+#ifdef BSP_USING_TIM10
+    TIM10_INDEX,
+#endif
+};
+
+struct acm32_clock_timer
+{
+    rt_clock_timer_t    time_device;
+    TIM_HandleTypeDef   tim_handle;
+    IRQn_Type           tim_irqn;
+    char               *name;
+};
+
+static struct acm32_clock_timer acm32_clock_timer_obj[] =
+{
+#ifdef BSP_USING_TIM1
+    TIM1_CONFIG,
+#endif
+#ifdef BSP_USING_TIM2
+    TIM2_CONFIG,
+#endif
+#ifdef BSP_USING_TIM3
+    TIM3_CONFIG,
+#endif
+#ifdef BSP_USING_TIM6
+    TIM6_CONFIG,
+#endif
+#ifdef BSP_USING_TIM10
+    TIM10_CONFIG,
+#endif
+};
+
+/* Same rule as HAL SDK TIM_Base Get_Timer_Bus_Clock + *2 when HCLK != PCLK */
+static rt_uint32_t acm32_timer_clock_get(TIM_TypeDef *instance)
+{
+    rt_uint32_t pclk;
+    uint32_t base = (uint32_t)instance;
+
+    switch (base)
+    {
+    case TIM1_BASE_ADDR:
+    case TIM10_BASE_ADDR:
+        pclk = HAL_RCC_GetPCLK2Freq();
+        break;
+    case TIM2_BASE_ADDR:
+    case TIM3_BASE_ADDR:
+    case TIM6_BASE_ADDR:
+    default:
+        pclk = HAL_RCC_GetPCLK1Freq();
+        break;
+    }
+
+    if (HAL_RCC_GetHCLKFreq() != pclk)
+    {
+        pclk <<= 1;
+    }
+    return pclk;
+}
+
+static void timer_init(struct rt_clock_timer_device *timer, rt_uint32_t state)
+{
+    TIM_HandleTypeDef *tim;
+    rt_uint32_t timer_clock;
+
+    RT_ASSERT(timer != RT_NULL);
+    if (!state)
+    {
+        return;
+    }
+
+    tim = (TIM_HandleTypeDef *)timer->parent.user_data;
+    timer_clock = acm32_timer_clock_get(tim->Instance);
+
+    if (timer->freq == 0)
+    {
+        timer->freq = 1000000; /* default 1MHz count frequency */
+    }
+
+    tim->Init.Period = 1000 - 1;
+    tim->Init.Prescaler = (timer_clock / (rt_uint32_t)timer->freq) - 1;
+    tim->Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+    tim->Init.CounterMode = (timer->info->cntmode == CLOCK_TIMER_CNTMODE_UP) ?
+                            TIM_COUNTERMODE_UP : TIM_COUNTERMODE_DOWN;
+    tim->Init.RepetitionCounter = 0;
+    tim->Init.ARRPreLoadEn = TIM_ARR_PRELOAD_ENABLE;
+
+    HAL_TIMER_MSP_Init(tim);
+    HAL_TIMER_Base_Init(tim);
+}
+
+static rt_err_t timer_start(rt_clock_timer_t *timer, rt_uint32_t t, rt_clock_timer_mode_t opmode)
+{
+    TIM_HandleTypeDef *tim;
+
+    RT_ASSERT(timer != RT_NULL);
+    tim = (TIM_HandleTypeDef *)timer->parent.user_data;
+
+    tim->Instance->CNT = 0;
+    tim->Instance->ARR = (t > 0) ? (t - 1) : 0;
+
+    if (opmode == CLOCK_TIMER_MODE_ONESHOT)
+    {
+        SET_BIT(tim->Instance->CR1, BIT3); /* OPM */
+    }
+    else
+    {
+        CLEAR_BIT(tim->Instance->CR1, BIT3);
+    }
+
+    HAL_TIM_ENABLE_IT(tim, TIMER_INT_EN_UPD);
+    HAL_TIMER_Base_Start(tim->Instance);
+
+    return RT_EOK;
+}
+
+static void timer_stop(rt_clock_timer_t *timer)
+{
+    TIM_HandleTypeDef *tim;
+
+    RT_ASSERT(timer != RT_NULL);
+    tim = (TIM_HandleTypeDef *)timer->parent.user_data;
+
+    HAL_TIM_DISABLE_IT(tim, TIMER_INT_EN_UPD);
+    HAL_TIMER_Base_Stop(tim->Instance);
+}
+
+static rt_err_t timer_ctrl(rt_clock_timer_t *timer, rt_uint32_t cmd, void *arg)
+{
+    TIM_HandleTypeDef *tim;
+    rt_err_t result = RT_EOK;
+
+    RT_ASSERT(timer != RT_NULL);
+    RT_ASSERT(arg != RT_NULL);
+
+    tim = (TIM_HandleTypeDef *)timer->parent.user_data;
+
+    switch (cmd)
+    {
+    case CLOCK_TIMER_CTRL_FREQ_SET:
+    {
+        rt_uint32_t freq = *((rt_uint32_t *)arg);
+        rt_uint32_t timer_clock = acm32_timer_clock_get(tim->Instance);
+        rt_uint32_t psc;
+
+        if (freq == 0)
+        {
+            return -RT_EINVAL;
+        }
+
+        psc = timer_clock / freq;
+        if (psc == 0)
+        {
+            psc = 1;
+        }
+        tim->Instance->PSC = psc - 1;
+        tim->Instance->EGR |= TIM_EVENTSOURCE_UPDATE;
+        timer->freq = (rt_int32_t)freq;
+    }
+    break;
+    default:
+        result = -RT_ENOSYS;
+        break;
+    }
+
+    return result;
+}
+
+static rt_uint32_t timer_counter_get(rt_clock_timer_t *timer)
+{
+    RT_ASSERT(timer != RT_NULL);
+    return ((TIM_HandleTypeDef *)timer->parent.user_data)->Instance->CNT;
+}
+
+static const struct rt_clock_timer_info _info = TIM_DEV_INFO_CONFIG;
+#ifdef BSP_USING_TIM2
+static const struct rt_clock_timer_info _info32 = TIM2_DEV_INFO_CONFIG;
+#endif
+
+static const struct rt_clock_timer_ops _ops =
+{
+    .init = timer_init,
+    .start = timer_start,
+    .stop = timer_stop,
+    .count_get = timer_counter_get,
+    .control = timer_ctrl,
+};
+
+#ifdef BSP_USING_TIM1
+void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
+{
+    rt_interrupt_enter();
+    if (TIM1->SR & TIMER_SR_UIF)
+    {
+        rt_clock_timer_isr(&acm32_clock_timer_obj[TIM1_INDEX].time_device);
+    }
+    TIM1->SR = 0;
+    rt_interrupt_leave();
+}
+#endif
+
+#ifdef BSP_USING_TIM2
+void TIM2_IRQHandler(void)
+{
+    rt_interrupt_enter();
+    if (TIM2->SR & TIMER_SR_UIF)
+    {
+        rt_clock_timer_isr(&acm32_clock_timer_obj[TIM2_INDEX].time_device);
+    }
+    TIM2->SR = 0;
+    rt_interrupt_leave();
+}
+#endif
+
+#ifdef BSP_USING_TIM3
+void TIM3_IRQHandler(void)
+{
+    rt_interrupt_enter();
+    if (TIM3->SR & TIMER_SR_UIF)
+    {
+        rt_clock_timer_isr(&acm32_clock_timer_obj[TIM3_INDEX].time_device);
+    }
+    TIM3->SR = 0;
+    rt_interrupt_leave();
+}
+#endif
+
+#ifdef BSP_USING_TIM6
+void TIM6_IRQHandler(void)
+{
+    rt_interrupt_enter();
+    if (TIM6->SR & TIMER_SR_UIF)
+    {
+        rt_clock_timer_isr(&acm32_clock_timer_obj[TIM6_INDEX].time_device);
+    }
+    TIM6->SR = 0;
+    rt_interrupt_leave();
+}
+#endif
+
+#ifdef BSP_USING_TIM10
+void TIM10_IRQHandler(void)
+{
+    rt_interrupt_enter();
+    if (TIM10->SR & TIMER_SR_UIF)
+    {
+        rt_clock_timer_isr(&acm32_clock_timer_obj[TIM10_INDEX].time_device);
+    }
+    TIM10->SR = 0;
+    rt_interrupt_leave();
+}
+#endif
+
+static int acm32_clock_timer_init(void)
+{
+    int i;
+    int result = RT_EOK;
+    const struct rt_clock_timer_info *info;
+
+    for (i = 0; i < (int)(sizeof(acm32_clock_timer_obj) / sizeof(acm32_clock_timer_obj[0])); i++)
+    {
+        info = &_info;
+#ifdef BSP_USING_TIM2
+        if (acm32_clock_timer_obj[i].tim_handle.Instance == TIM2)
+        {
+            info = &_info32;
+        }
+#endif
+        acm32_clock_timer_obj[i].time_device.info = info;
+        acm32_clock_timer_obj[i].time_device.ops  = &_ops;
+        result = rt_clock_timer_register(&acm32_clock_timer_obj[i].time_device,
+                                         acm32_clock_timer_obj[i].name,
+                                         &acm32_clock_timer_obj[i].tim_handle);
+        if (result != RT_EOK)
+        {
+            break;
+        }
+    }
+
+    return result;
+}
+INIT_BOARD_EXPORT(acm32_clock_timer_init);
+
+#endif /* BSP_USING_TIMx */
+#endif /* RT_USING_CLOCK_TIME */

@@ -44,16 +44,55 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
           Pin group and DMA map selectable below (ACM32P4xx AF table).
 
     choice
-        prompt "UART1 pin group"
+        prompt "UART1 TX pin"
         depends on BSP_USING_UART1
-        default BSP_UART1_PINS_PA9
-        help
-          TX/RX mux groups from the AF table.
+        default BSP_UART1_TX_PA9
+        config BSP_UART1_TX_PA9
+            bool "PA9 AF1 (default)"
+        config BSP_UART1_TX_PB6
+            bool "PB6 AF1"
+        config BSP_UART1_TX_PA14
+            bool "PA14 AF1 (SWCLK)"
+    endchoice
 
-        config BSP_UART1_PINS_PA9
-            bool "PA9(TX)/PA10(RX) AF1 (default, console)"
-        config BSP_UART1_PINS_PB6
-            bool "PB6(TX)/PB7(RX) AF1"
+    choice
+        prompt "UART1 RX pin"
+        depends on BSP_USING_UART1
+        default BSP_UART1_RX_PA10
+        config BSP_UART1_RX_PA10
+            bool "PA10 AF1 (default)"
+        config BSP_UART1_RX_PB7
+            bool "PB7 AF1"
+        config BSP_UART1_RX_PA13
+            bool "PA13 AF1 (SWDIO)"
+    endchoice
+
+    choice
+        prompt "UART1 CTS pin"
+        depends on BSP_USING_UART1
+        default BSP_UART1_CTS_PA11
+        help
+          CTS/RTS pins are configured in Kconfig for future use. Current drv_uart.c
+          does not enable hardware flow control. These options are informational
+          until flow control is implemented.
+        config BSP_UART1_CTS_PA11
+            bool "PA11 AF1 (default)"
+        config BSP_UART1_CTS_PC5
+            bool "PC5 AF1"
+    endchoice
+
+    choice
+        prompt "UART1 RTS pin"
+        depends on BSP_USING_UART1
+        default BSP_UART1_RTS_PA12
+        help
+          CTS/RTS pins are configured in Kconfig for future use. Current drv_uart.c
+          does not enable hardware flow control. These options are informational
+          until flow control is implemented.
+        config BSP_UART1_RTS_PA12
+            bool "PA12 AF1 (default)"
+        config BSP_UART1_RTS_PC4
+            bool "PC4 AF1"
     endchoice
 
     config BSP_USING_UART1_DMA
@@ -63,7 +102,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         help
           DMA unit/channel: pick a preset map or Custom.
           WARNING: unit+channel must be unique across UART/SPI DMA users.
-          Compile-time check in dma_channel_check.h.
+          Compile-time check in rtconfig.py check_bsp_resources.
 
     choice
         prompt "UART1 DMA channel map"
@@ -118,16 +157,57 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
           Pin group and DMA map selectable below.
 
     choice
-        prompt "UART2 pin group"
+        prompt "UART2 TX pin"
         depends on BSP_USING_UART2
-        default BSP_UART2_PINS_PD5
+        default BSP_UART2_TX_PD5
+        config BSP_UART2_TX_PD5
+            bool "PD5 AF3 (default)"
+        config BSP_UART2_TX_PA2
+            bool "PA2 AF1"
+        config BSP_UART2_TX_PC2
+            bool "PC2 AF2"
+    endchoice
 
-        config BSP_UART2_PINS_PD5
-            bool "PD5(TX)/PD6(RX) AF3 (default)"
-        config BSP_UART2_PINS_PA2
-            bool "PA2(TX)/PA3(RX) AF1"
-            help
-              Conflicts with default LPUART1 PA2/PA3 if both enabled.
+    choice
+        prompt "UART2 RX pin"
+        depends on BSP_USING_UART2
+        default BSP_UART2_RX_PD6
+        config BSP_UART2_RX_PD6
+            bool "PD6 AF3 (default)"
+        config BSP_UART2_RX_PA3
+            bool "PA3 AF1"
+        config BSP_UART2_RX_PC1
+            bool "PC1 AF2"
+    endchoice
+
+    choice
+        prompt "UART2 CTS pin"
+        depends on BSP_USING_UART2
+        default BSP_UART2_CTS_PD3
+        help
+          CTS/RTS pins are configured in Kconfig for future use. Current drv_uart.c
+          does not enable hardware flow control. These options are informational
+          until flow control is implemented.
+        config BSP_UART2_CTS_PD3
+            bool "PD3 AF3 (default)"
+        config BSP_UART2_CTS_PA0
+            bool "PA0 AF1"
+    endchoice
+
+    choice
+        prompt "UART2 RTS pin"
+        depends on BSP_USING_UART2
+        default BSP_UART2_RTS_PD4
+        help
+          CTS/RTS pins are configured in Kconfig for future use. Current drv_uart.c
+          does not enable hardware flow control. These options are informational
+          until flow control is implemented.
+        config BSP_UART2_RTS_PD4
+            bool "PD4 AF3 (default)"
+        config BSP_UART2_RTS_PA1
+            bool "PA1 AF1"
+        config BSP_UART2_RTS_PB1
+            bool "PB1 AF2"
     endchoice
 
     config BSP_USING_UART2_DMA
@@ -189,16 +269,55 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         default n
 
     choice
-        prompt "UART3 pin group"
+        prompt "UART3 TX pin"
         depends on BSP_USING_UART3
-        default BSP_UART3_PINS_PB10
+        default BSP_UART3_TX_PB10
+        config BSP_UART3_TX_PB10
+            bool "PB10 AF1 (default)"
+        config BSP_UART3_TX_PD8
+            bool "PD8 AF3"
+        config BSP_UART3_TX_PC10
+            bool "PC10 AF4"
+    endchoice
 
-        config BSP_UART3_PINS_PB10
-            bool "PB10(TX)/PB11(RX) AF1 (default)"
-            help
-              Conflicts with default LPUART2 / ETH on PB10/PB11 if those are used.
-        config BSP_UART3_PINS_PD8
-            bool "PD8(TX)/PD9(RX) AF3"
+    choice
+        prompt "UART3 RX pin"
+        depends on BSP_USING_UART3
+        default BSP_UART3_RX_PB11
+        config BSP_UART3_RX_PB11
+            bool "PB11 AF1 (default)"
+        config BSP_UART3_RX_PD9
+            bool "PD9 AF3"
+        config BSP_UART3_RX_PC11
+            bool "PC11 AF4"
+    endchoice
+
+    choice
+        prompt "UART3 CTS pin"
+        depends on BSP_USING_UART3
+        default BSP_UART3_CTS_PB13
+        help
+          CTS/RTS pins are configured in Kconfig for future use. Current drv_uart.c
+          does not enable hardware flow control. These options are informational
+          until flow control is implemented.
+        config BSP_UART3_CTS_PB13
+            bool "PB13 AF0 (default)"
+        config BSP_UART3_CTS_PD11
+            bool "PD11 AF3"
+    endchoice
+
+    choice
+        prompt "UART3 RTS pin"
+        depends on BSP_USING_UART3
+        default BSP_UART3_RTS_PB14
+        help
+          CTS/RTS pins are configured in Kconfig for future use. Current drv_uart.c
+          does not enable hardware flow control. These options are informational
+          until flow control is implemented.
+        config BSP_UART3_RTS_PB14
+            bool "PB14 AF0 (default)"
+        config BSP_UART3_RTS_PD12
+            bool "PD12 AF3"
     endchoice
 
     config BSP_USING_UART3_DMA
@@ -259,16 +378,69 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
           PC10/PC11 group conflicts with SPI3 default pins.
 
     choice
-        prompt "UART4 pin group"
+        prompt "UART4 TX pin"
         depends on BSP_USING_UART4
-        default BSP_UART4_PINS_PC10
+        default BSP_UART4_TX_PD1
+        config BSP_UART4_TX_PD1
+            bool "PD1 AF3 (default)"
+        config BSP_UART4_TX_PC10
+            bool "PC10 AF4"
+        config BSP_UART4_TX_PA0
+            bool "PA0 AF3"
+        config BSP_UART4_TX_PB9
+            bool "PB9 AF1"
+        config BSP_UART4_TX_PE9
+            bool "PE9 AF6"
+    endchoice
 
-        config BSP_UART4_PINS_PC10
-            bool "PC10(TX)/PC11(RX) AF4 (default)"
-            help
-              Conflicts with SPI3 PC10/PC11 if SPI3 uses PC group.
-        config BSP_UART4_PINS_PA0
-            bool "PA0(TX)/PA1(RX) AF3"
+    choice
+        prompt "UART4 RX pin"
+        depends on BSP_USING_UART4
+        default BSP_UART4_RX_PD0
+        config BSP_UART4_RX_PD0
+            bool "PD0 AF3 (default)"
+        config BSP_UART4_RX_PC11
+            bool "PC11 AF4"
+        config BSP_UART4_RX_PA1
+            bool "PA1 AF3"
+        config BSP_UART4_RX_PB8
+            bool "PB8 AF1"
+        config BSP_UART4_RX_PE10
+            bool "PE10 AF6"
+    endchoice
+
+    choice
+        prompt "UART4 CTS pin"
+        depends on BSP_USING_UART4
+        default BSP_UART4_CTS_PB15
+        help
+          CTS/RTS pins are configured in Kconfig for future use. Current drv_uart.c
+          does not enable hardware flow control. These options are informational
+          until flow control is implemented.
+        config BSP_UART4_CTS_PB15
+            bool "PB15 AF1 (default)"
+        config BSP_UART4_CTS_PE7
+            bool "PE7 AF6"
+        config BSP_UART4_CTS_PB0
+            bool "PB0 AF7"
+    endchoice
+
+    choice
+        prompt "UART4 RTS pin"
+        depends on BSP_USING_UART4
+        default BSP_UART4_RTS_PB14
+        help
+          CTS/RTS pins are configured in Kconfig for future use. Current drv_uart.c
+          does not enable hardware flow control. These options are informational
+          until flow control is implemented.
+        config BSP_UART4_RTS_PB14
+            bool "PB14 AF1 (default)"
+        config BSP_UART4_RTS_PE8
+            bool "PE8 AF6"
+        config BSP_UART4_RTS_PB1
+            bool "PB1 AF7"
+        config BSP_UART4_RTS_PA15
+            bool "PA15 AF1"
     endchoice
 
     config BSP_USING_UART4_DMA
@@ -351,18 +523,23 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         default n
 
     choice
-        prompt "LPUART1 pin group"
+        prompt "LPUART1 TX pin"
         depends on BSP_USING_LPUART1
-        default BSP_LPUART1_PINS_PA2
+        default BSP_LPUART1_TX_PA9
+        config BSP_LPUART1_TX_PA9
+            bool "PA9 AF0 (default)"
+        config BSP_LPUART1_TX_PB6
+            bool "PB6 AF0"
+    endchoice
 
-        config BSP_LPUART1_PINS_PA2
-            bool "PA2(TX)/PA3(RX) AF3 (board default)"
-        config BSP_LPUART1_PINS_PB6
-            bool "PB6(TX)/PB7(RX) AF0"
-        config BSP_LPUART1_PINS_PA9
-            bool "PA9(TX)/PA10(RX) AF0"
-            help
-              Conflicts with default UART1 PA9/PA10 if both enabled.
+    choice
+        prompt "LPUART1 RX pin"
+        depends on BSP_USING_LPUART1
+        default BSP_LPUART1_RX_PA10
+        config BSP_LPUART1_RX_PA10
+            bool "PA10 AF0 (default)"
+        config BSP_LPUART1_RX_PB7
+            bool "PB7 AF0"
     endchoice
 
     config BSP_USING_LPUART2
@@ -371,14 +548,23 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         default n
 
     choice
-        prompt "LPUART2 pin group"
+        prompt "LPUART2 TX pin"
         depends on BSP_USING_LPUART2
-        default BSP_LPUART2_PINS_PB10
+        default BSP_LPUART2_TX_PC0
+        config BSP_LPUART2_TX_PC0
+            bool "PC0 AF0 (default)"
+        config BSP_LPUART2_TX_PE3
+            bool "PE3 AF0"
+    endchoice
 
-        config BSP_LPUART2_PINS_PB10
-            bool "PB10(TX)/PB11(RX) AF3 (default)"
-        config BSP_LPUART2_PINS_PE3
-            bool "PE3(TX)/PE4(RX) AF0"
+    choice
+        prompt "LPUART2 RX pin"
+        depends on BSP_USING_LPUART2
+        default BSP_LPUART2_RX_PC1
+        config BSP_LPUART2_RX_PC1
+            bool "PC1 AF0 (default)"
+        config BSP_LPUART2_RX_PE4
+            bool "PE4 AF0"
     endchoice
 
     config BSP_USING_SPI1
@@ -387,43 +573,58 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         select RT_USING_PIN
         default n
         help
-          Pin group selectable below (SCK/MOSI/MISO + default soft CS).
+          SCK/MOSI/MISO/CS pin selectable below (per-signal choices).
           From ACM32P4xx GPIO AF table; CS is soft GPIO by default.
 
     choice
-        prompt "SPI1 pin group"
+        prompt "SPI1 SCK pin"
         depends on BSP_USING_SPI1
-        default BSP_SPI1_PINS_PE
-        help
-          Complete SCK/MOSI/MISO mux groups from the AF table.
-
-        config BSP_SPI1_PINS_PE
-            bool "PE12/PE11/PE10 AF3, soft CS PE13"
-            help
-              SCK=PE12 MOSI=PE11 MISO=PE10 (AF3). Default soft CS PE13.
-
-        config BSP_SPI1_PINS_PA
-            bool "PA5/PA7/PA6 AF0, soft CS PA4"
-            help
-              SCK=PA5 MOSI=PA7 MISO=PA6 (AF0). Default soft CS PA4.
-
-        config BSP_SPI1_PINS_PB
-            bool "PB3/PB5/PB4, soft CS PA15"
-            help
-              SCK=PB3(AF4) MOSI=PB5(AF0) MISO=PB4(AF4). Soft CS PA15.
+        default BSP_SPI1_SCK_PE12
+        config BSP_SPI1_SCK_PE12
+            bool "PE12 AF3 (default)"
+        config BSP_SPI1_SCK_PA5
+            bool "PA5 AF0"
+        config BSP_SPI1_SCK_PB3
+            bool "PB3 AF4"
     endchoice
 
-    config BSP_SPI1_CS_PIN
-        int "SPI1 soft CS pin index (A=0..15, B=16..31, C=32.., D=48.., E=64..)"
+    choice
+        prompt "SPI1 MOSI pin"
         depends on BSP_USING_SPI1
-        range -1 127
-        default 77 if BSP_SPI1_PINS_PE
-        default 4 if BSP_SPI1_PINS_PA
-        default 15 if BSP_SPI1_PINS_PB
-        default 77
-        help
-          Soft CS GPIO index for rt_hw_spi_device_attach / SPI1_DEFAULT_CS_PIN_INDEX.
-          Set -1 for no hardware CS pin (RT_SPI_NO_CS).
+        default BSP_SPI1_MOSI_PE11
+        config BSP_SPI1_MOSI_PE11
+            bool "PE11 AF3 (default)"
+        config BSP_SPI1_MOSI_PA7
+            bool "PA7 AF0"
+        config BSP_SPI1_MOSI_PB5
+            bool "PB5 AF0"
+    endchoice
+
+    choice
+        prompt "SPI1 MISO pin"
+        depends on BSP_USING_SPI1
+        default BSP_SPI1_MISO_PE10
+        config BSP_SPI1_MISO_PE10
+            bool "PE10 AF3 (default)"
+        config BSP_SPI1_MISO_PA6
+            bool "PA6 AF0"
+        config BSP_SPI1_MISO_PB4
+            bool "PB4 AF4"
+    endchoice
+
+    choice
+        prompt "SPI1 CS pin"
+        depends on BSP_USING_SPI1
+        default BSP_SPI1_CS_PE13
+        config BSP_SPI1_CS_PE13
+            bool "PE13 (default)"
+        config BSP_SPI1_CS_PA4
+            bool "PA4"
+        config BSP_SPI1_CS_PA15
+            bool "PA15"
+        config BSP_SPI1_CS_PE1
+            bool "PE1"
+    endchoice
 
     config BSP_USING_SPI1_DMA
         bool "Enable SPI1 DMA"
@@ -434,7 +635,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
           Full-duplex always polls (HAL has no TransmitReceive_DMA).
           DMA unit/channel: pick a preset map or Custom below.
           WARNING: unit+channel must be unique across all UART/SPI DMA users.
-          Compile-time check in dma_channel_check.h.
+          Compile-time check in rtconfig.py check_bsp_resources.
 
     choice
         prompt "SPI1 DMA channel map"
@@ -500,47 +701,63 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         select RT_USING_PIN
         default n
         help
-          Pin group selectable below. PB13 group conflicts with ETH RMII TXD0/TXD1;
-          use PC group when Ethernet is enabled.
+          SCK/MOSI/MISO/CS pin selectable below (per-signal choices).
 
     choice
-        prompt "SPI2 pin group"
+        prompt "SPI2 SCK pin"
         depends on BSP_USING_SPI2
-        default BSP_SPI2_PINS_PB13 if !BSP_USING_ETH
-        default BSP_SPI2_PINS_PC if BSP_USING_ETH
-        help
-          Complete SCK/MOSI/MISO mux groups from the AF table.
-
-        config BSP_SPI2_PINS_PB13
-            bool "PB13/PB15/PB14 AF3, soft CS PB12 (conflicts ETH)"
-            depends on !BSP_USING_ETH
-            help
-              SCK=PB13 MOSI=PB15 MISO=PB14 (AF3). Soft CS PB12.
-              Conflicts with ETH RMII TXD0/TXD1 on PB12/PB13.
-
-        config BSP_SPI2_PINS_PC
-            bool "PC7/PC9/PC8 AF6, soft CS PC6"
-            help
-              SCK=PC7 MOSI=PC9 MISO=PC8 (AF6). Soft CS PC6.
-              Safe to use with Ethernet.
-
-        config BSP_SPI2_PINS_PB10
-            bool "PB10/PB15/PB14 AF3, soft CS PB9"
-            help
-              SCK=PB10 MOSI=PB15 MISO=PB14 (AF3). Soft CS PB9.
-              Note: PB14 may conflict with ETH PHY reset if that uses PB14.
+        default BSP_SPI2_SCK_PB13
+        config BSP_SPI2_SCK_PB13
+            bool "PB13 AF3 (default)"
+        config BSP_SPI2_SCK_PC7
+            bool "PC7 AF6"
+        config BSP_SPI2_SCK_PF8
+            bool "PF8 AF3"
+        config BSP_SPI2_SCK_PA9
+            bool "PA9 AF3"
     endchoice
 
-    config BSP_SPI2_CS_PIN
-        int "SPI2 soft CS pin index (A=0..15, B=16..31, C=32.., D=48.., E=64..)"
+    choice
+        prompt "SPI2 MOSI pin"
         depends on BSP_USING_SPI2
-        range -1 127
-        default 28 if BSP_SPI2_PINS_PB13
-        default 38 if BSP_SPI2_PINS_PC
-        default 25 if BSP_SPI2_PINS_PB10
-        default 28
-        help
-          Soft CS GPIO index. -1 means no CS pin.
+        default BSP_SPI2_MOSI_PB15
+        config BSP_SPI2_MOSI_PB15
+            bool "PB15 AF3 (default)"
+        config BSP_SPI2_MOSI_PC9
+            bool "PC9 AF6"
+        config BSP_SPI2_MOSI_PF0
+            bool "PF0 AF3"
+        config BSP_SPI2_MOSI_PC1
+            bool "PC1 AF3"
+    endchoice
+
+    choice
+        prompt "SPI2 MISO pin"
+        depends on BSP_USING_SPI2
+        default BSP_SPI2_MISO_PB14
+        config BSP_SPI2_MISO_PB14
+            bool "PB14 AF3 (default)"
+        config BSP_SPI2_MISO_PC8
+            bool "PC8 AF6"
+        config BSP_SPI2_MISO_PF4
+            bool "PF4 AF3"
+        config BSP_SPI2_MISO_PC2
+            bool "PC2 AF3"
+    endchoice
+
+    choice
+        prompt "SPI2 CS pin"
+        depends on BSP_USING_SPI2
+        default BSP_SPI2_CS_PB12
+        config BSP_SPI2_CS_PB12
+            bool "PB12 (default)"
+        config BSP_SPI2_CS_PC6
+            bool "PC6"
+        config BSP_SPI2_CS_PF6
+            bool "PF6"
+        config BSP_SPI2_CS_PB9
+            bool "PB9"
+    endchoice
 
     config BSP_USING_SPI2_DMA
         bool "Enable SPI2 DMA"
@@ -550,7 +767,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
           Same policy as SPI1 DMA: half-duplex TX/RX >= 32 bytes.
           DMA unit/channel: pick a preset map or Custom below.
           WARNING: unit+channel must be unique across all UART/SPI DMA users.
-          Compile-time check in dma_channel_check.h.
+          Compile-time check in rtconfig.py check_bsp_resources.
 
     choice
         prompt "SPI2 DMA channel map"
@@ -611,36 +828,59 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         select RT_USING_PIN
         default n
         help
-          Pin group selectable below. PC group may conflict with UART4 on PC10/PC11.
+          SCK/MOSI/MISO/CS pin selectable below (per-signal choices).
 
     choice
-        prompt "SPI3 pin group"
+        prompt "SPI3 SCK pin"
         depends on BSP_USING_SPI3
-        default BSP_SPI3_PINS_PC
-        help
-          Complete SCK/MOSI/MISO mux groups from the AF table.
-
-        config BSP_SPI3_PINS_PC
-            bool "PC10/PC12/PC11 AF2, soft CS PC9"
-            help
-              SCK=PC10 MOSI=PC12 MISO=PC11 (AF2). Soft CS PC9 (GPIO).
-              Conflicts with UART4 AF4 on PC10/PC11 if UART4 uses those pins.
-
-        config BSP_SPI3_PINS_PB
-            bool "PB3/PB5/PB4 AF3, soft CS PA15"
-            help
-              SCK=PB3 MOSI=PB5 MISO=PB4 (AF3). Soft CS PA15.
+        default BSP_SPI3_SCK_PC10
+        config BSP_SPI3_SCK_PC10
+            bool "PC10 AF2 (default)"
+        config BSP_SPI3_SCK_PB3
+            bool "PB3 AF3"
+        config BSP_SPI3_SCK_PG0
+            bool "PG0 AF3"
     endchoice
 
-    config BSP_SPI3_CS_PIN
-        int "SPI3 soft CS pin index (A=0..15, B=16..31, C=32.., D=48.., E=64..)"
+    choice
+        prompt "SPI3 MOSI pin"
         depends on BSP_USING_SPI3
-        range -1 127
-        default 41 if BSP_SPI3_PINS_PC
-        default 15 if BSP_SPI3_PINS_PB
-        default 41
-        help
-          Soft CS GPIO index. -1 means no CS pin.
+        default BSP_SPI3_MOSI_PC12
+        config BSP_SPI3_MOSI_PC12
+            bool "PC12 AF2 (default)"
+        config BSP_SPI3_MOSI_PB5
+            bool "PB5 AF3"
+        config BSP_SPI3_MOSI_PG2
+            bool "PG2 AF3"
+        config BSP_SPI3_MOSI_PD6
+            bool "PD6 AF2"
+    endchoice
+
+    choice
+        prompt "SPI3 MISO pin"
+        depends on BSP_USING_SPI3
+        default BSP_SPI3_MISO_PC11
+        config BSP_SPI3_MISO_PC11
+            bool "PC11 AF2 (default)"
+        config BSP_SPI3_MISO_PB4
+            bool "PB4 AF3"
+        config BSP_SPI3_MISO_PG6
+            bool "PG6 AF3"
+    endchoice
+
+    choice
+        prompt "SPI3 CS pin"
+        depends on BSP_USING_SPI3
+        default BSP_SPI3_CS_PA4
+        config BSP_SPI3_CS_PA4
+            bool "PA4 (default)"
+        config BSP_SPI3_CS_PA15
+            bool "PA15"
+        config BSP_SPI3_CS_PG4
+            bool "PG4"
+        config BSP_SPI3_CS_PC9
+            bool "PC9"
+    endchoice
 
     config BSP_USING_SPI3_DMA
         bool "Enable SPI3 DMA"
@@ -650,7 +890,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
           Same policy as SPI1 DMA: half-duplex TX/RX >= 32 bytes.
           DMA unit/channel: pick a preset map or Custom below.
           WARNING: unit+channel must be unique across all UART/SPI DMA users.
-          Compile-time check in dma_channel_check.h.
+          Compile-time check in rtconfig.py check_bsp_resources.
 
     choice
         prompt "SPI3 DMA channel map"
@@ -711,35 +951,61 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         select RT_USING_PIN
         default n
         help
-          Pin group selectable below. PE group avoids SPI1 PE10-13.
+          SCK/MOSI/MISO/CS pin selectable below (per-signal choices).
 
     choice
-        prompt "SPI4 pin group"
+        prompt "SPI4 SCK pin"
         depends on BSP_USING_SPI4
-        default BSP_SPI4_PINS_PE
-        help
-          Complete SCK/MOSI/MISO mux groups from the AF table.
-
-        config BSP_SPI4_PINS_PE
-            bool "PE2/PE6/PE5 AF4, soft CS PE4"
-            help
-              SCK=PE2 MOSI=PE6 MISO=PE5 (AF4). Soft CS PE4.
-
-        config BSP_SPI4_PINS_PB
-            bool "PB2/PB1/PB6, soft CS PE4"
-            help
-              SCK=PB2(AF1) MOSI=PB1(AF0) MISO=PB6(AF3). Soft CS PE4.
+        default BSP_SPI4_SCK_PE2
+        config BSP_SPI4_SCK_PE2
+            bool "PE2 AF4 (default)"
+        config BSP_SPI4_SCK_PB2
+            bool "PB2 AF1"
+        config BSP_SPI4_SCK_PB9
+            bool "PB9 AF3"
+        config BSP_SPI4_SCK_PE12
+            bool "PE12 AF4"
     endchoice
 
-    config BSP_SPI4_CS_PIN
-        int "SPI4 soft CS pin index (A=0..15, B=16..31, C=32.., D=48.., E=64..)"
+    choice
+        prompt "SPI4 MOSI pin"
         depends on BSP_USING_SPI4
-        range -1 127
-        default 68 if BSP_SPI4_PINS_PE
-        default 68 if BSP_SPI4_PINS_PB
-        default 68
-        help
-          Soft CS GPIO index. -1 means no CS pin.
+        default BSP_SPI4_MOSI_PE6
+        config BSP_SPI4_MOSI_PE6
+            bool "PE6 AF4 (default)"
+        config BSP_SPI4_MOSI_PB1
+            bool "PB1 AF0"
+        config BSP_SPI4_MOSI_PB15
+            bool "PB15 AF6"
+        config BSP_SPI4_MOSI_PE14
+            bool "PE14 AF4"
+        config BSP_SPI4_MOSI_PB14
+            bool "PB14 AF5"
+    endchoice
+
+    choice
+        prompt "SPI4 MISO pin"
+        depends on BSP_USING_SPI4
+        default BSP_SPI4_MISO_PE5
+        config BSP_SPI4_MISO_PE5
+            bool "PE5 AF4 (default)"
+        config BSP_SPI4_MISO_PB6
+            bool "PB6 AF3"
+        config BSP_SPI4_MISO_PE13
+            bool "PE13 AF4"
+    endchoice
+
+    choice
+        prompt "SPI4 CS pin"
+        depends on BSP_USING_SPI4
+        default BSP_SPI4_CS_PE4
+        config BSP_SPI4_CS_PE4
+            bool "PE4 (default)"
+        config BSP_SPI4_CS_PA11
+            bool "PA11"
+        config BSP_SPI4_CS_PB12
+            bool "PB12"
+    endchoice
 
     config BSP_USING_SPI4_DMA
         bool "Enable SPI4 DMA"
@@ -749,7 +1015,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
           Same policy as SPI1 DMA: half-duplex TX/RX >= 32 bytes.
           DMA unit/channel: pick a preset map or Custom below.
           WARNING: unit+channel must be unique across all UART/SPI DMA users.
-          Compile-time check in dma_channel_check.h.
+          Compile-time check in rtconfig.py check_bsp_resources.
 
     choice
         prompt "SPI4 DMA channel map"
@@ -806,6 +1072,538 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         bool "Enable GPIO1"
         select RT_USING_PIN
         default y
+
+    menu "Hardware I2C"
+        config BSP_USING_I2C1
+            bool "Enable I2C1"
+            select RT_USING_I2C
+            default n
+
+        choice
+            prompt "I2C1 SCL pin"
+            depends on BSP_USING_I2C1
+            default BSP_I2C1_SCL_PB6
+            config BSP_I2C1_SCL_PB6
+                bool "PB6 AF7 (default)"
+            config BSP_I2C1_SCL_PA13
+                bool "PA13 AF4 (SWDIO)"
+            config BSP_I2C1_SCL_PF11
+                bool "PF11 AF4"
+        endchoice
+
+        choice
+            prompt "I2C1 SDA pin"
+            depends on BSP_USING_I2C1
+            default BSP_I2C1_SDA_PB7
+            config BSP_I2C1_SDA_PB7
+                bool "PB7 AF7 (default)"
+            config BSP_I2C1_SDA_PA14
+                bool "PA14 AF4 (SWCLK)"
+            config BSP_I2C1_SDA_PF12
+                bool "PF12 AF4"
+        endchoice
+
+        config BSP_USING_I2C2
+            bool "Enable I2C2"
+            select RT_USING_I2C
+            default n
+
+        choice
+            prompt "I2C2 SCL pin"
+            depends on BSP_USING_I2C2
+            default BSP_I2C2_SCL_PE1
+            config BSP_I2C2_SCL_PE1
+                bool "PE1 AF7 (default)"
+            config BSP_I2C2_SCL_PB10
+                bool "PB10 AF0"
+            config BSP_I2C2_SCL_PG10
+                bool "PG10 AF0"
+        endchoice
+
+        choice
+            prompt "I2C2 SDA pin"
+            depends on BSP_USING_I2C2
+            default BSP_I2C2_SDA_PE0
+            config BSP_I2C2_SDA_PE0
+                bool "PE0 AF7 (default)"
+            config BSP_I2C2_SDA_PB11
+                bool "PB11 AF0"
+            config BSP_I2C2_SDA_PG11
+                bool "PG11 AF0"
+        endchoice
+    endmenu
+
+    menu "Hardware TIMER"
+        config BSP_USING_TIM1
+            bool "Enable Timer1 (clock timer)"
+            select RT_USING_CLOCK_TIME
+            default n
+        config BSP_USING_TIM2
+            bool "Enable Timer2 (clock timer, 32-bit)"
+            select RT_USING_CLOCK_TIME
+            default n
+        config BSP_USING_TIM3
+            bool "Enable Timer3 (clock timer)"
+            select RT_USING_CLOCK_TIME
+            default n
+        config BSP_USING_TIM6
+            bool "Enable Timer6 (clock timer, basic)"
+            select RT_USING_CLOCK_TIME
+            default n
+        config BSP_USING_TIM10
+            bool "Enable Timer10 (clock timer)"
+            select RT_USING_CLOCK_TIME
+            default n
+    endmenu
+
+    menu "Hardware PWM"
+        config BSP_USING_PWM1
+            bool "Enable PWM1 (TIM1)"
+            select RT_USING_PWM
+            default n
+            help
+              TIM1 PWM output. Complementary output available. Device name "pwm1".
+        if BSP_USING_PWM1
+            config BSP_USING_PWM1_CH1
+                bool "Enable PWM1 Channel 1"
+                default y
+            config BSP_USING_PWM1_CH2
+                bool "Enable PWM1 Channel 2"
+                default n
+            config BSP_USING_PWM1_CH3
+                bool "Enable PWM1 Channel 3"
+                default n
+            config BSP_USING_PWM1_CH4
+                bool "Enable PWM1 Channel 4"
+                default n
+
+            choice
+                prompt "PWM1 CH1 pin"
+                depends on BSP_USING_PWM1_CH1
+                default BSP_PWM1_CH1_PE9
+                config BSP_PWM1_CH1_PE9
+                    bool "PE9 AF1 (default)"
+                config BSP_PWM1_CH1_PA8
+                    bool "PA8 AF2"
+            endchoice
+
+            choice
+                prompt "PWM1 CH2 pin"
+                depends on BSP_USING_PWM1_CH2
+                default BSP_PWM1_CH2_PE11
+                config BSP_PWM1_CH2_PE11
+            bool "PE11 AF3 (default)"
+                config BSP_PWM1_CH2_PA9
+                    bool "PA9 AF2"
+            endchoice
+
+            choice
+                prompt "PWM1 CH3 pin"
+                depends on BSP_USING_PWM1_CH3
+                default BSP_PWM1_CH3_PE13
+                config BSP_PWM1_CH3_PE13
+                    bool "PE13 AF1 (default)"
+                config BSP_PWM1_CH3_PA10
+                    bool "PA10 AF2"
+            endchoice
+
+            choice
+                prompt "PWM1 CH4 pin"
+                depends on BSP_USING_PWM1_CH4
+                default BSP_PWM1_CH4_PE14
+                config BSP_PWM1_CH4_PE14
+                    bool "PE14 AF1 (default)"
+                config BSP_PWM1_CH4_PA11
+                    bool "PA11 AF2"
+            endchoice
+        endif
+
+        config BSP_USING_PWM2
+            bool "Enable PWM2 (TIM2)"
+            select RT_USING_PWM
+            default n
+            help
+              TIM2 PWM output. Device name "pwm2".
+        if BSP_USING_PWM2
+            config BSP_USING_PWM2_CH1
+                bool "Enable PWM2 Channel 1"
+                default y
+            config BSP_USING_PWM2_CH2
+                bool "Enable PWM2 Channel 2"
+                default n
+            config BSP_USING_PWM2_CH3
+                bool "Enable PWM2 Channel 3"
+                default n
+            config BSP_USING_PWM2_CH4
+                bool "Enable PWM2 Channel 4"
+                default n
+
+            choice
+                prompt "PWM2 CH1 pin"
+                depends on BSP_USING_PWM2_CH1
+                default BSP_PWM2_CH1_PA0
+                config BSP_PWM2_CH1_PA0
+                    bool "PA0 AF2 (default)"
+                config BSP_PWM2_CH1_PA5
+                    bool "PA5 AF2"
+            endchoice
+
+            choice
+                prompt "PWM2 CH2 pin"
+                depends on BSP_USING_PWM2_CH2
+                default BSP_PWM2_CH2_PA1
+                config BSP_PWM2_CH2_PA1
+                    bool "PA1 AF2 (default)"
+                config BSP_PWM2_CH2_PB3
+                    bool "PB3 AF2"
+            endchoice
+
+            choice
+                prompt "PWM2 CH3 pin"
+                depends on BSP_USING_PWM2_CH3
+                default BSP_PWM2_CH3_PA2
+                config BSP_PWM2_CH3_PA2
+                    bool "PA2 AF2 (default)"
+                config BSP_PWM2_CH3_PB10
+                    bool "PB10 AF2"
+            endchoice
+
+            choice
+                prompt "PWM2 CH4 pin"
+                depends on BSP_USING_PWM2_CH4
+                default BSP_PWM2_CH4_PA3
+                config BSP_PWM2_CH4_PA3
+                    bool "PA3 AF2 (default)"
+                config BSP_PWM2_CH4_PB11
+                    bool "PB11 AF2"
+            endchoice
+        endif
+
+        config BSP_USING_PWM3
+            bool "Enable PWM3 (TIM3)"
+            select RT_USING_PWM
+            default n
+            help
+              TIM3 PWM output. Device name "pwm3".
+        if BSP_USING_PWM3
+            config BSP_USING_PWM3_CH1
+                bool "Enable PWM3 Channel 1"
+                default y
+            config BSP_USING_PWM3_CH2
+                bool "Enable PWM3 Channel 2"
+                default n
+            config BSP_USING_PWM3_CH3
+                bool "Enable PWM3 Channel 3"
+                default n
+            config BSP_USING_PWM3_CH4
+                bool "Enable PWM3 Channel 4"
+                default n
+
+            choice
+                prompt "PWM3 CH1 pin"
+                depends on BSP_USING_PWM3_CH1
+                default BSP_PWM3_CH1_PA6
+                config BSP_PWM3_CH1_PA6
+                    bool "PA6 AF1 (default)"
+                config BSP_PWM3_CH1_PB4
+                    bool "PB4 AF1"
+                config BSP_PWM3_CH1_PC6
+                    bool "PC6 AF0"
+            endchoice
+
+            choice
+                prompt "PWM3 CH2 pin"
+                depends on BSP_USING_PWM3_CH2
+                default BSP_PWM3_CH2_PA7
+                config BSP_PWM3_CH2_PA7
+                    bool "PA7 AF1 (default)"
+                config BSP_PWM3_CH2_PB5
+                    bool "PB5 AF1"
+                config BSP_PWM3_CH2_PC7
+                    bool "PC7 AF0"
+            endchoice
+
+            choice
+                prompt "PWM3 CH3 pin"
+                depends on BSP_USING_PWM3_CH3
+                default BSP_PWM3_CH3_PB0
+                config BSP_PWM3_CH3_PB0
+                    bool "PB0 AF1 (default)"
+                config BSP_PWM3_CH3_PC8
+                    bool "PC8 AF0"
+            endchoice
+
+            choice
+                prompt "PWM3 CH4 pin"
+                depends on BSP_USING_PWM3_CH4
+                default BSP_PWM3_CH4_PB1
+                config BSP_PWM3_CH4_PB1
+                    bool "PB1 AF1 (default)"
+                config BSP_PWM3_CH4_PC9
+                    bool "PC9 AF0"
+            endchoice
+        endif
+
+        config BSP_USING_PWM10
+            bool "Enable PWM10 (TIM10)"
+            select RT_USING_PWM
+            default n
+            help
+              TIM10 PWM output. Only one channel. Device name "pwm10".
+        if BSP_USING_PWM10
+            config BSP_USING_PWM10_CH1
+                bool "Enable PWM10 Channel 1"
+                default y
+
+            choice
+                prompt "PWM10 CH1 pin"
+                depends on BSP_USING_PWM10_CH1
+                default BSP_PWM10_CH1_PF7
+                config BSP_PWM10_CH1_PF7
+                    bool "PF7 AF0 (default)"
+                config BSP_PWM10_CH1_PA4
+                    bool "PA4 AF1"
+                config BSP_PWM10_CH1_PB8
+                    bool "PB8 AF1"
+                config BSP_PWM10_CH1_PE3
+                    bool "PE3 AF1"
+            endchoice
+        endif
+    endmenu
+
+    menu "Hardware Pulse Encoder"
+        config BSP_USING_PULSE_ENCODER2
+            bool "Enable Pulse Encoder2 (TIM2: PA0 A / PA1 B)"
+            select RT_USING_PULSE_ENCODER
+            depends on !BSP_USING_TIM2
+            default n
+            help
+              AB phase encoder via TIM2 slave mode ENC3.
+              CH1=PA0(AF1), CH2=PA1(AF1). Conflicts with TIM2 clock timer.
+
+        config BSP_USING_PULSE_ENCODER3
+            bool "Enable Pulse Encoder3 (TIM3: PA6 A / PA7 B)"
+            select RT_USING_PULSE_ENCODER
+            depends on !BSP_USING_TIM3
+            default n
+            help
+              AB phase encoder via TIM3 slave mode ENC3.
+              CH1=PA6(AF1), CH2=PA7(AF1). Conflicts with TIM3 clock timer.
+    endmenu
+
+    menu "Hardware Input Capture"
+        config BSP_USING_CAPTURE2
+            bool "Enable Input Capture2 (TIM2 CH1: PA0)"
+            select RT_USING_INPUT_CAPTURE
+            depends on !BSP_USING_TIM2
+            default n
+            help
+              Input capture via TIM2 CH1 on PA0(AF1).
+              Conflicts with TIM2 clock timer and pulse encoder 2.
+
+        config BSP_USING_CAPTURE3
+            bool "Enable Input Capture3 (TIM3 CH1: PA6)"
+            select RT_USING_INPUT_CAPTURE
+            depends on !BSP_USING_TIM3
+            default n
+            help
+              Input capture via TIM3 CH1 on PA6(AF1).
+              Conflicts with TIM3 clock timer and pulse encoder 3.
+    endmenu
+
+    config BSP_USING_LPTIMER
+        bool "Enable LPTIMER (Low Power Timer)"
+        select RT_USING_PM
+        default n
+        help
+            Low power timer using LPTIM1 for PM tickless/lptimer framework.
+            Uses LPTIM1 with internal PCLK, prescaler 128, period 0xFFFF.
+            Enables RT_USING_PM to bring in the lptimer framework.
+
+    config BSP_USING_ADC
+        bool "Enable ADC"
+        select RT_USING_ADC
+        default n
+        help
+          Single ADC instance (device "adc1"). Channel pin map follows
+          ACM32P4 table 32-4, e.g. CH3=PA4, CH1=PA5, CH9=PA6, CH7=PA7.
+
+    config BSP_USING_DAC
+        bool "Enable DAC1"
+        select RT_USING_DAC
+        default n
+        help
+          DAC1 CH1=PA4, CH2=PA5. Device name "dac1", channels 1/2.
+
+    config BSP_USING_RTC
+        bool "Enable RTC"
+        select RT_USING_RTC
+        default n
+        help
+          Calendar RTC, device name "rtc". Default clock source XTL 32.768kHz.
+
+    choice
+        prompt "RTC clock source"
+        depends on BSP_USING_RTC
+        default BSP_RTC_USING_XTL
+
+        config BSP_RTC_USING_XTL
+            bool "XTL 32.768kHz crystal"
+        config BSP_RTC_USING_RC32K
+            bool "Internal RC32K"
+    endchoice
+
+    menu "Hardware WDT"
+        config BSP_USING_WDT
+            bool "Enable Watchdog (WDT)"
+            select RT_USING_WDT
+            default n
+            help
+              Window/system WDT clocked from APB1. Device name "wdt".
+
+        config BSP_USING_IWDT
+            bool "Enable Independent Watchdog (IWDT)"
+            select RT_USING_WDT
+            default n
+            help
+              Independent WDT clocked from RC32K. Device name "iwdt".
+    endmenu
+
+    menu "Hardware FDCAN"
+        config BSP_USING_FDCAN1
+            bool "Enable FDCAN1"
+            select RT_USING_CAN
+            default n
+
+        choice
+            prompt "FDCAN1 TX pin"
+            depends on BSP_USING_FDCAN1
+            default BSP_FDCAN1_TX_PD1
+            config BSP_FDCAN1_TX_PD1
+                bool "PD1 AF4 (default)"
+            config BSP_FDCAN1_TX_PB9
+                bool "PB9 AF4"
+            config BSP_FDCAN1_TX_PA12
+                bool "PA12 AF4 (USB_DP)"
+        endchoice
+
+        choice
+            prompt "FDCAN1 RX pin"
+            depends on BSP_USING_FDCAN1
+            default BSP_FDCAN1_RX_PD0
+            config BSP_FDCAN1_RX_PD0
+                bool "PD0 AF4 (default)"
+            config BSP_FDCAN1_RX_PB8
+                bool "PB8 AF4"
+            config BSP_FDCAN1_RX_PA11
+                bool "PA11 AF4 (USB_DM)"
+        endchoice
+
+        config BSP_USING_FDCAN2
+            bool "Enable FDCAN2"
+            select RT_USING_CAN
+            default n
+
+        choice
+            prompt "FDCAN2 TX pin"
+            depends on BSP_USING_FDCAN2
+            default BSP_FDCAN2_TX_PE6
+            config BSP_FDCAN2_TX_PE6
+                bool "PE6 AF1 (default)"
+            config BSP_FDCAN2_TX_PD12
+                bool "PD12 AF1"
+        endchoice
+
+        choice
+            prompt "FDCAN2 RX pin"
+            depends on BSP_USING_FDCAN2
+            default BSP_FDCAN2_RX_PE5
+            config BSP_FDCAN2_RX_PE5
+                bool "PE5 AF1 (default)"
+            config BSP_FDCAN2_RX_PD11
+                bool "PD11 AF1"
+        endchoice
+    endmenu
+
+    config BSP_USING_HWCRYPTO
+        bool "Enable HWRNG (True Random Number Generator)"
+        select RT_USING_HWCRYPTO
+        select RT_USING_HWCRYPTO_RNG
+        default n
+        help
+            Enable hardware random number generator using HRNG peripheral.
+            Device registered as "hwcryto" via rt_hwcrypto_register.
+
+    config BSP_USING_FSUSB
+        bool "Enable FSUSB (USB Device)"
+        select RT_USING_USB_DEVICE
+        default n
+        help
+            Enable ACM32P4xx Full-Speed USB Device driver.
+            Pins: PA11=DM, PA12=DP (AF10, no pull, DRIVE_LEVEL4).
+            NOTE: Must uncomment #define HAL_FSUSB_MODULE_ENABLED in
+            libraries/Device/acm32p4xx_hal_conf.h before building.
+
+    config BSP_USING_I2S1
+        bool "Enable I2S1 (Audio output)"
+        select RT_USING_AUDIO
+        default n
+
+    choice
+        prompt "I2S1 WS pin"
+        depends on BSP_USING_I2S1
+        default BSP_I2S1_WS_PA4
+        config BSP_I2S1_WS_PA4
+            bool "PA4 AF7 (default)"
+        config BSP_I2S1_WS_PA15
+            bool "PA15 AF7"
+    endchoice
+
+    choice
+        prompt "I2S1 CK pin"
+        depends on BSP_USING_I2S1
+        default BSP_I2S1_CK_PA5
+        config BSP_I2S1_CK_PA5
+            bool "PA5 AF7 (default)"
+        config BSP_I2S1_CK_PC10
+            bool "PC10 AF7"
+        config BSP_I2S1_CK_PB3
+            bool "PB3 AF7"
+    endchoice
+
+    choice
+        prompt "I2S1 SDI pin"
+        depends on BSP_USING_I2S1
+        default BSP_I2S1_SDI_PA6
+        config BSP_I2S1_SDI_PA6
+            bool "PA6 AF7 (default)"
+        config BSP_I2S1_SDI_PC11
+            bool "PC11 AF7"
+        config BSP_I2S1_SDI_PB4
+            bool "PB4 AF7"
+    endchoice
+
+    choice
+        prompt "I2S1 SDO pin"
+        depends on BSP_USING_I2S1
+        default BSP_I2S1_SDO_PC12
+        config BSP_I2S1_SDO_PC12
+            bool "PC12 AF7 (default)"
+        config BSP_I2S1_SDO_PB5
+            bool "PB5 AF7"
+        config BSP_I2S1_SDO_PD7
+            bool "PD7 AF7"
+    endchoice
+
+    choice
+        prompt "I2S1 MCK pin"
+        depends on BSP_USING_I2S1
+        default BSP_I2S1_MCK_PC4
+        config BSP_I2S1_MCK_PC4
+            bool "PC4 AF7 (default)"
+        config BSP_I2S1_MCK_PC7
+            bool "PC7 AF7"
+    endchoice
 
     config BSP_USING_ETH
         bool "Enable Ethernet (LAN8720A, RMII)"
@@ -908,6 +1706,15 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         int "Netmask byte 3"
         depends on BSP_ETH_STATIC_IP
         default 0
+
+    config BSP_USING_SDMMC1
+        bool "Enable SDMMC1 (SD card via SDIO)"
+        select RT_USING_SDIO
+        default n
+        help
+            Enable SD/MMC driver for SD card slot.
+            Pins: PC8=DAT0, PC9=DAT1, PC10=DAT2, PC11=DAT3, PC12=CLK, PD2=CMD (all AF12).
+            Uses HAL SDMMC with IDMA, polling mode.
 
 endmenu
 
