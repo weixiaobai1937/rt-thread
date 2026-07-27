@@ -114,8 +114,11 @@ static rt_err_t pulse_encoder_init(struct rt_pulse_encoder_device *pulse_encoder
     slave_cfg.InputTrigger = TIM_TS_ITR0;
     HAL_TIMER_Slave_Mode_Config(&dev->tim_handle, &slave_cfg);
 
+    /* 配置编码器模式 CC1S=01(CCMR1 bit0=1,bit1=0), CC2S=01(bit8=1,bit9=0)
+     * 即通道1和通道2均配置为输入，TI1FP1/TI2FP2 作为编码器输入 */
     dev->tim_handle.Instance->CCMR1 = (dev->tim_handle.Instance->CCMR1 & ~((uint32_t)(BIT0 | BIT1 | BIT8 | BIT9))) | (BIT0 | BIT8);
 
+    /* 清除极性位(CCER bit1/3/5/7)：所有通道上升沿捕获，极性不反相 */
     dev->tim_handle.Instance->CCER &= ~(BIT1 | BIT3 | BIT5 | BIT7);
 
     HAL_TIMER_Base_Start(dev->tim_handle.Instance);

@@ -36,7 +36,8 @@
 #define SD_HIGH_SPEED_FREQ     50000000U
 #define SDIO_MAX_FREQ          SD_HIGH_SPEED_FREQ
 
-#define SDIO_TX_RX_COMPLETE_TIMEOUT_LOOPS    (1000000)
+#define SDIO_TX_RX_COMPLETE_TIMEOUT_MS    (1000)   /* 1 second timeout */
+#define SDIO_IDLE_TIMEOUT_MS               (500)    /* 500ms idle wait */
 
 /* SDMMC1 pins: PC8=DAT0, PC9=DAT1, PC10=DAT2, PC11=DAT3, PC12=CLK, PD2=CMD (all AF12) */
 #define SDMMC1_DAT0_PIN       GPIO_PIN_8
@@ -72,13 +73,13 @@ static struct acm32_sdmmc sdmmc1_priv;
 static rt_err_t sdmmc_send_no_data_cmd(SDMMC_HandleTypeDef *hsdmmc, uint32_t cmd, uint32_t arg)
 {
     uint32_t int_status;
-    uint32_t timeout;
+    rt_tick_t tick_start;
 
     /* wait idle with timeout */
-    timeout = SDIO_TX_RX_COMPLETE_TIMEOUT_LOOPS;
-    while ((hsdmmc->Instance->SDMMC_STATUS & (1 << 9)) && timeout--)
+    tick_start = rt_tick_get();
+    while (hsdmmc->Instance->SDMMC_STATUS & (1 << 9))
     {
-        if (timeout == 0)
+        if (rt_tick_get() - tick_start >= rt_tick_from_millisecond(SDIO_IDLE_TIMEOUT_MS))
         {
             LOG_E("SDMMC wait idle timeout");
             return -RT_ETIMEOUT;
@@ -90,10 +91,10 @@ static rt_err_t sdmmc_send_no_data_cmd(SDMMC_HandleTypeDef *hsdmmc, uint32_t cmd
     hsdmmc->Instance->SDMMC_CMD = (cmd | ((uint32_t)hsdmmc->Init.Ch << 16));
 
     /* wait for command completed with timeout */
-    timeout = SDIO_TX_RX_COMPLETE_TIMEOUT_LOOPS;
+    tick_start = rt_tick_get();
     while (!(hsdmmc->Instance->SDMMC_RINTSTS & SDMMC_RINT_CMD_CMPLT))
     {
-        if (timeout == 0)
+        if (rt_tick_get() - tick_start >= rt_tick_from_millisecond(SDIO_TX_RX_COMPLETE_TIMEOUT_MS))
         {
             LOG_E("SDMMC wait cmd complete timeout");
             return -RT_ETIMEOUT;

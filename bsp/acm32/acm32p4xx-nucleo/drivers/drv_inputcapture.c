@@ -210,7 +210,7 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
      * CC1P=1 表示下降沿捕获 (当前电平为低)
      * 这比直接读 GPIO 更可靠，避免高频下的时序问题。
      */
-    level = (htim->Instance->CCER & TIM_CCER_CC1P) ? RT_FALSE : RT_TRUE;
+    level = (htim->Instance->CCER & BIT1) ? RT_FALSE : RT_TRUE;
 
     dev->pulsewidth_us = captured;
 

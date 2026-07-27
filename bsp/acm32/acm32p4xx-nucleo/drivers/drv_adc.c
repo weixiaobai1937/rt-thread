@@ -185,9 +185,11 @@ static rt_err_t _adc_enabled(struct rt_adc_device *device, rt_int8_t channel, rt
             return -RT_ERROR;
         }
         /* 使用临界区保护 ChannelNum 的原子操作 */
-        rt_enter_critical();
-        adcObj->handle.ChannelNum++;
-        rt_exit_critical();
+        {
+            rt_base_t level = rt_hw_interrupt_disable();
+            adcObj->handle.ChannelNum++;
+            rt_hw_interrupt_enable(level);
+        }
     }
     else
     {
@@ -197,12 +199,14 @@ static rt_err_t _adc_enabled(struct rt_adc_device *device, rt_int8_t channel, rt
         }
         adcObj->handle.Init.ChannelEn &= ~(1U << ch);
         /* 使用临界区保护 ChannelNum 的原子操作 */
-        rt_enter_critical();
-        if (adcObj->handle.ChannelNum > 0)
         {
-            adcObj->handle.ChannelNum--;
+            rt_base_t level = rt_hw_interrupt_disable();
+            if (adcObj->handle.ChannelNum > 0)
+            {
+                adcObj->handle.ChannelNum--;
+            }
+            rt_hw_interrupt_enable(level);
         }
-        rt_exit_critical();
     }
 
     return RT_EOK;

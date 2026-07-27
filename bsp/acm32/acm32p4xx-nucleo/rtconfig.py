@@ -233,93 +233,51 @@ def _bsp_check_dma(cfg):
     return errors, infos
 
 
-_BSP_UART_PIN_GROUPS = {
-    'UART1': {
-        'enable': 'BSP_USING_UART1',
-        'groups': {
-            'BSP_UART1_PINS_PA9': ('PA9', 'PA10'),
-            'BSP_UART1_PINS_PB6': ('PB6', 'PB7'),
-        },
-        'fallback': ('PA9', 'PA10'),
-    },
-    'UART2': {
-        'enable': 'BSP_USING_UART2',
-        'groups': {
-            'BSP_UART2_PINS_PD5': ('PD5', 'PD6'),
-            'BSP_UART2_PINS_PA2': ('PA2', 'PA3'),
-        },
-        'fallback': ('PD5', 'PD6'),
-    },
-    'UART3': {
-        'enable': 'BSP_USING_UART3',
-        'groups': {
-            'BSP_UART3_PINS_PB10': ('PB10', 'PB11'),
-            'BSP_UART3_PINS_PD8': ('PD8', 'PD9'),
-        },
-        'fallback': ('PB10', 'PB11'),
-    },
-    'UART4': {
-        'enable': 'BSP_USING_UART4',
-        'groups': {
-            'BSP_UART4_PINS_PC10': ('PC10', 'PC11'),
-            'BSP_UART4_PINS_PA0': ('PA0', 'PA1'),
-        },
-        'fallback': ('PC10', 'PC11'),
-    },
-    'LPUART1': {
-        'enable': 'BSP_USING_LPUART1',
-        'groups': {
-            'BSP_LPUART1_PINS_PA2': ('PA2', 'PA3'),
-            'BSP_LPUART1_PINS_PB6': ('PB6', 'PB7'),
-            'BSP_LPUART1_PINS_PA9': ('PA9', 'PA10'),
-        },
-        'fallback': ('PA2', 'PA3'),
-    },
-    'LPUART2': {
-        'enable': 'BSP_USING_LPUART2',
-        'groups': {
-            'BSP_LPUART2_PINS_PB10': ('PB10', 'PB11'),
-            'BSP_LPUART2_PINS_PE3': ('PE3', 'PE4'),
-        },
-        'fallback': ('PB10', 'PB11'),
-    },
+# Per-signal pin macro suffix → pin name for conflict detection.
+# Order: specific choices first, fallback default last.
+_BSP_UART_TX_PINS = {
+    1: ['PB6', 'PA14', 'PA9'],
+    2: ['PA2', 'PC2', 'PD5'],
+    3: ['PD8', 'PC10', 'PB10'],
+    4: ['PC10', 'PA0', 'PB9', 'PE9', 'PD1'],
 }
-
-_BSP_SPI_PIN_GROUPS = {
-    'SPI1': {
-        'enable': 'BSP_USING_SPI1',
-        'groups': {
-            'BSP_SPI1_PINS_PE': ('PE12', 'PE11', 'PE10', 'PE13'),
-            'BSP_SPI1_PINS_PA': ('PA5', 'PA7', 'PA6', 'PA4'),
-            'BSP_SPI1_PINS_PB': ('PB3', 'PB5', 'PB4', 'PA15'),
-        },
-        'fallback': ('PE12', 'PE11', 'PE10', 'PE13'),
-    },
-    'SPI2': {
-        'enable': 'BSP_USING_SPI2',
-        'groups': {
-            'BSP_SPI2_PINS_PB13': ('PB13', 'PB15', 'PB14', 'PB12'),
-            'BSP_SPI2_PINS_PC': ('PC7', 'PC9', 'PC8', 'PC6'),
-            'BSP_SPI2_PINS_PB10': ('PB10', 'PB15', 'PB14', 'PB9'),
-        },
-        'fallback': ('PB13', 'PB15', 'PB14', 'PB12'),
-    },
-    'SPI3': {
-        'enable': 'BSP_USING_SPI3',
-        'groups': {
-            'BSP_SPI3_PINS_PC': ('PC10', 'PC12', 'PC11', 'PC9'),
-            'BSP_SPI3_PINS_PB': ('PB3', 'PB5', 'PB4', 'PA15'),
-        },
-        'fallback': ('PC10', 'PC12', 'PC11', 'PC9'),
-    },
-    'SPI4': {
-        'enable': 'BSP_USING_SPI4',
-        'groups': {
-            'BSP_SPI4_PINS_PE': ('PE2', 'PE6', 'PE5', 'PE4'),
-            'BSP_SPI4_PINS_PB': ('PB2', 'PB1', 'PB6', 'PE4'),
-        },
-        'fallback': ('PE2', 'PE6', 'PE5', 'PE4'),
-    },
+_BSP_UART_RX_PINS = {
+    1: ['PB7', 'PA13', 'PA10'],
+    2: ['PA3', 'PC1', 'PD6'],
+    3: ['PD9', 'PC11', 'PB11'],
+    4: ['PC11', 'PA1', 'PB8', 'PE10', 'PD0'],
+}
+_BSP_LPUART_TX_PINS = {
+    1: ['PB6', 'PA9'],
+    2: ['PE3', 'PC0'],
+}
+_BSP_LPUART_RX_PINS = {
+    1: ['PB7', 'PA10'],
+    2: ['PE4', 'PC1'],
+}
+_BSP_SPI_SCK_PINS = {
+    1: ['PA5', 'PB3', 'PE12'],
+    2: ['PC7', 'PF8', 'PA9', 'PB13'],
+    3: ['PB3', 'PG0', 'PC10'],
+    4: ['PB2', 'PB9', 'PE12', 'PE2'],
+}
+_BSP_SPI_MOSI_PINS = {
+    1: ['PA7', 'PB5', 'PE11'],
+    2: ['PC9', 'PF0', 'PC1', 'PB15'],
+    3: ['PB5', 'PG2', 'PD6', 'PC12'],
+    4: ['PB1', 'PB15', 'PE14', 'PB14', 'PE6'],
+}
+_BSP_SPI_MISO_PINS = {
+    1: ['PA6', 'PB4', 'PE10'],
+    2: ['PC8', 'PF4', 'PC2', 'PB14'],
+    3: ['PB4', 'PG6', 'PC11'],
+    4: ['PB6', 'PE13', 'PE5'],
+}
+_BSP_SPI_CS_PINS = {
+    1: ['PA4', 'PA15', 'PE1', 'PE13'],
+    2: ['PC6', 'PF6', 'PB9', 'PB12'],
+    3: ['PA15', 'PG4', 'PC9', 'PA4'],
+    4: ['PA11', 'PB12', 'PE4'],
 }
 
 _BSP_ETH_PINS = ('PA1', 'PA2', 'PA7', 'PB11', 'PB12', 'PB13', 'PC1', 'PC4', 'PC5')
@@ -340,39 +298,80 @@ def _bsp_pin_index_to_name(idx):
     return 'P%c%d' % (chr(ord('A') + port), pin)
 
 
-def _bsp_resolve_group_pins(cfg, meta):
-    if not _bsp_enabled(cfg, meta['enable']):
-        return ()
-    for key, pins in meta['groups'].items():
-        if _bsp_enabled(cfg, key):
-            return pins
-    return meta['fallback']
+def _bsp_scan_pin(cfg, prefix, suffixes):
+    """Scan per-signal macro like BSP_UART1_TX_PA9 using suffix list.
+    Returns the first matching pin name (e.g. 'PA9'), or default (last) entry."""
+    for s in suffixes:
+        if _bsp_enabled(cfg, prefix + s):
+            return s
+    return suffixes[-1] if suffixes else None
 
 
 def _bsp_check_pins(cfg):
     errors = []
     infos = []
     pin_map = {}
+    info_lines = []
 
     def add(owner, pins):
         for p in pins:
-            pin_map.setdefault(p, []).append(owner)
+            if p:
+                pin_map.setdefault(p, []).append(owner)
 
-    for name, meta in _BSP_UART_PIN_GROUPS.items():
-        pins = _bsp_resolve_group_pins(cfg, meta)
-        if pins:
-            add(name, pins)
-    for name, meta in _BSP_SPI_PIN_GROUPS.items():
-        pins = _bsp_resolve_group_pins(cfg, meta)
-        if pins:
-            add(name, pins)
+    # UART1-4: TX + RX per-signal conflict check
+    for n in [1, 2, 3, 4]:
+        if not _bsp_enabled(cfg, 'BSP_USING_UART%d' % n):
+            continue
+        tx = _bsp_scan_pin(cfg, 'BSP_UART%d_TX_' % n, _BSP_UART_TX_PINS[n])
+        rx = _bsp_scan_pin(cfg, 'BSP_UART%d_RX_' % n, _BSP_UART_RX_PINS[n])
+        if tx:
+            add('UART%d_TX' % n, [tx])
+        if rx:
+            add('UART%d_RX' % n, [rx])
+        info_lines.append('    UART%d   %s %s' % (n, tx or '?', rx or '?'))
+
+    # LPUART1-2: TX + RX per-signal conflict check
+    for n in [1, 2]:
+        if not _bsp_enabled(cfg, 'BSP_USING_LPUART%d' % n):
+            continue
+        tx = _bsp_scan_pin(cfg, 'BSP_LPUART%d_TX_' % n, _BSP_LPUART_TX_PINS[n])
+        rx = _bsp_scan_pin(cfg, 'BSP_LPUART%d_RX_' % n, _BSP_LPUART_RX_PINS[n])
+        if tx:
+            add('LPUART%d_TX' % n, [tx])
+        if rx:
+            add('LPUART%d_RX' % n, [rx])
+        info_lines.append('    LPUART%d %s %s' % (n, tx or '?', rx or '?'))
+
+    # SPI1-4: SCK + MOSI + MISO + CS per-signal conflict check
+    for n in [1, 2, 3, 4]:
+        if not _bsp_enabled(cfg, 'BSP_USING_SPI%d' % n):
+            continue
+        sck  = _bsp_scan_pin(cfg, 'BSP_SPI%d_SCK_'  % n, _BSP_SPI_SCK_PINS[n])
+        mosi = _bsp_scan_pin(cfg, 'BSP_SPI%d_MOSI_' % n, _BSP_SPI_MOSI_PINS[n])
+        miso = _bsp_scan_pin(cfg, 'BSP_SPI%d_MISO_' % n, _BSP_SPI_MISO_PINS[n])
+        cs   = _bsp_scan_pin(cfg, 'BSP_SPI%d_CS_'   % n, _BSP_SPI_CS_PINS[n])
+        if sck:
+            add('SPI%d_SCK' % n, [sck])
+        if mosi:
+            add('SPI%d_MOSI' % n, [mosi])
+        if miso:
+            add('SPI%d_MISO' % n, [miso])
+        if cs:
+            add('SPI%d_CS' % n, [cs])
+        info_lines.append('    SPI%d    %s %s %s %s' %
+                          (n, sck or '?', mosi or '?', miso or '?', cs or '?'))
+
+    # ETH pins
     if _bsp_enabled(cfg, 'BSP_USING_ETH'):
         eth_pins = list(_BSP_ETH_PINS)
         rst = _bsp_pin_index_to_name(cfg.get('BSP_ETH_PHY_RST_PIN', 30))
         if rst:
             eth_pins.append(rst)
         add('ETH', eth_pins)
+        info_lines.append('    ETH      (RMII board pins + PHY_RST=%s)' %
+                          (rst if rst else '?'))
 
+    # Check conflicts
     for pin, owners in sorted(pin_map.items()):
         uniq = []
         for o in owners:
@@ -382,16 +381,9 @@ def _bsp_check_pins(cfg):
             errors.append('Pin conflict: %s used by %s' % (pin, ', '.join(uniq)))
 
     if pin_map:
-        lines = ['  Pin groups:']
-        for name, meta in list(_BSP_UART_PIN_GROUPS.items()) + list(_BSP_SPI_PIN_GROUPS.items()):
-            pins = _bsp_resolve_group_pins(cfg, meta)
-            if pins:
-                lines.append('    %-8s %s' % (name, ' '.join(pins)))
-        if _bsp_enabled(cfg, 'BSP_USING_ETH'):
-            rst = _bsp_pin_index_to_name(cfg.get('BSP_ETH_PHY_RST_PIN', 30))
-            lines.append('    ETH      (RMII board pins + PHY_RST=%s)' %
-                         (rst if rst else '?'))
+        lines = ['  Pin groups:'] + info_lines
         infos.append('\n'.join(lines))
+
     return errors, infos
 
 

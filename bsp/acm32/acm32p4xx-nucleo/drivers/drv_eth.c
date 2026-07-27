@@ -160,6 +160,22 @@ static void rx_buf_free_custom(struct pbuf *p)
 
 /* ===== PHY nRST GPIO clock (BSP_ETH_PHY_RST_PIN -> port) ===== */
 
+static GPIO_TypeDef *eth_phy_rst_port(void)
+{
+    switch (ETH_PHY_RST_PORT_IDX)
+    {
+    case 0: return GPIOA;
+    case 1: return GPIOB;
+    case 2: return GPIOC;
+    case 3: return GPIOD;
+    case 4: return GPIOE;
+    case 5: return GPIOF;
+    case 6: return GPIOG;
+    case 7: return GPIOH;
+    default: return GPIOA;
+    }
+}
+
 static void eth_phy_rst_clk_enable(void)
 {
     switch (ETH_PHY_RST_PORT_IDX)
@@ -212,7 +228,7 @@ void HAL_ETH_MspInit(ETH_HandleTypeDef *heth)
         GPIO_InitStruct.Pull = GPIO_NOPULL;
         GPIO_InitStruct.Drive = GPIO_DRIVE_LEVEL3;
         GPIO_InitStruct.Alternate = GPIO_FUNCTION_0;
-        HAL_GPIO_Init(ETH_PHY_RST_PORT, &GPIO_InitStruct);
+        HAL_GPIO_Init(eth_phy_rst_port(), &GPIO_InitStruct);
 
         /* PC1(MDC), PC4(RXD0), PC5(RXD1) -- AF6 */
         GPIO_InitStruct.Pin = GPIO_PIN_1 | GPIO_PIN_4 | GPIO_PIN_5;
@@ -223,9 +239,9 @@ void HAL_ETH_MspInit(ETH_HandleTypeDef *heth)
         HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
         /* PHY hardware reset: low 15ms -> high -> wait 20ms */
-        HAL_GPIO_WritePin(ETH_PHY_RST_PORT, ETH_PHY_RST_PIN, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(eth_phy_rst_port(), ETH_PHY_RST_PIN, GPIO_PIN_RESET);
         HAL_Delay(15);
-        HAL_GPIO_WritePin(ETH_PHY_RST_PORT, ETH_PHY_RST_PIN, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(eth_phy_rst_port(), ETH_PHY_RST_PIN, GPIO_PIN_SET);
         HAL_Delay(20);
     }
 

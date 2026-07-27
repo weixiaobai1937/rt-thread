@@ -83,19 +83,39 @@ struct acm32_uart_config
 
 /* ---- USART1 ---- */
 #ifdef BSP_USING_UART1
-#if !defined(BSP_UART1_PINS_PA9) && !defined(BSP_UART1_PINS_PB6)
-#define BSP_UART1_PINS_PA9
+/* TX pin: PA9 AF1 (default), PB6 AF1, PA14 AF1 */
+#if defined(BSP_UART1_TX_PB6)
+#define UART1_TX_PORT   GPIOB
+#define UART1_TX_PIN    GPIO_PIN_6
+#define UART1_TX_AF     GPIO_FUNCTION_1
+#elif defined(BSP_UART1_TX_PA14)
+#define UART1_TX_PORT   GPIOA
+#define UART1_TX_PIN    GPIO_PIN_14
+#define UART1_TX_AF     GPIO_FUNCTION_1
+#else
+#define UART1_TX_PORT   GPIOA
+#define UART1_TX_PIN    GPIO_PIN_9
+#define UART1_TX_AF     GPIO_FUNCTION_1
 #endif
 
-#if defined(BSP_UART1_PINS_PB6)
-#define UART1_PINS_HINT "PB6/TX PB7/RX"
-#define UART1_PIN_CFG   UART_PIN_FIELDS(GPIOB, GPIO_PIN_6, GPIO_FUNCTION_1, \
-                                        GPIOB, GPIO_PIN_7, GPIO_FUNCTION_1)
+/* RX pin: PA10 AF1 (default), PB7 AF1, PA13 AF1 */
+#if defined(BSP_UART1_RX_PB7)
+#define UART1_RX_PORT   GPIOB
+#define UART1_RX_PIN    GPIO_PIN_7
+#define UART1_RX_AF     GPIO_FUNCTION_1
+#elif defined(BSP_UART1_RX_PA13)
+#define UART1_RX_PORT   GPIOA
+#define UART1_RX_PIN    GPIO_PIN_13
+#define UART1_RX_AF     GPIO_FUNCTION_1
 #else
-#define UART1_PINS_HINT "PA9/TX PA10/RX"
-#define UART1_PIN_CFG   UART_PIN_FIELDS(GPIOA, GPIO_PIN_9, GPIO_FUNCTION_1, \
-                                        GPIOA, GPIO_PIN_10, GPIO_FUNCTION_1)
+#define UART1_RX_PORT   GPIOA
+#define UART1_RX_PIN    GPIO_PIN_10
+#define UART1_RX_AF     GPIO_FUNCTION_1
 #endif
+
+#define UART1_PINS_HINT "see Kconfig"
+#define UART1_PIN_CFG   UART_PIN_FIELDS(UART1_TX_PORT, UART1_TX_PIN, UART1_TX_AF, \
+                                        UART1_RX_PORT, UART1_RX_PIN, UART1_RX_AF)
 
 #ifdef BSP_USING_UART1_DMA
 #if defined(BSP_UART1_DMA_MAP_DMA2)
@@ -155,19 +175,39 @@ struct acm32_uart_config
 
 /* ---- USART2 ---- */
 #ifdef BSP_USING_UART2
-#if !defined(BSP_UART2_PINS_PD5) && !defined(BSP_UART2_PINS_PA2)
-#define BSP_UART2_PINS_PD5
+/* TX pin: PD5 AF3 (default), PA2 AF1, PC2 AF2 */
+#if defined(BSP_UART2_TX_PA2)
+#define UART2_TX_PORT   GPIOA
+#define UART2_TX_PIN    GPIO_PIN_2
+#define UART2_TX_AF     GPIO_FUNCTION_1
+#elif defined(BSP_UART2_TX_PC2)
+#define UART2_TX_PORT   GPIOC
+#define UART2_TX_PIN    GPIO_PIN_2
+#define UART2_TX_AF     GPIO_FUNCTION_2
+#else
+#define UART2_TX_PORT   GPIOD
+#define UART2_TX_PIN    GPIO_PIN_5
+#define UART2_TX_AF     GPIO_FUNCTION_3
 #endif
 
-#if defined(BSP_UART2_PINS_PA2)
-#define UART2_PINS_HINT "PA2/TX PA3/RX"
-#define UART2_PIN_CFG   UART_PIN_FIELDS(GPIOA, GPIO_PIN_2, GPIO_FUNCTION_1, \
-                                        GPIOA, GPIO_PIN_3, GPIO_FUNCTION_1)
+/* RX pin: PD6 AF3 (default), PA3 AF1, PC1 AF2 */
+#if defined(BSP_UART2_RX_PA3)
+#define UART2_RX_PORT   GPIOA
+#define UART2_RX_PIN    GPIO_PIN_3
+#define UART2_RX_AF     GPIO_FUNCTION_1
+#elif defined(BSP_UART2_RX_PC1)
+#define UART2_RX_PORT   GPIOC
+#define UART2_RX_PIN    GPIO_PIN_1
+#define UART2_RX_AF     GPIO_FUNCTION_2
 #else
-#define UART2_PINS_HINT "PD5/TX PD6/RX"
-#define UART2_PIN_CFG   UART_PIN_FIELDS(GPIOD, GPIO_PIN_5, GPIO_FUNCTION_3, \
-                                        GPIOD, GPIO_PIN_6, GPIO_FUNCTION_3)
+#define UART2_RX_PORT   GPIOD
+#define UART2_RX_PIN    GPIO_PIN_6
+#define UART2_RX_AF     GPIO_FUNCTION_3
 #endif
+
+#define UART2_PINS_HINT "see Kconfig"
+#define UART2_PIN_CFG   UART_PIN_FIELDS(UART2_TX_PORT, UART2_TX_PIN, UART2_TX_AF, \
+                                        UART2_RX_PORT, UART2_RX_PIN, UART2_RX_AF)
 
 #ifdef BSP_USING_UART2_DMA
 #if defined(BSP_UART2_DMA_MAP_DMA1)
@@ -227,19 +267,39 @@ struct acm32_uart_config
 
 /* ---- USART3 ---- */
 #ifdef BSP_USING_UART3
-#if !defined(BSP_UART3_PINS_PB10) && !defined(BSP_UART3_PINS_PD8)
-#define BSP_UART3_PINS_PB10
+/* TX pin: PB10 AF1 (default), PD8 AF3, PC10 AF4 */
+#if defined(BSP_UART3_TX_PD8)
+#define UART3_TX_PORT   GPIOD
+#define UART3_TX_PIN    GPIO_PIN_8
+#define UART3_TX_AF     GPIO_FUNCTION_3
+#elif defined(BSP_UART3_TX_PC10)
+#define UART3_TX_PORT   GPIOC
+#define UART3_TX_PIN    GPIO_PIN_10
+#define UART3_TX_AF     GPIO_FUNCTION_4
+#else
+#define UART3_TX_PORT   GPIOB
+#define UART3_TX_PIN    GPIO_PIN_10
+#define UART3_TX_AF     GPIO_FUNCTION_1
 #endif
 
-#if defined(BSP_UART3_PINS_PD8)
-#define UART3_PINS_HINT "PD8/TX PD9/RX"
-#define UART3_PIN_CFG   UART_PIN_FIELDS(GPIOD, GPIO_PIN_8, GPIO_FUNCTION_3, \
-                                        GPIOD, GPIO_PIN_9, GPIO_FUNCTION_3)
+/* RX pin: PB11 AF1 (default), PD9 AF3, PC11 AF4 */
+#if defined(BSP_UART3_RX_PD9)
+#define UART3_RX_PORT   GPIOD
+#define UART3_RX_PIN    GPIO_PIN_9
+#define UART3_RX_AF     GPIO_FUNCTION_3
+#elif defined(BSP_UART3_RX_PC11)
+#define UART3_RX_PORT   GPIOC
+#define UART3_RX_PIN    GPIO_PIN_11
+#define UART3_RX_AF     GPIO_FUNCTION_4
 #else
-#define UART3_PINS_HINT "PB10/TX PB11/RX"
-#define UART3_PIN_CFG   UART_PIN_FIELDS(GPIOB, GPIO_PIN_10, GPIO_FUNCTION_1, \
-                                        GPIOB, GPIO_PIN_11, GPIO_FUNCTION_1)
+#define UART3_RX_PORT   GPIOB
+#define UART3_RX_PIN    GPIO_PIN_11
+#define UART3_RX_AF     GPIO_FUNCTION_1
 #endif
+
+#define UART3_PINS_HINT "see Kconfig"
+#define UART3_PIN_CFG   UART_PIN_FIELDS(UART3_TX_PORT, UART3_TX_PIN, UART3_TX_AF, \
+                                        UART3_RX_PORT, UART3_RX_PIN, UART3_RX_AF)
 
 #ifdef BSP_USING_UART3_DMA
 #if defined(BSP_UART3_DMA_MAP_DMA1)
@@ -299,19 +359,55 @@ struct acm32_uart_config
 
 /* ---- USART4 ---- */
 #ifdef BSP_USING_UART4
-#if !defined(BSP_UART4_PINS_PC10) && !defined(BSP_UART4_PINS_PA0)
-#define BSP_UART4_PINS_PC10
+/* TX pin: PD1 AF3 (default), PC10 AF4, PA0 AF3, PB9 AF3, PE9 AF4 */
+#if defined(BSP_UART4_TX_PC10)
+#define UART4_TX_PORT   GPIOC
+#define UART4_TX_PIN    GPIO_PIN_10
+#define UART4_TX_AF     GPIO_FUNCTION_4
+#elif defined(BSP_UART4_TX_PA0)
+#define UART4_TX_PORT   GPIOA
+#define UART4_TX_PIN    GPIO_PIN_0
+#define UART4_TX_AF     GPIO_FUNCTION_3
+#elif defined(BSP_UART4_TX_PB9)
+#define UART4_TX_PORT   GPIOB
+#define UART4_TX_PIN    GPIO_PIN_9
+#define UART4_TX_AF     GPIO_FUNCTION_3
+#elif defined(BSP_UART4_TX_PE9)
+#define UART4_TX_PORT   GPIOE
+#define UART4_TX_PIN    GPIO_PIN_9
+#define UART4_TX_AF     GPIO_FUNCTION_4
+#else
+#define UART4_TX_PORT   GPIOD
+#define UART4_TX_PIN    GPIO_PIN_1
+#define UART4_TX_AF     GPIO_FUNCTION_3
 #endif
 
-#if defined(BSP_UART4_PINS_PA0)
-#define UART4_PINS_HINT "PA0/TX PA1/RX"
-#define UART4_PIN_CFG   UART_PIN_FIELDS(GPIOA, GPIO_PIN_0, GPIO_FUNCTION_3, \
-                                        GPIOA, GPIO_PIN_1, GPIO_FUNCTION_3)
+/* RX pin: PD0 AF3 (default), PC11 AF4, PA1 AF3, PB8 AF3, PE10 AF4 */
+#if defined(BSP_UART4_RX_PC11)
+#define UART4_RX_PORT   GPIOC
+#define UART4_RX_PIN    GPIO_PIN_11
+#define UART4_RX_AF     GPIO_FUNCTION_4
+#elif defined(BSP_UART4_RX_PA1)
+#define UART4_RX_PORT   GPIOA
+#define UART4_RX_PIN    GPIO_PIN_1
+#define UART4_RX_AF     GPIO_FUNCTION_3
+#elif defined(BSP_UART4_RX_PB8)
+#define UART4_RX_PORT   GPIOB
+#define UART4_RX_PIN    GPIO_PIN_8
+#define UART4_RX_AF     GPIO_FUNCTION_3
+#elif defined(BSP_UART4_RX_PE10)
+#define UART4_RX_PORT   GPIOE
+#define UART4_RX_PIN    GPIO_PIN_10
+#define UART4_RX_AF     GPIO_FUNCTION_4
 #else
-#define UART4_PINS_HINT "PC10/TX PC11/RX"
-#define UART4_PIN_CFG   UART_PIN_FIELDS(GPIOC, GPIO_PIN_10, GPIO_FUNCTION_4, \
-                                        GPIOC, GPIO_PIN_11, GPIO_FUNCTION_4)
+#define UART4_RX_PORT   GPIOD
+#define UART4_RX_PIN    GPIO_PIN_0
+#define UART4_RX_AF     GPIO_FUNCTION_3
 #endif
+
+#define UART4_PINS_HINT "see Kconfig"
+#define UART4_PIN_CFG   UART_PIN_FIELDS(UART4_TX_PORT, UART4_TX_PIN, UART4_TX_AF, \
+                                        UART4_RX_PORT, UART4_RX_PIN, UART4_RX_AF)
 
 #ifdef BSP_USING_UART4_DMA
 #if defined(BSP_UART4_DMA_MAP_DMA1)
@@ -400,23 +496,31 @@ struct acm32_uart_config
 
 /* ---- LPUART1 ---- */
 #ifdef BSP_USING_LPUART1
-#if !defined(BSP_LPUART1_PINS_PA2) && !defined(BSP_LPUART1_PINS_PB6) && !defined(BSP_LPUART1_PINS_PA9)
-#define BSP_LPUART1_PINS_PA2
+/* TX pin: PA9 AF0 (default), PB6 AF0 */
+#if defined(BSP_LPUART1_TX_PB6)
+#define LPUART1_TX_PORT  GPIOB
+#define LPUART1_TX_PIN   GPIO_PIN_6
+#define LPUART1_TX_AF    GPIO_FUNCTION_0
+#else
+#define LPUART1_TX_PORT  GPIOA
+#define LPUART1_TX_PIN   GPIO_PIN_9
+#define LPUART1_TX_AF    GPIO_FUNCTION_0
 #endif
 
-#if defined(BSP_LPUART1_PINS_PB6)
-#define LPUART1_PINS_HINT "PB6/TX PB7/RX"
-#define LPUART1_PIN_CFG UART_PIN_FIELDS(GPIOB, GPIO_PIN_6, GPIO_FUNCTION_0, \
-                                        GPIOB, GPIO_PIN_7, GPIO_FUNCTION_0)
-#elif defined(BSP_LPUART1_PINS_PA9)
-#define LPUART1_PINS_HINT "PA9/TX PA10/RX"
-#define LPUART1_PIN_CFG UART_PIN_FIELDS(GPIOA, GPIO_PIN_9, GPIO_FUNCTION_0, \
-                                        GPIOA, GPIO_PIN_10, GPIO_FUNCTION_0)
+/* RX pin: PA10 AF0 (default), PB7 AF0 */
+#if defined(BSP_LPUART1_RX_PB7)
+#define LPUART1_RX_PORT  GPIOB
+#define LPUART1_RX_PIN   GPIO_PIN_7
+#define LPUART1_RX_AF    GPIO_FUNCTION_0
 #else
-#define LPUART1_PINS_HINT "PA2/TX PA3/RX"
-#define LPUART1_PIN_CFG UART_PIN_FIELDS(GPIOA, GPIO_PIN_2, GPIO_FUNCTION_3, \
-                                        GPIOA, GPIO_PIN_3, GPIO_FUNCTION_3)
+#define LPUART1_RX_PORT  GPIOA
+#define LPUART1_RX_PIN   GPIO_PIN_10
+#define LPUART1_RX_AF    GPIO_FUNCTION_0
 #endif
+
+#define LPUART1_PINS_HINT "see Kconfig"
+#define LPUART1_PIN_CFG UART_PIN_FIELDS(LPUART1_TX_PORT, LPUART1_TX_PIN, LPUART1_TX_AF, \
+                                        LPUART1_RX_PORT, LPUART1_RX_PIN, LPUART1_RX_AF)
 
 #define LPUART1_CONFIG \
     { .name = "lpuart1", .uart_type = 1, .Instance = LPUART1, .irq_type = LPUART1_IRQn, \
@@ -425,19 +529,31 @@ struct acm32_uart_config
 
 /* ---- LPUART2 ---- */
 #ifdef BSP_USING_LPUART2
-#if !defined(BSP_LPUART2_PINS_PB10) && !defined(BSP_LPUART2_PINS_PE3)
-#define BSP_LPUART2_PINS_PB10
+/* TX pin: PC0 AF0 (default), PE3 AF0 */
+#if defined(BSP_LPUART2_TX_PE3)
+#define LPUART2_TX_PORT  GPIOE
+#define LPUART2_TX_PIN   GPIO_PIN_3
+#define LPUART2_TX_AF    GPIO_FUNCTION_0
+#else
+#define LPUART2_TX_PORT  GPIOC
+#define LPUART2_TX_PIN   GPIO_PIN_0
+#define LPUART2_TX_AF    GPIO_FUNCTION_0
 #endif
 
-#if defined(BSP_LPUART2_PINS_PE3)
-#define LPUART2_PINS_HINT "PE3/TX PE4/RX"
-#define LPUART2_PIN_CFG UART_PIN_FIELDS(GPIOE, GPIO_PIN_3, GPIO_FUNCTION_0, \
-                                        GPIOE, GPIO_PIN_4, GPIO_FUNCTION_0)
+/* RX pin: PC1 AF0 (default), PE4 AF0 */
+#if defined(BSP_LPUART2_RX_PE4)
+#define LPUART2_RX_PORT  GPIOE
+#define LPUART2_RX_PIN   GPIO_PIN_4
+#define LPUART2_RX_AF    GPIO_FUNCTION_0
 #else
-#define LPUART2_PINS_HINT "PB10/TX PB11/RX"
-#define LPUART2_PIN_CFG UART_PIN_FIELDS(GPIOB, GPIO_PIN_10, GPIO_FUNCTION_3, \
-                                        GPIOB, GPIO_PIN_11, GPIO_FUNCTION_3)
+#define LPUART2_RX_PORT  GPIOC
+#define LPUART2_RX_PIN   GPIO_PIN_1
+#define LPUART2_RX_AF    GPIO_FUNCTION_0
 #endif
+
+#define LPUART2_PINS_HINT "see Kconfig"
+#define LPUART2_PIN_CFG UART_PIN_FIELDS(LPUART2_TX_PORT, LPUART2_TX_PIN, LPUART2_TX_AF, \
+                                        LPUART2_RX_PORT, LPUART2_RX_PIN, LPUART2_RX_AF)
 
 #define LPUART2_CONFIG \
     { .name = "lpuart2", .uart_type = 1, .Instance = LPUART2, .irq_type = LPUART2_IRQn, \

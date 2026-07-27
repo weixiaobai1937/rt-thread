@@ -31,6 +31,11 @@
 #define FDCAN_FILTER_LEN_16    16
 #define FDCAN_FILTER_LEN_32    32
 
+/* CAN 采样点配置（千分比，875 = 87.5%），可在 rtconfig.h 或 Kconfig 中覆盖 */
+#ifndef CAN_SAMPLE_POINT_PER_THOUSAND
+#define CAN_SAMPLE_POINT_PER_THOUSAND   875U
+#endif
+
 /* ==================== 波特率计算 ==================== */
 
 /*
@@ -52,7 +57,7 @@ static rt_err_t can_baud_rate_calc(uint32_t baud_rate,
         if (total_tq < 4 || total_tq > 258)
             continue;
 
-        uint32_t ts2 = (total_tq * 125U) / 1000U;
+        uint32_t ts2 = (total_tq * (1000U - CAN_SAMPLE_POINT_PER_THOUSAND)) / 1000U;
         if (ts2 < 1)
             ts2 = 1;
         if (ts2 > 128)

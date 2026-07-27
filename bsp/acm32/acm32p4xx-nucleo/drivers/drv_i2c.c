@@ -65,6 +65,18 @@ static struct acm32_i2c_config i2c_config[] =
 
 static struct acm32_i2c i2c_objs[sizeof(i2c_config) / sizeof(i2c_config[0])] = {0};
 
+/* Lookup i2c_obj by HAL handle Instance pointer (safe alternative to rt_container_of) */
+static struct acm32_i2c *i2c_find(I2C_TypeDef *Instance)
+{
+    size_t i;
+    for (i = 0; i < sizeof(i2c_objs) / sizeof(i2c_objs[0]); i++)
+    {
+        if (i2c_objs[i].config && i2c_objs[i].config->Instance == Instance)
+            return &i2c_objs[i];
+    }
+    return NULL;
+}
+
 static void acm32_i2c_gpio_clk_enable(GPIO_TypeDef *port)
 {
     if (port == GPIOA)
@@ -175,9 +187,11 @@ void HAL_I2C_MspInit(I2C_HandleTypeDef *hi2c)
 
     RT_ASSERT(hi2c != RT_NULL);
 
-    i2c_obj = rt_container_of(hi2c, struct acm32_i2c, handle);
+    i2c_obj = i2c_find(hi2c->Instance);
+    if (i2c_obj == RT_NULL || i2c_obj->config == RT_NULL)
+        return;
+
     cfg = i2c_obj->config;
-    RT_ASSERT(cfg != RT_NULL);
 
     acm32_i2c_periph_clk_enable(cfg->Instance);
     acm32_i2c_gpio_clk_enable(cfg->scl_port);

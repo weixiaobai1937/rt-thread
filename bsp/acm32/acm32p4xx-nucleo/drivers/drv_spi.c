@@ -250,8 +250,18 @@ static rt_uint32_t acm32_spi_baud_prescaler(rt_uint32_t max_hz)
 #ifdef ACM32_SPI_USING_DMA
 static void acm32_spi_dma_fill(DMA_HandleTypeDef *hdma,
                                const struct acm32_spi_dma_config *cfg,
-                               rt_uint32_t dataflow)
+                               rt_uint32_t dataflow,
+                               rt_uint32_t data_width)
 {
+    uint32_t dma_width;
+
+    if (data_width == 16)
+        dma_width = DMA_SRCWIDTH_HALFWORD;
+    else if (data_width >= 32)
+        dma_width = DMA_SRCWIDTH_WORD;
+    else
+        dma_width = DMA_SRCWIDTH_BYTE;
+
     hdma->Instance = cfg->Instance;
     hdma->Channel  = cfg->Channel;
     hdma->Init.Mode       = DMA_MODE_NORMAL;
@@ -261,8 +271,8 @@ static void acm32_spi_dma_fill(DMA_HandleTypeDef *hdma,
                             DMA_SRCINCDEC_INC : DMA_SRCINCDEC_DISABLE;
     hdma->Init.DestIncDec = (dataflow == DMA_DATAFLOW_M2P) ?
                             DMA_DESTINCDEC_DISABLE : DMA_DESTINCDEC_INC;
-    hdma->Init.SrcWidth   = DMA_SRCWIDTH_BYTE;
-    hdma->Init.DestWidth  = DMA_DESTWIDTH_BYTE;
+    hdma->Init.SrcWidth   = dma_width;
+    hdma->Init.DestWidth  = dma_width;
     hdma->Init.SrcBurst   = DMA_SRCBURST_1;
     hdma->Init.DestBurst  = DMA_DESTBURST_1;
     hdma->Init.SrcMaster  = DMA_SRCMASTER_1;
@@ -287,11 +297,14 @@ static rt_err_t acm32_spi_dma_init(struct acm32_spi *spi_drv)
         (rt_uint32_t)spi_drv->dma_rx_cfg->Instance >= (rt_uint32_t)DMA2_Channel0)
         __HAL_RCC_DMA2_CLK_ENABLE();
 
-    acm32_spi_dma_fill(&spi_drv->dma_tx, spi_drv->dma_tx_cfg, DMA_DATAFLOW_M2P);
+    /* Use cfg->data_width to select DMA width (default 8-bit) */
+    rt_uint32_t dw = spi_drv->cfg ? spi_drv->cfg->data_width : 8;
+
+    acm32_spi_dma_fill(&spi_drv->dma_tx, spi_drv->dma_tx_cfg, DMA_DATAFLOW_M2P, dw);
     if (HAL_DMA_Init(&spi_drv->dma_tx) != HAL_OK)
         return -RT_EIO;
 
-    acm32_spi_dma_fill(&spi_drv->dma_rx, spi_drv->dma_rx_cfg, DMA_DATAFLOW_P2M);
+    acm32_spi_dma_fill(&spi_drv->dma_rx, spi_drv->dma_rx_cfg, DMA_DATAFLOW_P2M, dw);
     if (HAL_DMA_Init(&spi_drv->dma_rx) != HAL_OK)
         return -RT_EIO;
 

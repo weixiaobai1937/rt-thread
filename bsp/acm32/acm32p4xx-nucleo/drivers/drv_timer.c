@@ -232,7 +232,7 @@ void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
     {
         rt_clock_timer_isr(&acm32_clock_timer_obj[TIM1_INDEX].time_device);
     }
-    TIM1->SR = 0;
+    TIM1->SR = ~(uint32_t)TIMER_SR_UIF;
     rt_interrupt_leave();
 }
 #endif
@@ -245,7 +245,7 @@ void TIM2_IRQHandler(void)
     {
         rt_clock_timer_isr(&acm32_clock_timer_obj[TIM2_INDEX].time_device);
     }
-    TIM2->SR = 0;
+    TIM2->SR = ~(uint32_t)TIMER_SR_UIF;
     rt_interrupt_leave();
 }
 #endif
@@ -258,7 +258,7 @@ void TIM3_IRQHandler(void)
     {
         rt_clock_timer_isr(&acm32_clock_timer_obj[TIM3_INDEX].time_device);
     }
-    TIM3->SR = 0;
+    TIM3->SR = ~(uint32_t)TIMER_SR_UIF;
     rt_interrupt_leave();
 }
 #endif
@@ -271,7 +271,7 @@ void TIM6_IRQHandler(void)
     {
         rt_clock_timer_isr(&acm32_clock_timer_obj[TIM6_INDEX].time_device);
     }
-    TIM6->SR = 0;
+    TIM6->SR = ~(uint32_t)TIMER_SR_UIF;
     rt_interrupt_leave();
 }
 #endif
@@ -284,7 +284,7 @@ void TIM10_IRQHandler(void)
     {
         rt_clock_timer_isr(&acm32_clock_timer_obj[TIM10_INDEX].time_device);
     }
-    TIM10->SR = 0;
+    TIM10->SR = ~(uint32_t)TIMER_SR_UIF;
     rt_interrupt_leave();
 }
 #endif

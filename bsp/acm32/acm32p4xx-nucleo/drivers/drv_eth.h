@@ -13,7 +13,7 @@ extern "C" {
 /*
  * PHY nRST: any GPIO via Kconfig BSP_ETH_PHY_RST_PIN (RT-Thread pin index).
  *   PXn = port*16 + n  (PA0=0 .. PB14=30, PC0=32, ...)
- * Decode to HAL port/pin; clock enable in drv_eth.c.
+ * Port is resolved via eth_phy_rst_port() in drv_eth.c (switch on PORT_IDX).
  */
 #ifndef BSP_ETH_PHY_RST_PIN
 #define BSP_ETH_PHY_RST_PIN         30  /* PB14 default */
@@ -22,9 +22,6 @@ extern "C" {
 #define ETH_PHY_RST_PORT_IDX        ((BSP_ETH_PHY_RST_PIN) / 16)
 #define ETH_PHY_RST_PIN_NUM         ((BSP_ETH_PHY_RST_PIN) % 16)
 #define ETH_PHY_RST_PIN             ((uint32_t)(1UL << ETH_PHY_RST_PIN_NUM))
-/* GPIOA..H are 0x400 apart on ACM32P4 */
-#define ETH_PHY_RST_PORT            ((GPIO_TypeDef *)(GPIOA_BASE_ADDR + \
-                                    (0x400UL * (uint32_t)ETH_PHY_RST_PORT_IDX)))
 
 /* ========== IEEE 802.3 Standard Registers ========== */
 #define PHY_REG_BCR                 0x00U   /* Basic Control */
