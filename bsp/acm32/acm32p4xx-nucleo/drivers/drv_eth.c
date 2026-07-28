@@ -783,8 +783,8 @@ static rt_err_t rt_acm32_eth_init(rt_device_t dev)
 
 #if defined(__ARMCC_VERSION)
         {
-            extern const uint32_t Image$$RW_IRAM1$$ZI$$Limit;
-            uintptr_t zi = (uintptr_t)&Image$$RW_IRAM1$$ZI$$Limit;
+            extern const uint32_t Image$$RW_DTCM$$ZI$$Limit;
+            uintptr_t zi = (uintptr_t)&Image$$RW_DTCM$$ZI$$Limit;
             if (zi > sram_base)
             {
                 LOG_E("BSS/ZI 0x%08X overlaps ETH SRAM1 0x%08X",

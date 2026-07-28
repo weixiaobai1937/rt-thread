@@ -74,24 +74,32 @@ static int rt_hw_lptimer_init(void)
                                    HAL_LPTIM_AutoReloadMatchCallback) != HAL_OK)
     {
         LOG_E("LPTIM1 register callback failed");
+        HAL_LPTIM_DeInit(&hlptim1);
+        NVIC_DisableIRQ(LPTIM1_IRQn);
         return -RT_ERROR;
     }
 
     if (HAL_LPTIM_ConfigCountValue(&hlptim1, 0, 0xFFFF, 0) != HAL_OK)
     {
         LOG_E("LPTIM1 config count failed");
+        HAL_LPTIM_DeInit(&hlptim1);
+        NVIC_DisableIRQ(LPTIM1_IRQn);
         return -RT_ERROR;
     }
 
     if (HAL_LPTIM_EnableIT(&hlptim1, LPTIM_IT_ARRM) != HAL_OK)
     {
         LOG_E("LPTIM1 enable IT failed");
+        HAL_LPTIM_DeInit(&hlptim1);
+        NVIC_DisableIRQ(LPTIM1_IRQn);
         return -RT_ERROR;
     }
 
     if (HAL_LPTIM_Timeout_Start(&hlptim1) != HAL_OK)
     {
         LOG_E("LPTIM1 start failed");
+        HAL_LPTIM_DeInit(&hlptim1);
+        NVIC_DisableIRQ(LPTIM1_IRQn);
         return -RT_ERROR;
     }
 

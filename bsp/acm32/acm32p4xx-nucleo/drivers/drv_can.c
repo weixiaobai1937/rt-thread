@@ -53,7 +53,7 @@ static rt_err_t can_baud_rate_calc(uint32_t baud_rate,
 
     for (uint32_t presc = 1; presc <= 512; presc++)
     {
-        uint32_t total_tq = FDCAN_CLOCK_HZ / (presc * baud_rate);
+        uint32_t total_tq = (FDCAN_CLOCK_HZ + presc * baud_rate / 2) / (presc * baud_rate);
         if (total_tq < 4 || total_tq > 258)
             continue;
 
@@ -214,7 +214,7 @@ static void fdcan_msp_init(FDCAN_HandleTypeDef *hfdcan)
         gpio.Alternate = FDCAN1_AF;
         HAL_GPIO_Init(FDCAN1_RX_PORT, &gpio);
 
-        HAL_NVIC_SetPriority(FDCAN1_IRQn, 0, 1);
+        HAL_NVIC_SetPriority(FDCAN1_IRQn, 2, 0);
         HAL_NVIC_EnableIRQ(FDCAN1_IRQn);
 #endif
     }
@@ -233,7 +233,7 @@ static void fdcan_msp_init(FDCAN_HandleTypeDef *hfdcan)
         gpio.Alternate = FDCAN2_AF;
         HAL_GPIO_Init(FDCAN2_RX_PORT, &gpio);
 
-        HAL_NVIC_SetPriority(FDCAN2_IRQn, 0, 1);
+        HAL_NVIC_SetPriority(FDCAN2_IRQn, 2, 0);
         HAL_NVIC_EnableIRQ(FDCAN2_IRQn);
 #endif
     }
@@ -395,6 +395,9 @@ static rt_err_t _can_control(struct rt_can_device *can, int cmd, void *arg)
 
     case RT_CAN_CMD_GET_STATUS:
     {
+        if (arg == RT_NULL)
+            return -RT_EINVAL;
+
         fdcan_ecc_u ecc;
         ecc.w = pdrv_can->fdcanHandle.Instance->ECC;
 
@@ -460,6 +463,24 @@ static rt_err_t _can_control(struct rt_can_device *can, int cmd, void *arg)
     return RT_EOK;
 }
 
+/* 填充 FDCAN 发送报文头（阻塞/非阻塞发送共用） */
+static void fill_tx_header(FDCAN_TxHeaderTypeDef *hdr, const struct rt_can_msg *pmsg)
+{
+    hdr->ID.w = 0;
+    hdr->FrameInfo.w = 0;
+    hdr->ID.b.ID = pmsg->id;
+
+    if (pmsg->ide == RT_CAN_EXTID)
+        hdr->FrameInfo.b.IDE = FDCAN_EXTENDED_ID;
+    else
+        hdr->FrameInfo.b.IDE = FDCAN_STANDARD_ID;
+
+    hdr->FrameInfo.b.RTR = (pmsg->rtr == RT_CAN_RTR) ? 1 : 0;
+    hdr->FrameInfo.b.DLC = len_to_dlc(pmsg->len);
+    hdr->FrameInfo.b.FDF = 0;
+    hdr->FrameInfo.b.BRS = 0;
+}
+
 static rt_ssize_t _can_sendmsg(struct rt_can_device *can, const void *buf, rt_uint32_t boxno)
 {
     acm32_can_t *pdrv_can;
@@ -474,20 +495,7 @@ static rt_ssize_t _can_sendmsg(struct rt_can_device *can, const void *buf, rt_ui
 
     pmsg = (struct rt_can_msg *)buf;
 
-    /* 使用局部变量避免多线程竞争 */
-    tx_header.ID.w = 0;
-    tx_header.FrameInfo.w = 0;
-    tx_header.ID.b.ID = pmsg->id;
-
-    if (pmsg->ide == RT_CAN_EXTID)
-        tx_header.FrameInfo.b.IDE = FDCAN_EXTENDED_ID;
-    else
-        tx_header.FrameInfo.b.IDE = FDCAN_STANDARD_ID;
-
-    tx_header.FrameInfo.b.RTR = (pmsg->rtr == RT_CAN_RTR) ? 1 : 0;
-    tx_header.FrameInfo.b.DLC = len_to_dlc(pmsg->len);
-    tx_header.FrameInfo.b.FDF = 0;
-    tx_header.FrameInfo.b.BRS = 0;
+    fill_tx_header(&tx_header, pmsg);
 
     if (HAL_FDCAN_TransmitMessageByPTB(&pdrv_can->fdcanHandle,
                                         &tx_header,
@@ -549,20 +557,7 @@ static rt_ssize_t _can_sendmsg_nonblocking(struct rt_can_device *can, const void
 
     pmsg = (struct rt_can_msg *)buf;
 
-    /* 使用局部变量避免多线程竞争 */
-    tx_header.ID.w = 0;
-    tx_header.FrameInfo.w = 0;
-    tx_header.ID.b.ID = pmsg->id;
-
-    if (pmsg->ide == RT_CAN_EXTID)
-        tx_header.FrameInfo.b.IDE = FDCAN_EXTENDED_ID;
-    else
-        tx_header.FrameInfo.b.IDE = FDCAN_STANDARD_ID;
-
-    tx_header.FrameInfo.b.RTR = (pmsg->rtr == RT_CAN_RTR) ? 1 : 0;
-    tx_header.FrameInfo.b.DLC = len_to_dlc(pmsg->len);
-    tx_header.FrameInfo.b.FDF = 0;
-    tx_header.FrameInfo.b.BRS = 0;
+    fill_tx_header(&tx_header, pmsg);
 
     if (HAL_FDCAN_AddMessageToSTB(&pdrv_can->fdcanHandle,
                                    &tx_header,
@@ -593,7 +588,7 @@ void HAL_FDCAN_RxBufferNewMessageCallback(FDCAN_HandleTypeDef *hfdcan)
         rt_hw_can_isr(&st_DrvCan1.device, RT_CAN_EVENT_RX_IND | (0 << 8));
 #endif
     }
-    else
+    else if (hfdcan->Instance == FDCAN2)
     {
 #ifdef BSP_USING_FDCAN2
         rt_hw_can_isr(&st_DrvCan2.device, RT_CAN_EVENT_RX_IND | (0 << 8));
@@ -609,7 +604,7 @@ void HAL_FDCAN_TXPTBCompletedCallback(FDCAN_HandleTypeDef *hfdcan)
         rt_hw_can_isr(&st_DrvCan1.device, RT_CAN_EVENT_TX_DONE);
 #endif
     }
-    else
+    else if (hfdcan->Instance == FDCAN2)
     {
 #ifdef BSP_USING_FDCAN2
         rt_hw_can_isr(&st_DrvCan2.device, RT_CAN_EVENT_TX_DONE);
@@ -625,7 +620,7 @@ void HAL_FDCAN_TXSTBCompletedCallback(FDCAN_HandleTypeDef *hfdcan)
         rt_hw_can_isr(&st_DrvCan1.device, RT_CAN_EVENT_TX_DONE);
 #endif
     }
-    else
+    else if (hfdcan->Instance == FDCAN2)
     {
 #ifdef BSP_USING_FDCAN2
         rt_hw_can_isr(&st_DrvCan2.device, RT_CAN_EVENT_TX_DONE);
@@ -647,7 +642,7 @@ void HAL_FDCAN_ErrorCallback(FDCAN_HandleTypeDef *hfdcan)
         rt_hw_can_isr(&st_DrvCan1.device, RT_CAN_EVENT_TX_FAIL);
 #endif
     }
-    else
+    else if (hfdcan->Instance == FDCAN2)
     {
 #ifdef BSP_USING_FDCAN2
         st_DrvCan2.device.status.rcverrcnt = ecc.b.RECNT;

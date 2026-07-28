@@ -52,7 +52,13 @@ static time_t get_rtc_timestamp(void)
     tm_new.tm_mon  = bcd2dec(d.Month) - 1;
     tm_new.tm_year = bcd2dec(d.Year) + 100;
 
-    return timegm(&tm_new);
+    time_t ts = timegm(&tm_new);
+    if (ts == (time_t)-1)
+    {
+        LOG_E("RTC: timegm failed, BCD values may be invalid");
+        return 0;
+    }
+    return ts;
 }
 
 static rt_err_t set_rtc_time_stamp(time_t time_stamp)
@@ -62,9 +68,9 @@ static rt_err_t set_rtc_time_stamp(time_t time_stamp)
     struct tm now;
 
     gmtime_r(&time_stamp, &now);
-    if (now.tm_year < 100)
+    if (now.tm_year < 100 || now.tm_year > 199)
     {
-        return -RT_ERROR;
+        return -RT_ERROR;  /* RTC 仅支持 2000-2099 年 */
     }
 
     t.Second = dec2bcd((rt_uint8_t)now.tm_sec);
@@ -75,16 +81,8 @@ static rt_err_t set_rtc_time_stamp(time_t time_stamp)
     d.Year   = dec2bcd((rt_uint8_t)(now.tm_year - 100));
     d.WeekDay = (rt_uint8_t)((now.tm_wday == 0) ? 7 : now.tm_wday);
 
-    if (HAL_RTC_SetTime(&t) != HAL_OK)
-    {
-        LOG_E("HAL_RTC_SetTime failed");
-        return -RT_ERROR;
-    }
-    if (HAL_RTC_SetDate(&d) != HAL_OK)
-    {
-        LOG_E("HAL_RTC_SetDate failed");
-        return -RT_ERROR;
-    }
+    HAL_RTC_SetTime(&t);
+    HAL_RTC_SetDate(&d);
 
     return RT_EOK;
 }

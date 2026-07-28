@@ -10,6 +10,7 @@
 
 #include <board.h>
 #include <rtdevice.h>
+#include "drv_tim_utils.h"
 
 #if defined(RT_USING_INPUT_CAPTURE) && (defined(BSP_USING_CAPTURE2) || defined(BSP_USING_CAPTURE3))
 
@@ -45,28 +46,6 @@ static struct acm32_inputcapture acm32_inputcapture_obj[] =
     { .tim_handle.Instance = TIM3, .name = "capture3" },
 #endif
 };
-
-static rt_uint32_t acm32_timer_clock_get(TIM_TypeDef *instance)
-{
-    rt_uint32_t pclk;
-    uint32_t base = (uint32_t)instance;
-
-    switch (base)
-    {
-    case TIM1_BASE_ADDR:
-        pclk = HAL_RCC_GetPCLK2Freq();
-        break;
-    case TIM2_BASE_ADDR:
-    case TIM3_BASE_ADDR:
-    default:
-        pclk = HAL_RCC_GetPCLK1Freq();
-        break;
-    }
-
-    if (HAL_RCC_GetHCLKFreq() != pclk)
-        pclk <<= 1;
-    return pclk;
-}
 
 static void acm32_gpio_clk_enable(GPIO_TypeDef *port)
 {
@@ -113,7 +92,7 @@ static rt_err_t capture_init(struct rt_inputcapture_device *inputcapture)
 
     acm32_capture_gpio_init(dev);
 
-    dev->tim_clock_hz = acm32_timer_clock_get(dev->tim_handle.Instance);
+    dev->tim_clock_hz = acm32_tim_clock_get(dev->tim_handle.Instance);
 
     dev->tim_handle.Init.Prescaler = (dev->tim_clock_hz / 1000000) - 1;
     dev->tim_handle.Init.Period = (dev->tim_handle.Instance == TIM2) ? 0xFFFFFFFF : 0xFFFF;

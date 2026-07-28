@@ -112,7 +112,11 @@ static rt_err_t pulse_encoder_init(struct rt_pulse_encoder_device *pulse_encoder
 
     slave_cfg.SlaveMode = TIM_SLAVE_MODE_ENC3;
     slave_cfg.InputTrigger = TIM_TS_ITR0;
-    HAL_TIMER_Slave_Mode_Config(&dev->tim_handle, &slave_cfg);
+    if (HAL_TIMER_Slave_Mode_Config(&dev->tim_handle, &slave_cfg) != HAL_OK)
+    {
+        LOG_E("%s slave mode config failed", dev->name);
+        return -RT_ERROR;
+    }
 
     /* 配置编码器模式 CC1S=01(CCMR1 bit0=1,bit1=0), CC2S=01(bit8=1,bit9=0)
      * 即通道1和通道2均配置为输入，TI1FP1/TI2FP2 作为编码器输入 */

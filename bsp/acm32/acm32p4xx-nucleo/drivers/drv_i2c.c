@@ -34,7 +34,7 @@ enum
 struct acm32_i2c_config
 {
     I2C_TypeDef      *Instance;
-    char             *name;
+    const char       *name;
     IRQn_Type         irq_type;
     uint32_t          clock_speed;
     GPIO_TypeDef     *scl_port;
@@ -111,10 +111,23 @@ static rt_uint16_t acm32_i2c_addr8(struct rt_i2c_msg *msg)
     return (rt_uint16_t)(msg->addr << 1);
 }
 
+/* 根据数据长度和时钟速度计算 I2C 操作超时时间（ms） */
+static uint32_t acm32_i2c_calc_timeout(struct acm32_i2c *hi2c, rt_uint16_t data_byte)
+{
+    /* 最坏情况：每字节 10 bits (8 data + ACK + 开销)，加上 start/stop */
+    rt_uint32_t bits = 10UL * data_byte + 20UL;
+    rt_uint32_t timeout = (bits * 1000UL) / (hi2c->config->clock_speed / 1000UL);
+    /* 至少 10ms，最多 1000ms */
+    if (timeout < 10) timeout = 10;
+    if (timeout > 1000) timeout = 1000;
+    return timeout;
+}
+
 static int acm32_i2c_read(struct acm32_i2c *hi2c, rt_uint16_t slave_address,
                           rt_uint8_t *p_buffer, rt_uint16_t data_byte)
 {
-    if (HAL_I2C_Master_Receive(&hi2c->handle, slave_address, p_buffer, data_byte, 1000) != HAL_OK)
+    uint32_t timeout = acm32_i2c_calc_timeout(hi2c, data_byte);
+    if (HAL_I2C_Master_Receive(&hi2c->handle, slave_address, p_buffer, data_byte, timeout) != HAL_OK)
     {
         return -1;
     }
@@ -124,7 +137,8 @@ static int acm32_i2c_read(struct acm32_i2c *hi2c, rt_uint16_t slave_address,
 static int acm32_i2c_write(struct acm32_i2c *hi2c, rt_uint16_t slave_address,
                            rt_uint8_t *p_buffer, rt_uint16_t data_byte)
 {
-    if (HAL_I2C_Master_Transmit(&hi2c->handle, slave_address, p_buffer, data_byte, 1000) != HAL_OK)
+    uint32_t timeout = acm32_i2c_calc_timeout(hi2c, data_byte);
+    if (HAL_I2C_Master_Transmit(&hi2c->handle, slave_address, p_buffer, data_byte, timeout) != HAL_OK)
     {
         return -1;
     }
@@ -145,6 +159,28 @@ static rt_ssize_t _i2c_xfer(struct rt_i2c_bus_device *bus, struct rt_i2c_msg msg
 
     /* 获取互斥锁保护总线事务 */
     rt_mutex_take(&i2c_obj->lock, RT_WAITING_FOREVER);
+
+    /* 优化：检测 write-then-read 模式（同一设备），使用 HAL_I2C_Mem_Read 发送 Sr */
+    if (num == 2 &&
+        !(msgs[0].flags & RT_I2C_RD) && (msgs[1].flags & RT_I2C_RD) &&
+        msgs[0].addr == msgs[1].addr &&
+        msgs[0].len > 0)
+    {
+        addr8 = acm32_i2c_addr8(&msgs[0]);
+        rt_uint16_t mem_size = (msgs[0].len >= 2) ? I2C_MEMADD_SIZE_16BIT : I2C_MEMADD_SIZE_8BIT;
+        rt_uint16_t mem_addr = (msgs[0].len >= 2)
+            ? (rt_uint16_t)((msgs[0].buf[0] << 8) | msgs[0].buf[1])
+            : (rt_uint16_t)msgs[0].buf[0];
+
+        if (HAL_I2C_Mem_Read(&i2c_obj->handle, addr8, mem_addr, mem_size,
+                             msgs[1].buf, msgs[1].len,
+                             acm32_i2c_calc_timeout(i2c_obj, msgs[0].len + msgs[1].len)) == HAL_OK)
+        {
+            rt_mutex_release(&i2c_obj->lock);
+            return 2;
+        }
+        /* Mem_Read 失败，回退到逐消息传输 */
+    }
 
     for (i = 0; i < num; i++)
     {
@@ -237,15 +273,15 @@ int rt_hw_i2c_init(void)
 
         if (HAL_I2C_Init(&i2c_objs[i].handle) != HAL_OK)
         {
-            LOG_E("%s HAL_I2C_Init failed", i2c_config[i].name);
-            return -RT_ERROR;
+            LOG_E("%s HAL_I2C_Init failed, skipping", i2c_config[i].name);
+            continue;
         }
 
         result = rt_i2c_bus_device_register(&i2c_objs[i].i2c_bus, i2c_config[i].name);
         if (result != RT_EOK)
         {
-            LOG_E("%s register failed", i2c_config[i].name);
-            return result;
+            LOG_E("%s register failed, skipping", i2c_config[i].name);
+            continue;
         }
 
         LOG_I("%s init ok", i2c_config[i].name);

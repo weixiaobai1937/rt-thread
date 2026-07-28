@@ -22,7 +22,7 @@
 extern int  rt_application_init(void);
 
 #if defined(__ARMCC_VERSION)
-    extern int Image$$RW_IRAM1$$ZI$$Limit;
+    extern int Image$$RW_DTCM$$ZI$$Limit;
 #elif __ICCARM__
     #pragma section="HEAP"
 #else
@@ -76,9 +76,9 @@ void rt_hw_board_init(void)
 #if defined(__ARMCC_VERSION)
 #if defined(BSP_USING_ETH)
     /* Heap ends before SRAM1 ETH desc/TX bounce reserve (see ETH_DMA_HEAP_END) */
-    rt_system_heap_init((void *)&Image$$RW_IRAM1$$ZI$$Limit, (void *)ETH_DMA_HEAP_END);
+    rt_system_heap_init((void *)&Image$$RW_DTCM$$ZI$$Limit, (void *)ETH_DMA_HEAP_END);
 #else
-    rt_system_heap_init((void *)&Image$$RW_IRAM1$$ZI$$Limit, (void *)SOC_SRAM_END_ADDR);
+    rt_system_heap_init((void *)&Image$$RW_DTCM$$ZI$$Limit, (void *)SOC_SRAM_END_ADDR);
 #endif
 #elif __ICCARM__
     rt_system_heap_init(__segment_end("HEAP"), (void *)SOC_SRAM_END_ADDR);

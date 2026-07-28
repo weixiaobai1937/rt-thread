@@ -231,6 +231,7 @@ static rt_err_t wdt_control(rt_watchdog_t *wdt, int cmd, void *arg)
             {
                 obj->handle.wdt.Instance = WDT;
                 HAL_WDT_Init(&obj->handle.wdt);
+                HAL_WDT_Refresh(&obj->handle.wdt);
             }
         }
         else
@@ -248,6 +249,7 @@ static rt_err_t wdt_control(rt_watchdog_t *wdt, int cmd, void *arg)
             {
                 obj->handle.iwdt.Instance = IWDT;
                 HAL_IWDT_Init(&obj->handle.iwdt);
+                HAL_IWDT_Refresh(&obj->handle.iwdt);
             }
         }
         break;
@@ -293,7 +295,8 @@ static rt_err_t wdt_control(rt_watchdog_t *wdt, int cmd, void *arg)
             if (obj->handle.wdt.Init.Load == 0)
             {
                 /* default ~1s */
-                calc_wdt_load(pclk, 1, &psc, &load);
+                if (calc_wdt_load(pclk, 1, &psc, &load) != RT_EOK)
+                    return -RT_ERROR;
                 obj->handle.wdt.Init.Prescaler = psc;
                 obj->handle.wdt.Init.Load = load;
             }
@@ -307,7 +310,8 @@ static rt_err_t wdt_control(rt_watchdog_t *wdt, int cmd, void *arg)
             if (obj->handle.iwdt.Init.Reload == 0)
             {
                 /* SDK default-ish: /32 * 4000 ≈ 4s @32kHz */
-                calc_iwdt_load(4, &psc, &load);
+                if (calc_iwdt_load(4, &psc, &load) != RT_EOK)
+                    return -RT_ERROR;
                 obj->handle.iwdt.Init.Prescaler = psc;
                 obj->handle.iwdt.Init.Reload = load;
             }
@@ -324,12 +328,14 @@ static rt_err_t wdt_control(rt_watchdog_t *wdt, int cmd, void *arg)
         if (obj->type == TYPE_WDT)
         {
             obj->handle.wdt.Instance->CTRL &= ~WDT_CTRL_EN;
+            obj->is_start = 0;
         }
         else
         {
-            obj->handle.iwdt.Instance->CMDR = IWDT_CMD_DISABLE;
+            /* IWDT 一旦启动无法停止，返回错误并保持 is_start 不变 */
+            LOG_W("IWDT cannot be stopped once started");
+            return -RT_EPERM;
         }
-        obj->is_start = 0;
         break;
 
     default:

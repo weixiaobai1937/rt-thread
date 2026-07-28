@@ -1129,66 +1129,46 @@ UART_IRQ_HANDLER(LPUART1, &uart_obj[LPUART1_INDEX])
 UART_IRQ_HANDLER(LPUART2, &uart_obj[LPUART2_INDEX])
 #endif
 
-/* ==================== DMA RX IRQ 实例化 ==================== */
+/* ==================== DMA IRQ 实例化（全通道覆盖，兼容任意 Kconfig 预设） ==================== */
 
 #ifdef HAL_DMA_MODULE_ENABLED
-#define DMA_RX_IRQ_HANDLER(irq_name)                   \
-    void irq_name##_IRQHandler(void)                    \
-    {                                                   \
-        rt_interrupt_enter();                           \
-        for (int _i = 0; _i < UART_MAX_INDEX; _i++)  \
-        {                                               \
-            if (uart_obj[_i].dma_rx.DMA &&             \
-                uart_obj[_i].dma_rx.DMA->INTSTATUS &   \
-                (1UL << uart_obj[_i].dma_rx.Channel))  \
-            {                                           \
-                HAL_DMA_IRQHandler(&uart_obj[_i].dma_rx);\
-            }                                           \
-        }                                               \
-        rt_interrupt_leave();                           \
+/*
+ * 每个 DMA 通道 IRQ 处理器搜索所有 uart_obj，
+ * 匹配 RX 或 TX DMA 实例后调用 HAL_DMA_IRQHandler。
+ * 这样不论 Kconfig 选择哪个 DMA 预设，正确的 IRQ 处理器都已定义。
+ */
+#define ACM32_DMA_IRQ_HANDLER(irq_name)                              \
+    void irq_name##_IRQHandler(void)                                 \
+    {                                                                \
+        rt_interrupt_enter();                                      \
+        for (int _i = 0; _i < UART_MAX_INDEX; _i++)                \
+        {                                                            \
+            if (uart_obj[_i].dma_rx.DMA &&                          \
+                uart_obj[_i].dma_rx.DMA->INTSTATUS &                \
+                (1UL << uart_obj[_i].dma_rx.Channel))               \
+            {                                                        \
+                HAL_DMA_IRQHandler(&uart_obj[_i].dma_rx);           \
+            }                                                        \
+            if (uart_obj[_i].dma_tx.DMA &&                          \
+                uart_obj[_i].dma_tx.DMA->INTSTATUS &                \
+                (1UL << uart_obj[_i].dma_tx.Channel))               \
+            {                                                        \
+                HAL_DMA_IRQHandler(&uart_obj[_i].dma_tx);           \
+            }                                                        \
+        }                                                            \
+        rt_interrupt_leave();                                        \
     }
 
-#ifdef BSP_USING_UART1_DMA
-DMA_RX_IRQ_HANDLER(DMA1_CH2)
-#endif
-#ifdef BSP_USING_UART2_DMA
-DMA_RX_IRQ_HANDLER(DMA2_CH0)
-#endif
-#ifdef BSP_USING_UART3_DMA
-DMA_RX_IRQ_HANDLER(DMA2_CH3)
-#endif
-#ifdef BSP_USING_UART4_DMA
-DMA_RX_IRQ_HANDLER(DMA1_CH0)
-#endif
-
-#define DMA_TX_IRQ_HANDLER(irq_name)                   \
-    void irq_name##_IRQHandler(void)                    \
-    {                                                   \
-        rt_interrupt_enter();                           \
-        for (int _i = 0; _i < UART_MAX_INDEX; _i++)  \
-        {                                               \
-            if (uart_obj[_i].dma_tx.DMA &&             \
-                uart_obj[_i].dma_tx.DMA->INTSTATUS &   \
-                (1UL << uart_obj[_i].dma_tx.Channel))  \
-            {                                           \
-                HAL_DMA_IRQHandler(&uart_obj[_i].dma_tx);\
-            }                                           \
-        }                                               \
-        rt_interrupt_leave();                           \
-    }
-
-#ifdef BSP_USING_UART1_DMA
-DMA_TX_IRQ_HANDLER(DMA1_CH1)
-#endif
-#ifdef BSP_USING_UART2_DMA
-DMA_TX_IRQ_HANDLER(DMA1_CH3)
-#endif
-#ifdef BSP_USING_UART3_DMA
-DMA_TX_IRQ_HANDLER(DMA2_CH2)
-#endif
-#ifdef BSP_USING_UART4_DMA
-DMA_TX_IRQ_HANDLER(DMA2_CH1)
-#endif
+/* DMA1 通道 0-3 */
+ACM32_DMA_IRQ_HANDLER(DMA1_CH0)
+ACM32_DMA_IRQ_HANDLER(DMA1_CH1)
+ACM32_DMA_IRQ_HANDLER(DMA1_CH2)
+ACM32_DMA_IRQ_HANDLER(DMA1_CH3)
+/* DMA2 通道 0-3 */
+ACM32_DMA_IRQ_HANDLER(DMA2_CH0)
+ACM32_DMA_IRQ_HANDLER(DMA2_CH1)
+ACM32_DMA_IRQ_HANDLER(DMA2_CH2)
+ACM32_DMA_IRQ_HANDLER(DMA2_CH3)
 #endif /* HAL_DMA_MODULE_ENABLED */
 
 #endif /* RT_USING_SERIAL_V2 */

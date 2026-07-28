@@ -10,6 +10,7 @@
 
 #include <board.h>
 #include <rtdevice.h>
+#include "drv_tim_utils.h"
 
 #if defined(RT_USING_PWM) && (defined(BSP_USING_PWM1) || defined(BSP_USING_PWM2) || \
                               defined(BSP_USING_PWM3) || defined(BSP_USING_PWM10))
@@ -141,18 +142,27 @@ static uint32_t hal_channel_from_rt_ch(uint32_t rt_ch)
     case 4:
         return TIM_CHANNEL_4;
     default:
-        return TIM_CHANNEL_1;
+        LOG_E("invalid PWM channel %u, valid: 1-4", rt_ch);
+        return 0xFFFFFFFF;  /* 无效通道哨兵值 */
     }
+}
+
+/* PWM 引脚初始化辅助函数：时钟使能 + GPIO 配置一步完成 */
+static void pwm_init_pin(GPIO_TypeDef *port, uint16_t pin, uint8_t af)
+{
+    GPIO_InitTypeDef gpio = {0};
+    gpio.Mode     = GPIO_MODE_AF_PP;
+    gpio.Pull     = GPIO_NOPULL;
+    gpio.Speed    = GPIO_SPEED_FREQ_HIGH;
+    gpio.Pin      = pin;
+    gpio.Alternate = af;
+    pwm_pin_gpio_clk_enable(port);
+    HAL_GPIO_Init(port, &gpio);
 }
 
 static void pwm_config_gpio(TIM_TypeDef *instance, rt_uint32_t channel)
 {
-    GPIO_InitTypeDef gpio = {0};
     uint32_t base = (uint32_t)instance;
-
-    gpio.Mode  = GPIO_MODE_AF_PP;
-    gpio.Pull  = GPIO_NOPULL;
-    gpio.Speed = GPIO_SPEED_FREQ_HIGH;
 
     switch (base)
     {
@@ -162,60 +172,36 @@ static void pwm_config_gpio(TIM_TypeDef *instance, rt_uint32_t channel)
 #ifdef BSP_USING_PWM1_CH1
         case 1:
 #ifdef BSP_PWM1_CH1_PE9
-            pwm_pin_gpio_clk_enable(GPIOE);
-            gpio.Pin = GPIO_PIN_9;
-            gpio.Alternate = GPIO_AF1;
-            HAL_GPIO_Init(GPIOE, &gpio);
+            pwm_init_pin(GPIOE, GPIO_PIN_9,  GPIO_AF1);
 #else
-            pwm_pin_gpio_clk_enable(GPIOA);
-            gpio.Pin = GPIO_PIN_8;
-            gpio.Alternate = GPIO_AF2;
-            HAL_GPIO_Init(GPIOA, &gpio);
+            pwm_init_pin(GPIOA, GPIO_PIN_8,  GPIO_AF2);
 #endif
             break;
 #endif
 #ifdef BSP_USING_PWM1_CH2
         case 2:
 #ifdef BSP_PWM1_CH2_PE11
-            pwm_pin_gpio_clk_enable(GPIOE);
-            gpio.Pin = GPIO_PIN_11;
-            gpio.Alternate = GPIO_AF1;
-            HAL_GPIO_Init(GPIOE, &gpio);
+            pwm_init_pin(GPIOE, GPIO_PIN_11, GPIO_AF1);
 #else
-            pwm_pin_gpio_clk_enable(GPIOA);
-            gpio.Pin = GPIO_PIN_9;
-            gpio.Alternate = GPIO_AF2;
-            HAL_GPIO_Init(GPIOA, &gpio);
+            pwm_init_pin(GPIOA, GPIO_PIN_9,  GPIO_AF2);
 #endif
             break;
 #endif
 #ifdef BSP_USING_PWM1_CH3
         case 3:
 #ifdef BSP_PWM1_CH3_PE13
-            pwm_pin_gpio_clk_enable(GPIOE);
-            gpio.Pin = GPIO_PIN_13;
-            gpio.Alternate = GPIO_AF1;
-            HAL_GPIO_Init(GPIOE, &gpio);
+            pwm_init_pin(GPIOE, GPIO_PIN_13, GPIO_AF1);
 #else
-            pwm_pin_gpio_clk_enable(GPIOA);
-            gpio.Pin = GPIO_PIN_10;
-            gpio.Alternate = GPIO_AF2;
-            HAL_GPIO_Init(GPIOA, &gpio);
+            pwm_init_pin(GPIOA, GPIO_PIN_10, GPIO_AF2);
 #endif
             break;
 #endif
 #ifdef BSP_USING_PWM1_CH4
         case 4:
 #ifdef BSP_PWM1_CH4_PE14
-            pwm_pin_gpio_clk_enable(GPIOE);
-            gpio.Pin = GPIO_PIN_14;
-            gpio.Alternate = GPIO_AF1;
-            HAL_GPIO_Init(GPIOE, &gpio);
+            pwm_init_pin(GPIOE, GPIO_PIN_14, GPIO_AF1);
 #else
-            pwm_pin_gpio_clk_enable(GPIOA);
-            gpio.Pin = GPIO_PIN_11;
-            gpio.Alternate = GPIO_AF2;
-            HAL_GPIO_Init(GPIOA, &gpio);
+            pwm_init_pin(GPIOA, GPIO_PIN_11, GPIO_AF2);
 #endif
             break;
 #endif
@@ -229,60 +215,36 @@ static void pwm_config_gpio(TIM_TypeDef *instance, rt_uint32_t channel)
 #ifdef BSP_USING_PWM2_CH1
         case 1:
 #ifdef BSP_PWM2_CH1_PA0
-            pwm_pin_gpio_clk_enable(GPIOA);
-            gpio.Pin = GPIO_PIN_0;
-            gpio.Alternate = GPIO_AF2;
-            HAL_GPIO_Init(GPIOA, &gpio);
+            pwm_init_pin(GPIOA, GPIO_PIN_0,  GPIO_AF2);
 #else
-            pwm_pin_gpio_clk_enable(GPIOA);
-            gpio.Pin = GPIO_PIN_5;
-            gpio.Alternate = GPIO_AF2;
-            HAL_GPIO_Init(GPIOA, &gpio);
+            pwm_init_pin(GPIOA, GPIO_PIN_5,  GPIO_AF2);
 #endif
             break;
 #endif
 #ifdef BSP_USING_PWM2_CH2
         case 2:
 #ifdef BSP_PWM2_CH2_PA1
-            pwm_pin_gpio_clk_enable(GPIOA);
-            gpio.Pin = GPIO_PIN_1;
-            gpio.Alternate = GPIO_AF2;
-            HAL_GPIO_Init(GPIOA, &gpio);
+            pwm_init_pin(GPIOA, GPIO_PIN_1,  GPIO_AF2);
 #else
-            pwm_pin_gpio_clk_enable(GPIOB);
-            gpio.Pin = GPIO_PIN_3;
-            gpio.Alternate = GPIO_AF2;
-            HAL_GPIO_Init(GPIOB, &gpio);
+            pwm_init_pin(GPIOB, GPIO_PIN_3,  GPIO_AF2);
 #endif
             break;
 #endif
 #ifdef BSP_USING_PWM2_CH3
         case 3:
 #ifdef BSP_PWM2_CH3_PA2
-            pwm_pin_gpio_clk_enable(GPIOA);
-            gpio.Pin = GPIO_PIN_2;
-            gpio.Alternate = GPIO_AF2;
-            HAL_GPIO_Init(GPIOA, &gpio);
+            pwm_init_pin(GPIOA, GPIO_PIN_2,  GPIO_AF2);
 #else
-            pwm_pin_gpio_clk_enable(GPIOB);
-            gpio.Pin = GPIO_PIN_10;
-            gpio.Alternate = GPIO_AF2;
-            HAL_GPIO_Init(GPIOB, &gpio);
+            pwm_init_pin(GPIOB, GPIO_PIN_10, GPIO_AF2);
 #endif
             break;
 #endif
 #ifdef BSP_USING_PWM2_CH4
         case 4:
 #ifdef BSP_PWM2_CH4_PA3
-            pwm_pin_gpio_clk_enable(GPIOA);
-            gpio.Pin = GPIO_PIN_3;
-            gpio.Alternate = GPIO_AF2;
-            HAL_GPIO_Init(GPIOA, &gpio);
+            pwm_init_pin(GPIOA, GPIO_PIN_3,  GPIO_AF2);
 #else
-            pwm_pin_gpio_clk_enable(GPIOB);
-            gpio.Pin = GPIO_PIN_11;
-            gpio.Alternate = GPIO_AF2;
-            HAL_GPIO_Init(GPIOB, &gpio);
+            pwm_init_pin(GPIOB, GPIO_PIN_11, GPIO_AF2);
 #endif
             break;
 #endif
@@ -296,70 +258,40 @@ static void pwm_config_gpio(TIM_TypeDef *instance, rt_uint32_t channel)
 #ifdef BSP_USING_PWM3_CH1
         case 1:
 #ifdef BSP_PWM3_CH1_PA6
-            pwm_pin_gpio_clk_enable(GPIOA);
-            gpio.Pin = GPIO_PIN_6;
-            gpio.Alternate = GPIO_AF1;
-            HAL_GPIO_Init(GPIOA, &gpio);
+            pwm_init_pin(GPIOA, GPIO_PIN_6,  GPIO_AF1);
 #elif defined(BSP_PWM3_CH1_PB4)
-            pwm_pin_gpio_clk_enable(GPIOB);
-            gpio.Pin = GPIO_PIN_4;
-            gpio.Alternate = GPIO_AF1;
-            HAL_GPIO_Init(GPIOB, &gpio);
+            pwm_init_pin(GPIOB, GPIO_PIN_4,  GPIO_AF1);
 #elif defined(BSP_PWM3_CH1_PC6)
-            pwm_pin_gpio_clk_enable(GPIOC);
-            gpio.Pin = GPIO_PIN_6;
-            gpio.Alternate = GPIO_AF0;
-            HAL_GPIO_Init(GPIOC, &gpio);
+            pwm_init_pin(GPIOC, GPIO_PIN_6,  GPIO_AF0);
 #endif
             break;
 #endif
 #ifdef BSP_USING_PWM3_CH2
         case 2:
 #ifdef BSP_PWM3_CH2_PA7
-            pwm_pin_gpio_clk_enable(GPIOA);
-            gpio.Pin = GPIO_PIN_7;
-            gpio.Alternate = GPIO_AF1;
-            HAL_GPIO_Init(GPIOA, &gpio);
+            pwm_init_pin(GPIOA, GPIO_PIN_7,  GPIO_AF1);
 #elif defined(BSP_PWM3_CH2_PB5)
-            pwm_pin_gpio_clk_enable(GPIOB);
-            gpio.Pin = GPIO_PIN_5;
-            gpio.Alternate = GPIO_AF1;
-            HAL_GPIO_Init(GPIOB, &gpio);
+            pwm_init_pin(GPIOB, GPIO_PIN_5,  GPIO_AF1);
 #elif defined(BSP_PWM3_CH2_PC7)
-            pwm_pin_gpio_clk_enable(GPIOC);
-            gpio.Pin = GPIO_PIN_7;
-            gpio.Alternate = GPIO_AF0;
-            HAL_GPIO_Init(GPIOC, &gpio);
+            pwm_init_pin(GPIOC, GPIO_PIN_7,  GPIO_AF0);
 #endif
             break;
 #endif
 #ifdef BSP_USING_PWM3_CH3
         case 3:
 #ifdef BSP_PWM3_CH3_PB0
-            pwm_pin_gpio_clk_enable(GPIOB);
-            gpio.Pin = GPIO_PIN_0;
-            gpio.Alternate = GPIO_AF1;
-            HAL_GPIO_Init(GPIOB, &gpio);
+            pwm_init_pin(GPIOB, GPIO_PIN_0,  GPIO_AF1);
 #else
-            pwm_pin_gpio_clk_enable(GPIOC);
-            gpio.Pin = GPIO_PIN_8;
-            gpio.Alternate = GPIO_AF0;
-            HAL_GPIO_Init(GPIOC, &gpio);
+            pwm_init_pin(GPIOC, GPIO_PIN_8,  GPIO_AF0);
 #endif
             break;
 #endif
 #ifdef BSP_USING_PWM3_CH4
         case 4:
 #ifdef BSP_PWM3_CH4_PB1
-            pwm_pin_gpio_clk_enable(GPIOB);
-            gpio.Pin = GPIO_PIN_1;
-            gpio.Alternate = GPIO_AF1;
-            HAL_GPIO_Init(GPIOB, &gpio);
+            pwm_init_pin(GPIOB, GPIO_PIN_1,  GPIO_AF1);
 #else
-            pwm_pin_gpio_clk_enable(GPIOC);
-            gpio.Pin = GPIO_PIN_9;
-            gpio.Alternate = GPIO_AF0;
-            HAL_GPIO_Init(GPIOC, &gpio);
+            pwm_init_pin(GPIOC, GPIO_PIN_9,  GPIO_AF0);
 #endif
             break;
 #endif
@@ -373,25 +305,13 @@ static void pwm_config_gpio(TIM_TypeDef *instance, rt_uint32_t channel)
 #ifdef BSP_USING_PWM10_CH1
         case 1:
 #ifdef BSP_PWM10_CH1_PF7
-            pwm_pin_gpio_clk_enable(GPIOF);
-            gpio.Pin = GPIO_PIN_7;
-            gpio.Alternate = GPIO_AF0;
-            HAL_GPIO_Init(GPIOF, &gpio);
+            pwm_init_pin(GPIOF, GPIO_PIN_7,  GPIO_AF0);
 #elif defined(BSP_PWM10_CH1_PA4)
-            pwm_pin_gpio_clk_enable(GPIOA);
-            gpio.Pin = GPIO_PIN_4;
-            gpio.Alternate = GPIO_AF1;
-            HAL_GPIO_Init(GPIOA, &gpio);
+            pwm_init_pin(GPIOA, GPIO_PIN_4,  GPIO_AF1);
 #elif defined(BSP_PWM10_CH1_PB8)
-            pwm_pin_gpio_clk_enable(GPIOB);
-            gpio.Pin = GPIO_PIN_8;
-            gpio.Alternate = GPIO_AF1;
-            HAL_GPIO_Init(GPIOB, &gpio);
+            pwm_init_pin(GPIOB, GPIO_PIN_8,  GPIO_AF1);
 #elif defined(BSP_PWM10_CH1_PE3)
-            pwm_pin_gpio_clk_enable(GPIOE);
-            gpio.Pin = GPIO_PIN_3;
-            gpio.Alternate = GPIO_AF1;
-            HAL_GPIO_Init(GPIOE, &gpio);
+            pwm_init_pin(GPIOE, GPIO_PIN_3,  GPIO_AF1);
 #endif
             break;
 #endif
@@ -402,31 +322,6 @@ static void pwm_config_gpio(TIM_TypeDef *instance, rt_uint32_t channel)
     default:
         break;
     }
-}
-
-static rt_uint32_t pwm_timer_clock_get(TIM_TypeDef *instance)
-{
-    rt_uint32_t pclk;
-    uint32_t base = (uint32_t)instance;
-
-    switch (base)
-    {
-    case TIM1_BASE_ADDR:
-    case TIM10_BASE_ADDR:
-        pclk = HAL_RCC_GetPCLK2Freq();
-        break;
-    case TIM2_BASE_ADDR:
-    case TIM3_BASE_ADDR:
-    default:
-        pclk = HAL_RCC_GetPCLK1Freq();
-        break;
-    }
-
-    if (HAL_RCC_GetHCLKFreq() != pclk)
-    {
-        pclk <<= 1;
-    }
-    return pclk;
 }
 
 uint32_t HAL_TIMER_MSP_Init(TIM_HandleTypeDef *htim)
@@ -488,11 +383,11 @@ static rt_err_t drv_pwm_set(TIM_HandleTypeDef *htim, struct rt_pwm_configuration
         return -RT_EINVAL;
     }
 
-    timer_clk = pwm_timer_clock_get(htim->Instance);
+    timer_clk = acm32_tim_clock_get(htim->Instance);
     timer_clk /= 1000000UL;
 
     period = (rt_uint64_t)cfg->period * timer_clk / 1000ULL;
-    psc = period / PWM_MAX_PERIOD + 1;
+    psc = (period + PWM_MAX_PERIOD - 1) / PWM_MAX_PERIOD;
     period = period / psc;
 
     if (period < PWM_MIN_PERIOD)
@@ -511,6 +406,8 @@ static rt_err_t drv_pwm_set(TIM_HandleTypeDef *htim, struct rt_pwm_configuration
     }
 
     hal_ch = hal_channel_from_rt_ch(cfg->channel);
+    if (hal_ch == 0xFFFFFFFF)
+        return -RT_EINVAL;
 
     htim->Init.Prescaler         = psc - 1;
     htim->Init.Period            = period - 1;
@@ -519,7 +416,11 @@ static rt_err_t drv_pwm_set(TIM_HandleTypeDef *htim, struct rt_pwm_configuration
     htim->Init.ARRPreLoadEn      = TIM_ARR_PRELOAD_ENABLE;
     htim->Init.RepetitionCounter = 0;
 
-    HAL_TIMER_Base_Init(htim);
+    if (HAL_TIMER_Base_Init(htim) != HAL_OK)
+    {
+        LOG_E("HAL_TIMER_Base_Init failed for ch%u", channel);
+        return -RT_ERROR;
+    }
 
     {
         TIM_OC_InitTypeDef oc_cfg = {0};
@@ -532,7 +433,11 @@ static rt_err_t drv_pwm_set(TIM_HandleTypeDef *htim, struct rt_pwm_configuration
         oc_cfg.OCIdleState  = OUTPUT_DISABLE_IDLE_STATE;
         oc_cfg.OCNIdleState = OUTPUT_DISABLE_IDLE_STATE;
 
-        HAL_TIMER_Output_Config(htim->Instance, &oc_cfg, hal_ch);
+        if (HAL_TIMER_Output_Config(htim->Instance, &oc_cfg, hal_ch) != HAL_OK)
+        {
+            LOG_E("HAL_TIMER_Output_Config failed for ch%u", channel);
+            return -RT_ERROR;
+        }
     }
 
     htim->Instance->CNT = 0;
@@ -560,6 +465,12 @@ static rt_err_t drv_pwm_enable(TIM_HandleTypeDef *htim, struct rt_pwm_configurat
     else
     {
         HAL_TIMER_OC_Stop(htim->Instance, hal_ch);
+        /* 检查是否所有通道均已禁用，若是则停止定时器基计数器以省电 */
+        if ((htim->Instance->CCER & (TIM_CCER_CC1E | TIM_CCER_CC2E |
+                                     TIM_CCER_CC3E | TIM_CCER_CC4E)) == 0)
+        {
+            HAL_TIMER_Base_Stop(htim->Instance);
+        }
     }
 
     return RT_EOK;
@@ -571,7 +482,7 @@ static rt_err_t drv_pwm_get(TIM_HandleTypeDef *htim, struct rt_pwm_configuration
     rt_uint32_t hal_ch;
     rt_uint32_t ccr_val;
 
-    timer_clk = pwm_timer_clock_get(htim->Instance);
+    timer_clk = acm32_tim_clock_get(htim->Instance);
     timer_clk /= 1000000UL;
 
     hal_ch = hal_channel_from_rt_ch(cfg->channel);

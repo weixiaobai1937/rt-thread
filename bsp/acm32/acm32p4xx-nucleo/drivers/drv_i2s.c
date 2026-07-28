@@ -26,12 +26,6 @@
 #define I2S_TX_DMA_BLK_COUNT   2U
 #define I2S_TX_DMA_BUF_TOTAL   (I2S_TX_DMA_BLK_SIZE * I2S_TX_DMA_BLK_COUNT)
 
-/* I2S1 TX DMA 通道配置（当需要改变 DMA 通道时修改此处） */
-#define I2S1_TX_DMA_INSTANCE    DMA1_Channel0
-#define I2S1_TX_DMA_CHANNEL     0U
-#define I2S1_TX_DMA_REQID       DMA1_REQ_I2S1_TX
-#define I2S1_TX_DMA_IRQ         DMA1_CH0_IRQn
-
 /* I2S1 pin definitions: all AF7, verified against GPIO AF table */
 /* Per-signal pin selection via Kconfig */
 
@@ -97,8 +91,9 @@ struct acm32_i2s
     struct rt_audio_configure config;
     rt_uint8_t                tx_buf[I2S_TX_DMA_BLK_COUNT][I2S_TX_DMA_BLK_SIZE];
     rt_uint8_t                tx_idx;       /* 当前 DMA 传输的缓冲区索引 */
-    volatile rt_bool_t        tx_busy[I2S_TX_DMA_BLK_COUNT]; /* true=缓冲区正在被DMA使用 */
+    rt_uint8_t                tx_next_idx;  /* 下一个待填充的缓冲区索引 */
     rt_uint8_t                running;
+    rt_uint8_t                hal_inited;   /* HAL + DMA 已初始化，下次 start 跳过 */
 };
 
 static struct acm32_i2s g_i2s_dev;
@@ -128,7 +123,7 @@ static rt_err_t acm32_i2s_getcaps(struct rt_audio_device *audio, struct rt_audio
     RT_ASSERT(audio != RT_NULL);
     RT_ASSERT(caps != RT_NULL);
 
-    i2s_dev = (struct acm32_i2s *)audio;
+    i2s_dev = rt_container_of(audio, struct acm32_i2s, audio_dev);
 
     switch (caps->main_type)
     {
@@ -179,7 +174,7 @@ static rt_err_t acm32_i2s_configure(struct rt_audio_device *audio, struct rt_aud
     RT_ASSERT(audio != RT_NULL);
     RT_ASSERT(caps != RT_NULL);
 
-    i2s_dev = (struct acm32_i2s *)audio;
+    i2s_dev = rt_container_of(audio, struct acm32_i2s, audio_dev);
 
     switch (caps->main_type)
     {
@@ -222,7 +217,7 @@ static rt_err_t acm32_i2s_start(struct rt_audio_device *audio, int stream)
     I2S_HandleTypeDef *hi2s;
 
     RT_ASSERT(audio != RT_NULL);
-    i2s_dev = (struct acm32_i2s *)audio;
+    i2s_dev = rt_container_of(audio, struct acm32_i2s, audio_dev);
 
     if (stream != AUDIO_STREAM_REPLAY)
         return -RT_EINVAL;
@@ -238,45 +233,49 @@ static rt_err_t acm32_i2s_start(struct rt_audio_device *audio, int stream)
     hi2s->Init.IOSwitch      = I2S_IO_SWITCH_DISABLE;
     hi2s->Init.AudioFreq     = (uint32_t)i2s_dev->config.samplerate;
 
-    if (HAL_I2S_Init(hi2s) != HAL_OK)
+    if (!i2s_dev->hal_inited)
     {
-        LOG_E("HAL_I2S_Init failed");
-        return -RT_ERROR;
+        if (HAL_I2S_Init(hi2s) != HAL_OK)
+        {
+            LOG_E("HAL_I2S_Init failed");
+            return -RT_ERROR;
+        }
+
+        __HAL_RCC_DMA1_CLK_ENABLE();
+
+        hi2s->hdmatx                           = &i2s_dev->dma_tx;
+        i2s_dev->dma_tx.Instance               = DMA1_Channel0;
+        i2s_dev->dma_tx.Channel                = 0U;
+        i2s_dev->dma_tx.DMA                    = DMA1;
+        i2s_dev->dma_tx.Parent                 = (void *)hi2s;
+        i2s_dev->dma_tx.Init.Mode              = DMA_MODE_NORMAL;
+        i2s_dev->dma_tx.Init.DataFlow          = DMA_DATAFLOW_M2P;
+        i2s_dev->dma_tx.Init.ReqID             = DMA1_REQ_I2S1_TX;
+        i2s_dev->dma_tx.Init.SrcIncDec         = DMA_SRCINCDEC_INC;
+        i2s_dev->dma_tx.Init.DestIncDec        = DMA_DESTINCDEC_DISABLE;
+        i2s_dev->dma_tx.Init.SrcWidth          = DMA_SRCWIDTH_WORD;
+        i2s_dev->dma_tx.Init.DestWidth         = DMA_DESTWIDTH_WORD;
+        i2s_dev->dma_tx.Init.SrcBurst          = DMA_SRCBURST_1;
+        i2s_dev->dma_tx.Init.DestBurst         = DMA_DESTBURST_1;
+        i2s_dev->dma_tx.Init.SrcMaster         = DMA_SRCMASTER_1;
+        i2s_dev->dma_tx.Init.DestMaster        = DMA_DESTMASTER_1;
+        i2s_dev->dma_tx.Init.Lock              = 0U;
+        i2s_dev->dma_tx.Init.NextMaster        = 0U;
+
+        if (HAL_DMA_Init(&i2s_dev->dma_tx) != HAL_OK)
+        {
+            LOG_E("DMA_Init failed");
+            return -RT_ERROR;
+        }
+
+        NVIC_SetPriority(DMA1_CH0_IRQn, 2);
+        NVIC_EnableIRQ(DMA1_CH0_IRQn);
+
+        i2s_dev->hal_inited = 1;
     }
-
-    __HAL_RCC_DMA1_CLK_ENABLE();
-
-    hi2s->hdmatx                           = &i2s_dev->dma_tx;
-    i2s_dev->dma_tx.Instance               = I2S1_TX_DMA_INSTANCE;
-    i2s_dev->dma_tx.Channel                = I2S1_TX_DMA_CHANNEL;
-    i2s_dev->dma_tx.DMA                    = DMA1;
-    i2s_dev->dma_tx.Parent                 = (void *)hi2s;
-    i2s_dev->dma_tx.Init.Mode              = DMA_MODE_NORMAL;
-    i2s_dev->dma_tx.Init.DataFlow          = DMA_DATAFLOW_M2P;
-    i2s_dev->dma_tx.Init.ReqID             = I2S1_TX_DMA_REQID;
-    i2s_dev->dma_tx.Init.SrcIncDec         = DMA_SRCINCDEC_INC;
-    i2s_dev->dma_tx.Init.DestIncDec        = DMA_DESTINCDEC_DISABLE;
-    i2s_dev->dma_tx.Init.SrcWidth          = DMA_SRCWIDTH_WORD;
-    i2s_dev->dma_tx.Init.DestWidth         = DMA_DESTWIDTH_WORD;
-    i2s_dev->dma_tx.Init.SrcBurst          = DMA_SRCBURST_1;
-    i2s_dev->dma_tx.Init.DestBurst         = DMA_DESTBURST_1;
-    i2s_dev->dma_tx.Init.SrcMaster         = DMA_SRCMASTER_1;
-    i2s_dev->dma_tx.Init.DestMaster        = DMA_DESTMASTER_1;
-    i2s_dev->dma_tx.Init.Lock              = 0U;
-    i2s_dev->dma_tx.Init.NextMaster        = 0U;
-
-    if (HAL_DMA_Init(&i2s_dev->dma_tx) != HAL_OK)
-    {
-        LOG_E("DMA_Init failed");
-        return -RT_ERROR;
-    }
-
-    NVIC_SetPriority(I2S1_TX_DMA_IRQ, 2);
-    NVIC_EnableIRQ(I2S1_TX_DMA_IRQ);
 
     i2s_dev->tx_idx      = 0;
-    i2s_dev->tx_busy[0]  = RT_TRUE;  /* buf[0] 已提交给 DMA */
-    i2s_dev->tx_busy[1]  = RT_FALSE;
+    i2s_dev->tx_next_idx = 0;
     i2s_dev->running     = 1;
 
     rt_memset(i2s_dev->tx_buf[0], 0, I2S_TX_DMA_BLK_SIZE);
@@ -292,7 +291,7 @@ static rt_err_t acm32_i2s_stop(struct rt_audio_device *audio, int stream)
     struct acm32_i2s *i2s_dev;
 
     RT_ASSERT(audio != RT_NULL);
-    i2s_dev = (struct acm32_i2s *)audio;
+    i2s_dev = rt_container_of(audio, struct acm32_i2s, audio_dev);
 
     if (stream != AUDIO_STREAM_REPLAY)
         return -RT_EINVAL;
@@ -303,8 +302,7 @@ static rt_err_t acm32_i2s_stop(struct rt_audio_device *audio, int stream)
         i2s_dev->running = 0;
         rt_memset(i2s_dev->tx_buf, 0, I2S_TX_DMA_BUF_TOTAL);
         i2s_dev->tx_idx = 0;
-        i2s_dev->tx_busy[0] = RT_FALSE;
-        i2s_dev->tx_busy[1] = RT_FALSE;
+        i2s_dev->tx_next_idx = 0;
         LOG_I("I2S playback stopped");
     }
 
@@ -316,12 +314,10 @@ static rt_ssize_t acm32_i2s_transmit(struct rt_audio_device *audio,
                                       rt_size_t size)
 {
     struct acm32_i2s *i2s_dev;
-    rt_uint8_t target;
-    rt_base_t level;
 
     RT_ASSERT(audio != RT_NULL);
 
-    i2s_dev = (struct acm32_i2s *)audio;
+    i2s_dev = rt_container_of(audio, struct acm32_i2s, audio_dev);
 
     if (writeBuf == RT_NULL || size == 0)
         return 0;
@@ -329,23 +325,18 @@ static rt_ssize_t acm32_i2s_transmit(struct rt_audio_device *audio,
     if (size > I2S_TX_DMA_BLK_SIZE)
         size = I2S_TX_DMA_BLK_SIZE;
 
-    level = rt_hw_interrupt_disable();
-    /* 找一个未在 DMA 传输中的空闲缓冲区 */
-    for (target = 0; target < I2S_TX_DMA_BLK_COUNT; target++)
+    /* 检查下一个缓冲区是否正被 DMA 使用（双缓冲竞态保护） */
+    if (i2s_dev->tx_next_idx == i2s_dev->tx_idx)
     {
-        if (target != i2s_dev->tx_idx && !i2s_dev->tx_busy[target])
-            break;
-    }
-    if (target >= I2S_TX_DMA_BLK_COUNT)
-    {
-        /* 所有缓冲区都在使用中，丢弃数据 */
-        rt_hw_interrupt_enable(level);
+        /* 缓冲区已满，DMA 尚未完成当前传输，无法写入 */
         return 0;
     }
 
-    rt_memcpy(i2s_dev->tx_buf[target], writeBuf, size);
-    i2s_dev->tx_busy[target] = RT_TRUE;
-    rt_hw_interrupt_enable(level);
+    /* 写入下一个可用缓冲区，避免覆盖正在传输的缓冲区 */
+    rt_memcpy(i2s_dev->tx_buf[i2s_dev->tx_next_idx], writeBuf, size);
+
+    /* 更新下一个缓冲区索引 */
+    i2s_dev->tx_next_idx = (i2s_dev->tx_next_idx + 1) % I2S_TX_DMA_BLK_COUNT;
 
     return (rt_ssize_t)size;
 }
@@ -412,21 +403,17 @@ void HAL_I2S_MspInit(I2S_HandleTypeDef *hi2s)
 void HAL_I2S_DMATxCpltCallback(I2S_HandleTypeDef *hi2s)
 {
     struct acm32_i2s *i2s_dev = &g_i2s_dev;
-    rt_uint8_t old_idx;
 
     if (!i2s_dev->running)
         return;
 
     rt_audio_tx_complete(&i2s_dev->audio_dev);
 
-    old_idx = i2s_dev->tx_idx;
     i2s_dev->tx_idx = (i2s_dev->tx_idx + 1) % I2S_TX_DMA_BLK_COUNT;
-    i2s_dev->tx_busy[old_idx] = RT_FALSE;  /* 上一缓冲区已释放 */
 
     HAL_I2S_Transmit_DMA(hi2s,
                          (const uint32_t *)i2s_dev->tx_buf[i2s_dev->tx_idx],
                          (uint16_t)(I2S_TX_DMA_BLK_SIZE / sizeof(uint32_t)));
-    i2s_dev->tx_busy[i2s_dev->tx_idx] = RT_TRUE;
 }
 
 void HAL_I2S_ErrorCallback(I2S_HandleTypeDef *hi2s)

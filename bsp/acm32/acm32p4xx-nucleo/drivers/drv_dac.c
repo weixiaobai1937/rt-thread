@@ -46,15 +46,24 @@ void HAL_DAC_MspInit(DAC_HandleTypeDef *hdac)
         return;
     }
 
-    /* HAL SDK DAC MspInit: PA4=OUT1, PA5=OUT2 */
+    /* HAL SDK DAC MspInit: PA4=OUT1, PA5=OUT2，按需配置避免冲突 */
     __HAL_RCC_DAC1_CLK_ENABLE();
     __HAL_RCC_GPIOA_CLK_ENABLE();
 
-    gpio.Pin = GPIO_PIN_4 | GPIO_PIN_5;
     gpio.Pull = GPIO_NOPULL;
     gpio.Mode = GPIO_MODE_ANALOG_SWITCH_ON;
     gpio.Drive = GPIO_DRIVE_LEVEL7;
-    HAL_GPIO_Init(GPIOA, &gpio);
+
+    if (acm32_dac_obj.ch_enabled & (1U << 1))
+    {
+        gpio.Pin = GPIO_PIN_4;
+        HAL_GPIO_Init(GPIOA, &gpio);
+    }
+    if (acm32_dac_obj.ch_enabled & (1U << 2))
+    {
+        gpio.Pin = GPIO_PIN_5;
+        HAL_GPIO_Init(GPIOA, &gpio);
+    }
 }
 
 static rt_err_t _dac_enabled(struct rt_dac_device *device, rt_uint32_t channel)
@@ -71,14 +80,21 @@ static rt_err_t _dac_enabled(struct rt_dac_device *device, rt_uint32_t channel)
         return -RT_EINVAL;
     }
 
+    dacObj->ch_enabled |= (1U << channel);
+
     if (dacObj->handle.Instance == RT_NULL)
     {
         dacObj->handle.Instance = DAC1;
-        /* MSP configures PA4/PA5 per HAL SDK */
         if (HAL_DAC_Init(&dacObj->handle) != HAL_OK)
         {
+            dacObj->ch_enabled &= ~(1U << channel);
             return -RT_ERROR;
         }
+    }
+    else
+    {
+        /* 重新调用 MspInit 配置新通道的 GPIO 引脚 */
+        HAL_DAC_Init(&dacObj->handle);
     }
 
     /* Align with HAL SDK DAC_Config_OutPut_Voltage (DC output) */
@@ -94,14 +110,14 @@ static rt_err_t _dac_enabled(struct rt_dac_device *device, rt_uint32_t channel)
 
     if (HAL_DAC_ConfigChannel(&dacObj->handle, &sConfig, hal_ch) != HAL_OK)
     {
+        dacObj->ch_enabled &= ~(1U << channel);
         return -RT_ERROR;
     }
     if (HAL_DAC_Start(&dacObj->handle, hal_ch) != HAL_OK)
     {
+        dacObj->ch_enabled &= ~(1U << channel);
         return -RT_ERROR;
     }
-
-    dacObj->ch_enabled |= (1U << channel);
     return RT_EOK;
 }
 

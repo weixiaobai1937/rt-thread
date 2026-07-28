@@ -276,7 +276,7 @@ static struct pin_irq_map pin_irq_map[] =
     {EXTI_LINE_15, RT_NULL},
 };
 
-static struct rt_pin_irq_hdr pin_irq_hdr_tab[] =
+static volatile struct rt_pin_irq_hdr pin_irq_hdr_tab[] =
 {
     {-1, 0, RT_NULL, RT_NULL},
     {-1, 0, RT_NULL, RT_NULL},
@@ -429,7 +429,7 @@ static rt_err_t _pin_attach_irq(struct rt_device *device, rt_base_t pin,
     index = get_pin(pin);
     if (index == RT_NULL)
     {
-        return -RT_ENOSYS;
+        return -RT_EINVAL;
     }
 
     irqindex = PIN2INDEX(pin);
@@ -468,7 +468,7 @@ static rt_err_t _pin_dettach_irq(struct rt_device *device, rt_base_t pin)
     index = get_pin(pin);
     if (index == RT_NULL)
     {
-        return -RT_ENOSYS;
+        return -RT_EINVAL;
     }
 
     irqindex = PIN2INDEX(pin);
@@ -499,7 +499,7 @@ static rt_err_t _pin_irq_enable(struct rt_device *device, rt_base_t pin,
     index = get_pin(pin);
     if (index == RT_NULL)
     {
-        return -RT_ENOSYS;
+        return -RT_EINVAL;
     }
 
     irqindex = PIN2INDEX(pin);
@@ -511,7 +511,7 @@ static rt_err_t _pin_irq_enable(struct rt_device *device, rt_base_t pin,
         if (pin_irq_hdr_tab[irqindex].pin == -1)
         {
             rt_hw_interrupt_enable(level);
-            return -RT_ENOSYS;
+            return -RT_EPERM;  /* 未 attach 中断回调 */
         }
 
         pin_irq_map[irqindex].gpio = index->gpio;
@@ -536,13 +536,21 @@ static rt_err_t _pin_irq_enable(struct rt_device *device, rt_base_t pin,
 
         pin_irq_enable_mask |= 1 << irqindex;
 
+        /* 使能对应 EXTI NVIC 通道 */
+        if (irqindex <= 4)
+            NVIC_EnableIRQ((IRQn_Type)(EXTI0_IRQn + irqindex));
+        else if (irqindex <= 9)
+            NVIC_EnableIRQ(EXTI9_5_IRQn);
+        else
+            NVIC_EnableIRQ(EXTI15_10_IRQn);
+
         rt_hw_interrupt_enable(level);
     }
     else if (enabled == PIN_IRQ_DISABLE)
     {
         if ((pin_irq_enable_mask & (1 << irqindex)) == 0)
         {
-            return -RT_ENOSYS;
+            return -RT_EPERM;  /* 中断未使能，不能禁用 */
         }
 
         level = rt_hw_interrupt_disable();
@@ -551,11 +559,27 @@ static rt_err_t _pin_irq_enable(struct rt_device *device, rt_base_t pin,
 
         pin_irq_enable_mask &= ~(1 << irqindex);
 
+        /* 若该共享 IRQ 组内无其他使能的线，禁能 NVIC */
+        if (irqindex <= 4)
+        {
+            NVIC_DisableIRQ((IRQn_Type)(EXTI0_IRQn + irqindex));
+        }
+        else if (irqindex <= 9)
+        {
+            if ((pin_irq_enable_mask & 0x03E0) == 0)  /* bit 5-9 */
+                NVIC_DisableIRQ(EXTI9_5_IRQn);
+        }
+        else
+        {
+            if ((pin_irq_enable_mask & 0xFC00) == 0)  /* bit 10-15 */
+                NVIC_DisableIRQ(EXTI15_10_IRQn);
+        }
+
         rt_hw_interrupt_enable(level);
     }
     else
     {
-        return -RT_ENOSYS;
+        return -RT_EINVAL;
     }
 
     return RT_EOK;
@@ -574,6 +598,8 @@ const static struct rt_pin_ops _acm32_pin_ops =
 
 int rt_hw_pin_init(void)
 {
+    __HAL_RCC_EXTI_CLK_ENABLE();
+
     rt_device_pin_register("pin", &_acm32_pin_ops, RT_NULL);
 
     return 0;
@@ -651,16 +677,17 @@ void EXTI4_IRQHandler(void)
 void EXTI9_5_IRQHandler(void)
 {
     rt_interrupt_enter();
+    uint32_t pdr = EXTI->PDR;  /* 在 HAL 清除前捕获 PDR 状态 */
     HAL_EXTI_IRQHandler(EXTI_LINE_5);
     HAL_EXTI_IRQHandler(EXTI_LINE_6);
     HAL_EXTI_IRQHandler(EXTI_LINE_7);
     HAL_EXTI_IRQHandler(EXTI_LINE_8);
     HAL_EXTI_IRQHandler(EXTI_LINE_9);
-    if (pin_irq_hdr_tab[5].hdr)  pin_irq_hdr_tab[5].hdr(pin_irq_hdr_tab[5].args);
-    if (pin_irq_hdr_tab[6].hdr)  pin_irq_hdr_tab[6].hdr(pin_irq_hdr_tab[6].args);
-    if (pin_irq_hdr_tab[7].hdr)  pin_irq_hdr_tab[7].hdr(pin_irq_hdr_tab[7].args);
-    if (pin_irq_hdr_tab[8].hdr)  pin_irq_hdr_tab[8].hdr(pin_irq_hdr_tab[8].args);
-    if (pin_irq_hdr_tab[9].hdr)  pin_irq_hdr_tab[9].hdr(pin_irq_hdr_tab[9].args);
+    if ((pdr & (1UL << 5)) && pin_irq_hdr_tab[5].hdr)  pin_irq_hdr_tab[5].hdr(pin_irq_hdr_tab[5].args);
+    if ((pdr & (1UL << 6)) && pin_irq_hdr_tab[6].hdr)  pin_irq_hdr_tab[6].hdr(pin_irq_hdr_tab[6].args);
+    if ((pdr & (1UL << 7)) && pin_irq_hdr_tab[7].hdr)  pin_irq_hdr_tab[7].hdr(pin_irq_hdr_tab[7].args);
+    if ((pdr & (1UL << 8)) && pin_irq_hdr_tab[8].hdr)  pin_irq_hdr_tab[8].hdr(pin_irq_hdr_tab[8].args);
+    if ((pdr & (1UL << 9)) && pin_irq_hdr_tab[9].hdr)  pin_irq_hdr_tab[9].hdr(pin_irq_hdr_tab[9].args);
     rt_interrupt_leave();
 }
 #endif
@@ -670,18 +697,19 @@ void EXTI9_5_IRQHandler(void)
 void EXTI15_10_IRQHandler(void)
 {
     rt_interrupt_enter();
+    uint32_t pdr = EXTI->PDR;  /* 在 HAL 清除前捕获 PDR 状态 */
     HAL_EXTI_IRQHandler(EXTI_LINE_10);
     HAL_EXTI_IRQHandler(EXTI_LINE_11);
     HAL_EXTI_IRQHandler(EXTI_LINE_12);
     HAL_EXTI_IRQHandler(EXTI_LINE_13);
     HAL_EXTI_IRQHandler(EXTI_LINE_14);
     HAL_EXTI_IRQHandler(EXTI_LINE_15);
-    if (pin_irq_hdr_tab[10].hdr) pin_irq_hdr_tab[10].hdr(pin_irq_hdr_tab[10].args);
-    if (pin_irq_hdr_tab[11].hdr) pin_irq_hdr_tab[11].hdr(pin_irq_hdr_tab[11].args);
-    if (pin_irq_hdr_tab[12].hdr) pin_irq_hdr_tab[12].hdr(pin_irq_hdr_tab[12].args);
-    if (pin_irq_hdr_tab[13].hdr) pin_irq_hdr_tab[13].hdr(pin_irq_hdr_tab[13].args);
-    if (pin_irq_hdr_tab[14].hdr) pin_irq_hdr_tab[14].hdr(pin_irq_hdr_tab[14].args);
-    if (pin_irq_hdr_tab[15].hdr) pin_irq_hdr_tab[15].hdr(pin_irq_hdr_tab[15].args);
+    if ((pdr & (1UL << 10)) && pin_irq_hdr_tab[10].hdr) pin_irq_hdr_tab[10].hdr(pin_irq_hdr_tab[10].args);
+    if ((pdr & (1UL << 11)) && pin_irq_hdr_tab[11].hdr) pin_irq_hdr_tab[11].hdr(pin_irq_hdr_tab[11].args);
+    if ((pdr & (1UL << 12)) && pin_irq_hdr_tab[12].hdr) pin_irq_hdr_tab[12].hdr(pin_irq_hdr_tab[12].args);
+    if ((pdr & (1UL << 13)) && pin_irq_hdr_tab[13].hdr) pin_irq_hdr_tab[13].hdr(pin_irq_hdr_tab[13].args);
+    if ((pdr & (1UL << 14)) && pin_irq_hdr_tab[14].hdr) pin_irq_hdr_tab[14].hdr(pin_irq_hdr_tab[14].args);
+    if ((pdr & (1UL << 15)) && pin_irq_hdr_tab[15].hdr) pin_irq_hdr_tab[15].hdr(pin_irq_hdr_tab[15].args);
     rt_interrupt_leave();
 }
 #endif

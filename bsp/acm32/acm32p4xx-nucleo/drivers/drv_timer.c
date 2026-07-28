@@ -11,6 +11,7 @@
 #include <board.h>
 #include <rtthread.h>
 #include <rtdevice.h>
+#include "drv_tim_utils.h"
 
 #ifdef RT_USING_CLOCK_TIME
 #if defined(BSP_USING_TIM1) || defined(BSP_USING_TIM2) || defined(BSP_USING_TIM3) || \
@@ -69,33 +70,6 @@ static struct acm32_clock_timer acm32_clock_timer_obj[] =
 #endif
 };
 
-/* Same rule as HAL SDK TIM_Base Get_Timer_Bus_Clock + *2 when HCLK != PCLK */
-static rt_uint32_t acm32_timer_clock_get(TIM_TypeDef *instance)
-{
-    rt_uint32_t pclk;
-    uint32_t base = (uint32_t)instance;
-
-    switch (base)
-    {
-    case TIM1_BASE_ADDR:
-    case TIM10_BASE_ADDR:
-        pclk = HAL_RCC_GetPCLK2Freq();
-        break;
-    case TIM2_BASE_ADDR:
-    case TIM3_BASE_ADDR:
-    case TIM6_BASE_ADDR:
-    default:
-        pclk = HAL_RCC_GetPCLK1Freq();
-        break;
-    }
-
-    if (HAL_RCC_GetHCLKFreq() != pclk)
-    {
-        pclk <<= 1;
-    }
-    return pclk;
-}
-
 static void timer_init(struct rt_clock_timer_device *timer, rt_uint32_t state)
 {
     TIM_HandleTypeDef *tim;
@@ -108,11 +82,17 @@ static void timer_init(struct rt_clock_timer_device *timer, rt_uint32_t state)
     }
 
     tim = (TIM_HandleTypeDef *)timer->parent.user_data;
-    timer_clock = acm32_timer_clock_get(tim->Instance);
+    timer_clock = acm32_tim_clock_get(tim->Instance);
 
     if (timer->freq == 0)
     {
         timer->freq = 1000000; /* default 1MHz count frequency */
+    }
+
+    /* 防止 freq > timer_clock 导致 Prescaler 下溢为 0xFFFFFFFF */
+    if ((rt_uint32_t)timer->freq > timer_clock)
+    {
+        timer->freq = (rt_int32_t)timer_clock;
     }
 
     tim->Init.Period = 1000 - 1;
@@ -178,7 +158,7 @@ static rt_err_t timer_ctrl(rt_clock_timer_t *timer, rt_uint32_t cmd, void *arg)
     case CLOCK_TIMER_CTRL_FREQ_SET:
     {
         rt_uint32_t freq = *((rt_uint32_t *)arg);
-        rt_uint32_t timer_clock = acm32_timer_clock_get(tim->Instance);
+        rt_uint32_t timer_clock = acm32_tim_clock_get(tim->Instance);
         rt_uint32_t psc;
 
         if (freq == 0)
@@ -232,7 +212,7 @@ void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
     {
         rt_clock_timer_isr(&acm32_clock_timer_obj[TIM1_INDEX].time_device);
     }
-    TIM1->SR = ~(uint32_t)TIMER_SR_UIF;
+    TIM1->SR = TIMER_SR_UIF;
     rt_interrupt_leave();
 }
 #endif
@@ -245,7 +225,7 @@ void TIM2_IRQHandler(void)
     {
         rt_clock_timer_isr(&acm32_clock_timer_obj[TIM2_INDEX].time_device);
     }
-    TIM2->SR = ~(uint32_t)TIMER_SR_UIF;
+    TIM2->SR = TIMER_SR_UIF;
     rt_interrupt_leave();
 }
 #endif
@@ -258,7 +238,7 @@ void TIM3_IRQHandler(void)
     {
         rt_clock_timer_isr(&acm32_clock_timer_obj[TIM3_INDEX].time_device);
     }
-    TIM3->SR = ~(uint32_t)TIMER_SR_UIF;
+    TIM3->SR = TIMER_SR_UIF;
     rt_interrupt_leave();
 }
 #endif
@@ -271,7 +251,7 @@ void TIM6_IRQHandler(void)
     {
         rt_clock_timer_isr(&acm32_clock_timer_obj[TIM6_INDEX].time_device);
     }
-    TIM6->SR = ~(uint32_t)TIMER_SR_UIF;
+    TIM6->SR = TIMER_SR_UIF;
     rt_interrupt_leave();
 }
 #endif
@@ -284,7 +264,7 @@ void TIM10_IRQHandler(void)
     {
         rt_clock_timer_isr(&acm32_clock_timer_obj[TIM10_INDEX].time_device);
     }
-    TIM10->SR = ~(uint32_t)TIMER_SR_UIF;
+    TIM10->SR = TIMER_SR_UIF;
     rt_interrupt_leave();
 }
 #endif

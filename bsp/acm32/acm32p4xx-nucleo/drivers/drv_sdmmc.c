@@ -36,8 +36,7 @@
 #define SD_HIGH_SPEED_FREQ     50000000U
 #define SDIO_MAX_FREQ          SD_HIGH_SPEED_FREQ
 
-#define SDIO_TX_RX_COMPLETE_TIMEOUT_MS    (1000)   /* 1 second timeout */
-#define SDIO_IDLE_TIMEOUT_MS               (500)    /* 500ms idle wait */
+#define SDIO_TX_RX_COMPLETE_TIMEOUT_LOOPS    (1000000)
 
 /* SDMMC1 pins: PC8=DAT0, PC9=DAT1, PC10=DAT2, PC11=DAT3, PC12=CLK, PD2=CMD (all AF12) */
 #define SDMMC1_DAT0_PIN       GPIO_PIN_8
@@ -73,13 +72,13 @@ static struct acm32_sdmmc sdmmc1_priv;
 static rt_err_t sdmmc_send_no_data_cmd(SDMMC_HandleTypeDef *hsdmmc, uint32_t cmd, uint32_t arg)
 {
     uint32_t int_status;
-    rt_tick_t tick_start;
+    uint32_t timeout;
 
     /* wait idle with timeout */
-    tick_start = rt_tick_get();
+    timeout = SDIO_TX_RX_COMPLETE_TIMEOUT_LOOPS;
     while (hsdmmc->Instance->SDMMC_STATUS & (1 << 9))
     {
-        if (rt_tick_get() - tick_start >= rt_tick_from_millisecond(SDIO_IDLE_TIMEOUT_MS))
+        if (--timeout == 0)
         {
             LOG_E("SDMMC wait idle timeout");
             return -RT_ETIMEOUT;
@@ -91,10 +90,10 @@ static rt_err_t sdmmc_send_no_data_cmd(SDMMC_HandleTypeDef *hsdmmc, uint32_t cmd
     hsdmmc->Instance->SDMMC_CMD = (cmd | ((uint32_t)hsdmmc->Init.Ch << 16));
 
     /* wait for command completed with timeout */
-    tick_start = rt_tick_get();
+    timeout = SDIO_TX_RX_COMPLETE_TIMEOUT_LOOPS;
     while (!(hsdmmc->Instance->SDMMC_RINTSTS & SDMMC_RINT_CMD_CMPLT))
     {
-        if (rt_tick_get() - tick_start >= rt_tick_from_millisecond(SDIO_TX_RX_COMPLETE_TIMEOUT_MS))
+        if (--timeout == 0)
         {
             LOG_E("SDMMC wait cmd complete timeout");
             return -RT_ETIMEOUT;
@@ -184,6 +183,11 @@ static void sdmmc_request(struct rt_mmcsd_host *host, struct rt_mmcsd_req *req)
         case READ_SINGLE_BLOCK:   /* CMD17 */
             if (data)
             {
+                if (data->blks * data->blksize > SDIO_BUFF_SIZE)
+                {
+                    status = HAL_ERROR;
+                    break;
+                }
                 status = HAL_SDMMC_Cmd17_RdSingle(hsdmmc, cmd->arg,
                     sdmmc_cache_buf);
                 if (status == HAL_OK)
@@ -201,6 +205,11 @@ static void sdmmc_request(struct rt_mmcsd_host *host, struct rt_mmcsd_req *req)
         case READ_MULTIPLE_BLOCK:   /* CMD18 */
             if (data)
             {
+                if (data->blks * data->blksize > SDIO_BUFF_SIZE)
+                {
+                    status = HAL_ERROR;
+                    break;
+                }
                 status = HAL_SDMMC_Cmd18_RdMul(hsdmmc, cmd->arg,
                     data->blks, sdmmc_cache_buf);
                 if (status == HAL_OK)
@@ -218,6 +227,11 @@ static void sdmmc_request(struct rt_mmcsd_host *host, struct rt_mmcsd_req *req)
         case WRITE_BLOCK:   /* CMD24 */
             if (data)
             {
+                if (data->blks * data->blksize > SDIO_BUFF_SIZE)
+                {
+                    status = HAL_ERROR;
+                    break;
+                }
                 rt_memcpy(sdmmc_cache_buf, data->buf,
                     data->blks * data->blksize);
                 status = HAL_SDMMC_Cmd24_WrSingle(hsdmmc, cmd->arg,
@@ -232,6 +246,11 @@ static void sdmmc_request(struct rt_mmcsd_host *host, struct rt_mmcsd_req *req)
         case WRITE_MULTIPLE_BLOCK:   /* CMD25 */
             if (data)
             {
+                if (data->blks * data->blksize > SDIO_BUFF_SIZE)
+                {
+                    status = HAL_ERROR;
+                    break;
+                }
                 rt_memcpy(sdmmc_cache_buf, data->buf,
                     data->blks * data->blksize);
                 status = HAL_SDMMC_Cmd25_WrMul(hsdmmc, cmd->arg,
@@ -374,7 +393,7 @@ static void sdmmc_set_iocfg(struct rt_mmcsd_host *host, struct rt_mmcsd_io_cfg *
      * div should satisfy: clk >= SrcClk / (2 * div), so div >= SrcClk / (2 * clk)
      * Adding 2 to match HAL_SD_Enum's pattern: div = SrcClk/400000 + 4 / 2
      */
-    div = src_clk / (2 * clk);
+    div = (src_clk + 2 * clk - 1) / (2 * clk);  /* 向上取整，确保实际时钟不超过请求值 */
     if (div == 0)
         div = 1;
     if (div > 0xFF)
@@ -452,6 +471,9 @@ static void sdmmc_gpio_init(void)
 {
     GPIO_InitTypeDef gpio = {0};
 
+    __HAL_RCC_GPIOC_CLK_ENABLE();
+    __HAL_RCC_GPIOD_CLK_ENABLE();
+
     /* CLK: PC12 AF12, high drive */
     gpio.Pin       = SDMMC1_CLK_PIN;
     gpio.Mode      = GPIO_MODE_AF_PP;
@@ -512,8 +534,7 @@ int rt_hw_sdio_init(void)
         return -RT_ERROR;
     }
 
-    HAL_NVIC_SetPriority(SDMMC_IRQn, 2, 0);
-    NVIC_EnableIRQ(SDMMC_IRQn);
+    /* SDMMC 使用轮询模式，不需要 NVIC 中断使能 */
 
     LOG_I("enumerating SD card ...");
     status = HAL_SD_Enum(&sdmmc1_handle, SDMMC_CLOCK_FREQ);

@@ -84,16 +84,18 @@
 #define HAL_UART_MODULE_ENABLED
 #define HAL_LPUART_MODULE_ENABLED
 #define HAL_SPI_MODULE_ENABLED
-//#define HAL_TIMER_MODULE_ENABLED
-//#define HAL_LPTIM_MODULE_ENABLED    
-//#define HAL_FSUSB_MODULE_ENABLED
+#define HAL_I2C_MODULE_ENABLED
+#define HAL_TIMER_MODULE_ENABLED
+#define HAL_ADC_MODULE_ENABLED
+#define HAL_DAC_MODULE_ENABLED
+#define HAL_FSUSB_MODULE_ENABLED
 //#define HAL_PUF_MODULE_ENABLED 
 //#define HAL_CDE_MODULE_ENABLED 
 //#define HAL_NORFLASH_MODULE_ENABLED
 //#define HAL_CRC_MODULE_ENABLED 
 //#define HAL_DIVIDER_MODULE_ENABLED 
 //#define HAL_AES_MODULE_ENABLED  
-//#define HAL_HRNG_MODULE_ENABLED  
+#define HAL_HRNG_MODULE_ENABLED  
 //#define HAL_ECC_MODULE_ENABLED 
 //#define HAL_RSA_MODULE_ENABLED 
 //#define HAL_DRBG_MODULE_ENABLED  
@@ -107,6 +109,9 @@
 #define HAL_RTC_MODULE_ENABLED
 #define HAL_EFUSE_MODULE_ENABLED
 #define HAL_ETH_MODULE_ENABLED
+#define HAL_FDCAN_MODULE_ENABLED
+#define HAL_I2S_MODULE_ENABLED
+#define HAL_SDMMC_MODULE_ENABLED
 /******* include modules header file *****************************************/
 
     
@@ -164,9 +169,21 @@
     #include "hal_spi.h"
 #endif
 
+#ifdef HAL_I2C_MODULE_ENABLED
+    #include "hal_i2c.h"
+#endif
+
 #ifdef HAL_TIMER_MODULE_ENABLED
     #include "hal_timer.h"  
     #include "hal_timer_ex.h"
+#endif
+
+#ifdef HAL_ADC_MODULE_ENABLED
+    #include "hal_adc.h"
+#endif
+
+#ifdef HAL_DAC_MODULE_ENABLED
+    #include "hal_dac.h"
 #endif
 
 #ifdef HAL_LPTIM_MODULE_ENABLED        
@@ -242,10 +259,6 @@
     #include "hal_fmc.h"
 #endif
 
-#ifdef HAL_LPTIM_MODULE_ENABLED
-    #include "hal_lptim.h"
-#endif
-
 #ifdef HAL_RTC_MODULE_ENABLED
     #include "hal_rtc.h"
 #endif
@@ -256,6 +269,18 @@
 
 #ifdef HAL_ETH_MODULE_ENABLED
     #include "hal_eth.h"
+#endif
+
+#ifdef HAL_FDCAN_MODULE_ENABLED
+    #include "hal_fdcan.h"
+#endif
+
+#ifdef HAL_I2S_MODULE_ENABLED
+    #include "hal_i2s.h"
+#endif
+
+#ifdef HAL_SDMMC_MODULE_ENABLED
+    #include "hal_sdmmc.h"
 #endif
 
 #endif /* __ACM32P4XX_HAL_CONF_H  */

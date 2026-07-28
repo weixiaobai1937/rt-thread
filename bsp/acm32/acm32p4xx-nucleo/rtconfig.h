@@ -323,7 +323,7 @@
  *     UART1    PA9 PA10
  *     UART2    PD5 PD6
  *     SPI1     PE12 PE11 PE10 PE13
- *     ETH      (RMII board pins)
+ *     ETH      (RMII board pins + PHY_RST=PB14)
  */
 /* BSP resource check OK (no DMA / pin conflicts) */
 /* END_BSP_RESOURCE_CHECK */

@@ -63,6 +63,7 @@ static void _crypto_destroy(struct rt_hwcrypto_ctx *ctx)
 
 static rt_err_t _crypto_copy(struct rt_hwcrypto_ctx *des, const struct rt_hwcrypto_ctx *src)
 {
+    /* RNG 无状态，无需复制上下文。若扩展 hash/symmetric 需实现 */
     RT_UNUSED(des);
     RT_UNUSED(src);
     return RT_EOK;
