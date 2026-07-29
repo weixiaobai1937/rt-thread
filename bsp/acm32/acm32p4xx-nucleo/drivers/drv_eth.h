@@ -87,13 +87,10 @@ enum acm32_phy_link_state
  * Bus masters (ETH/SDMMC/...) can access SRAM1 and OSPI external memory.
  * They cannot access DTCM (0x20000000-0x2000FFFF).
  *
- * Hybrid layout (stable under load):
- *   - TX/RX descriptors + TX bounce: internal SRAM1 (low latency, OWN bits)
- *   - RX data pool: PSRAM (large, zero-copy RX)
+ * All ETH DMA memory (descriptors, TX bounce, RX pool) is allocated
+ * from the psram memheap at runtime.
  * Requires DATA_IN_ExtSRAM + System_OSPI_PSRAM_Reclock() before eth init.
  */
-#define ETH_DMA_SRAM_START          0x20010000U
-#define ETH_DMA_SRAM_END            0x20020000U
 
 /*
  * Pool item holds pbuf_custom header + DMA payload.
@@ -122,17 +119,6 @@ enum acm32_phy_link_state
 #define ETH_RX_DLY_HAL_SEL          15U
 #define ETH_RX_DLY_LAN8720_UNIT     1U
 #define ETH_RX_DLY_LAN8720_SEL      5U
-
-/* Internal SRAM1 reserved at top for desc + TX bounce ring.
- * desc: (4+8)*40 ≈ 480; bounce: 4*1536 = 6144; total ≈ 7KB. */
-#define ETH_SRAM1_RESERVE           0x2000U
-#define ETH_DMA_HEAP_END            (ETH_DMA_SRAM_END - ETH_SRAM1_RESERVE)
-#define ETH_SRAM1_DESC_BASE         ETH_DMA_HEAP_END
-
-/* RX pool in PSRAM (skip nothing else; tests skip this window) */
-#define ETH_DMA_BUF_BASE            0x80000000U
-#define ETH_DMA_BUF_SIZE            0x8000U     /* 32KB reserved for RX pool */
-#define ETH_DMA_BUF_END             (ETH_DMA_BUF_BASE + ETH_DMA_BUF_SIZE)
 
 #ifdef __cplusplus
 }

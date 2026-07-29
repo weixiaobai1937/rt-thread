@@ -98,6 +98,7 @@
 
 #define RT_USING_MEMPOOL
 #define RT_USING_SMALL_MEM
+#define RT_USING_MEMHEAP
 #define RT_USING_SMALL_MEM_AS_HEAP
 #define RT_USING_HEAP
 /* end of Memory Management */
@@ -320,9 +321,9 @@
  *     SPI1_TX    -> DMA2_CH1
  *     SPI1_RX    -> DMA2_CH3
  *   Pin groups:
- *     UART1    PA9 PA10
- *     UART2    PD5 PD6
- *     SPI1     PE12 PE11 PE10 PE13
+ *     UART1   PA9 PA10
+ *     UART2   PD5 PD6
+ *     SPI1    PE12 PE11 PE10 PE13
  *     ETH      (RMII board pins + PHY_RST=PB14)
  */
 /* BSP resource check OK (no DMA / pin conflicts) */

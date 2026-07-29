@@ -19,11 +19,10 @@
 #define PSRAM_SIZE          0x00800000U /* 8MB */
 #define PSRAM_YIELD_WORDS   4096U       /* yield every 16KB */
 
-/* ETH DMA descriptors/buffers occupy a fixed window at PSRAM base when ETH on.
- * Tests must not walk/probe that region or descriptors will be corrupted. */
-#if defined(BSP_USING_ETH)
-#include "drv_eth.h"
-#define PSRAM_TEST_SKIP     ETH_DMA_BUF_SIZE
+/* PSRAM first 2MB managed by psram memheap (ETH DMA allocates from it).
+ * Tests must skip that region to avoid corrupting heap metadata. */
+#if defined(DATA_IN_ExtSRAM)
+#define PSRAM_TEST_SKIP     0x200000U
 #else
 #define PSRAM_TEST_SKIP     0U
 #endif

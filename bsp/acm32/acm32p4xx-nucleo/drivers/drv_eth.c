@@ -639,6 +639,16 @@ static rt_err_t rt_acm32_eth_tx(rt_device_t dev, struct pbuf *p)
     do {
         if (HAL_ETH_Transmit_IT(&EthHandle, &TxConfig) == HAL_OK)
         {
+            /* PSRAM is non-cacheable; OSPI write buffer may delay OWN=1 completion.
+             * Read-back the descriptor to force OSPI write buffer drain before
+             * re-triggering TX poll, so DMA sees the updated OWN bit. */
+            {
+                uint32_t prev_idx = (EthHandle.TxDescList.CurTxDesc - 1U + ETH_TX_DESC_CNT)
+                                    % ETH_TX_DESC_CNT;
+                (void)READ_REG(*(uint32_t *)EthHandle.TxDescList.TxDesc[prev_idx]);
+            }
+            WRITE_REG(EthHandle.Instance->DMATPDR,
+                      EthHandle.TxDescList.TxDesc[EthHandle.TxDescList.CurTxDesc]);
             errval = RT_EOK;
         }
         else if (EthHandle.ErrorCode & HAL_ETH_ERROR_BUSY)
@@ -764,70 +774,42 @@ static rt_err_t rt_acm32_eth_init(rt_device_t dev)
           macaddress[0], macaddress[1], macaddress[2],
           macaddress[3], macaddress[4], macaddress[5]);
 
-    /* Hybrid DMA layout:
-     *   SRAM1 top: TX/RX descriptors + TX bounce ring
-     *   PSRAM:     RX zero-copy pool
-     */
+    /* All ETH DMA memory from psram memheap */
     {
+        extern struct rt_memheap psram_heap;
         size_t desc_size = sizeof(ETH_DMADescTypeDef) * (ETH_RX_DESC_CNT + ETH_TX_DESC_CNT);
         size_t bounce_size = (size_t)ETH_TX_BOUNCE_CNT * ETH_TX_BOUNCE_SIZE;
-        size_t sram_need = ((desc_size + bounce_size + 31U) & ~31U);
         size_t pool_size = ETH_RX_POOL_SIZE;
         size_t bitmap_size = ((ETH_RX_BUFFER_CNT + 31) / 32) * sizeof(uint32_t);
-        uintptr_t sram_base = (ETH_SRAM1_DESC_BASE + 31U) & ~31U;
-        uintptr_t psram_base = (ETH_DMA_BUF_BASE + 31U) & ~31U;
-        uint8_t *sbuf;
-        uint8_t *pbuf;
-        size_t off;
+        size_t total = ((desc_size + bounce_size + pool_size + bitmap_size + 31U) & ~31U);
+        uint8_t *mem;
         int i;
 
-#if defined(__ARMCC_VERSION)
+        mem = (uint8_t *)rt_memheap_alloc(&psram_heap, total);
+        if (mem == RT_NULL)
         {
-            extern const uint32_t Image$$RW_DTCM$$ZI$$Limit;
-            uintptr_t zi = (uintptr_t)&Image$$RW_DTCM$$ZI$$Limit;
-            if (zi > sram_base)
-            {
-                LOG_E("BSS/ZI 0x%08X overlaps ETH SRAM1 0x%08X",
-                      (unsigned)zi, (unsigned)sram_base);
-                return -RT_ENOMEM;
-            }
-        }
-#endif
-        if (sram_base + sram_need > ETH_DMA_SRAM_END)
-        {
-            LOG_E("ETH SRAM1 no room: base=0x%08X need=%u end=0x%08X",
-                  (unsigned)sram_base, (unsigned)sram_need, (unsigned)ETH_DMA_SRAM_END);
-            return -RT_ENOMEM;
-        }
-        if (psram_base + pool_size + bitmap_size > ETH_DMA_BUF_END)
-        {
-            LOG_E("ETH PSRAM no room: base=0x%08X need=%u end=0x%08X",
-                  (unsigned)psram_base, (unsigned)(pool_size + bitmap_size),
-                  (unsigned)ETH_DMA_BUF_END);
+            LOG_E("ETH psram alloc %u bytes failed", (unsigned)total);
             return -RT_ENOMEM;
         }
 
-        sbuf = (uint8_t *)sram_base;
-        rt_memset(sbuf, 0, sram_need);
-        DMATxDscrTab = (ETH_DMADescTypeDef *)sbuf;
-        DMARxDscrTab = (ETH_DMADescTypeDef *)(sbuf + sizeof(ETH_DMADescTypeDef) * ETH_TX_DESC_CNT);
+        rt_memset(mem, 0, total);
+        System_CleanDAccelerate_by_Addr((volatile void *)mem, (int32_t)total);
+
+        DMATxDscrTab = (ETH_DMADescTypeDef *)mem;
+        DMARxDscrTab = (ETH_DMADescTypeDef *)(mem + sizeof(ETH_DMADescTypeDef) * ETH_TX_DESC_CNT);
         for (i = 0; i < ETH_TX_BOUNCE_CNT; i++)
         {
-            tx_bounce_bufs[i] = sbuf + desc_size + (size_t)i * ETH_TX_BOUNCE_SIZE;
+            tx_bounce_bufs[i] = mem + desc_size + (size_t)i * ETH_TX_BOUNCE_SIZE;
             tx_bounce_busy[i] = 0;
         }
 
-        pbuf = (uint8_t *)psram_base;
-        rt_memset(pbuf, 0, pool_size + bitmap_size);
-        System_CleanDAccelerate_by_Addr((volatile void *)pbuf, (int32_t)(pool_size + bitmap_size));
-        rx_pool_memory = pbuf;
-        off = pool_size;
-        rx_pool_bitmap = (uint32_t *)(pbuf + off);
+        rx_pool_memory = mem + desc_size + bounce_size;
+        rx_pool_bitmap = (uint32_t *)(rx_pool_memory + pool_size);
 
-        LOG_I("ETH DMA sram=%p (%u) psram=%p rx_pool=%u bounce=%ux%u",
-              (void *)sbuf, (unsigned)sram_need,
-              (void *)pbuf, (unsigned)pool_size,
-              (unsigned)ETH_TX_BOUNCE_CNT, (unsigned)ETH_TX_BOUNCE_SIZE);
+        LOG_I("ETH DMA psram=%p total=%u desc=%u bounce=%ux%u rx_pool=%u",
+              (void *)mem, (unsigned)total,
+              (unsigned)desc_size, (unsigned)ETH_TX_BOUNCE_CNT, (unsigned)ETH_TX_BOUNCE_SIZE,
+              (unsigned)pool_size);
     }
 
     /* Configure ETH handle */

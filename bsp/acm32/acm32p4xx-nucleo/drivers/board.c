@@ -13,9 +13,6 @@
 #include <rtthread.h>
 #include "board.h"
 #include <rtdevice.h>
-#if defined(BSP_USING_ETH)
-#include "drv_eth.h"
-#endif
 
 #define SOC_SRAM_END_ADDR   (SOC_SRAM_START_ADDR + SOC_SRAM_SIZE * 1024)
 
@@ -31,6 +28,10 @@ extern int  rt_application_init(void);
 
 extern void rt_hw_uart_init(void);
 extern volatile uint32_t SystemCoreClock;
+
+#if defined(DATA_IN_ExtSRAM) && defined(RT_USING_MEMHEAP)
+struct rt_memheap psram_heap;
+#endif
 
 /**
  * This is the timer interrupt service routine.
@@ -74,17 +75,14 @@ void rt_hw_board_init(void)
 
 #ifdef RT_USING_HEAP
 #if defined(__ARMCC_VERSION)
-#if defined(BSP_USING_ETH)
-    /* Heap ends before SRAM1 ETH desc/TX bounce reserve (see ETH_DMA_HEAP_END) */
-    rt_system_heap_init((void *)&Image$$RW_DTCM$$ZI$$Limit, (void *)ETH_DMA_HEAP_END);
-#else
     rt_system_heap_init((void *)&Image$$RW_DTCM$$ZI$$Limit, (void *)SOC_SRAM_END_ADDR);
-#endif
 #elif __ICCARM__
     rt_system_heap_init(__segment_end("HEAP"), (void *)SOC_SRAM_END_ADDR);
 #else
-    /* init memory system - MUST be before UART/console init for V2 serial */
     rt_system_heap_init((void *)&__bss_end, (void *)SOC_SRAM_END_ADDR);
+#endif
+#if defined(DATA_IN_ExtSRAM) && defined(RT_USING_MEMHEAP)
+    rt_memheap_init(&psram_heap, "psram", (void *)0x80000000, 0x200000);
 #endif
 #endif /* RT_USING_HEAP */
 

@@ -1610,6 +1610,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         select RT_USING_ETH
         select RT_USING_LWIP
         select RT_LWIP_DHCP
+        select RT_USING_MEMHEAP
         default n
         help
             Enable ETH driver for ACM32P4xx-Nucleo.
