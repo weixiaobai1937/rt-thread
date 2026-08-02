@@ -14,6 +14,7 @@
 
 #include <string.h>
 #include <drivers/dev_mmcsd_core.h>
+#include "system_accelerate.h"
 
 #define DBG_TAG              "drv.sdmmc"
 #define DBG_LVL               DBG_INFO
@@ -192,6 +193,9 @@ static void sdmmc_request(struct rt_mmcsd_host *host, struct rt_mmcsd_req *req)
                     sdmmc_cache_buf);
                 if (status == HAL_OK)
                 {
+                    System_InvalidateDAccelerate_by_Addr(
+                        (volatile void *)sdmmc_cache_buf,
+                        (int32_t)(data->blks * data->blksize));
                     rt_memcpy(data->buf, sdmmc_cache_buf,
                         data->blks * data->blksize);
                 }
@@ -214,6 +218,9 @@ static void sdmmc_request(struct rt_mmcsd_host *host, struct rt_mmcsd_req *req)
                     data->blks, sdmmc_cache_buf);
                 if (status == HAL_OK)
                 {
+                    System_InvalidateDAccelerate_by_Addr(
+                        (volatile void *)sdmmc_cache_buf,
+                        (int32_t)(data->blks * data->blksize));
                     rt_memcpy(data->buf, sdmmc_cache_buf,
                         data->blks * data->blksize);
                 }
@@ -234,6 +241,9 @@ static void sdmmc_request(struct rt_mmcsd_host *host, struct rt_mmcsd_req *req)
                 }
                 rt_memcpy(sdmmc_cache_buf, data->buf,
                     data->blks * data->blksize);
+                System_CleanDAccelerate_by_Addr(
+                    (volatile void *)sdmmc_cache_buf,
+                    (int32_t)(data->blks * data->blksize));
                 status = HAL_SDMMC_Cmd24_WrSingle(hsdmmc, cmd->arg,
                     sdmmc_cache_buf);
             }
@@ -253,6 +263,9 @@ static void sdmmc_request(struct rt_mmcsd_host *host, struct rt_mmcsd_req *req)
                 }
                 rt_memcpy(sdmmc_cache_buf, data->buf,
                     data->blks * data->blksize);
+                System_CleanDAccelerate_by_Addr(
+                    (volatile void *)sdmmc_cache_buf,
+                    (int32_t)(data->blks * data->blksize));
                 status = HAL_SDMMC_Cmd25_WrMul(hsdmmc, cmd->arg,
                     data->blks, sdmmc_cache_buf);
             }
@@ -292,6 +305,7 @@ static void sdmmc_request(struct rt_mmcsd_host *host, struct rt_mmcsd_req *req)
         default:
             LOG_W("unsupported cmd %d", cmd->cmd_code);
             cmd->err = -RT_EINVAL;
+            status = HAL_ERROR;
             break;
         }
 

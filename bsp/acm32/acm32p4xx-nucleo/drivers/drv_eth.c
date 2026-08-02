@@ -18,6 +18,7 @@
 #include <lwip/netifapi.h>
 #include <lwip/tcpip.h>
 #include <lwip/pbuf.h>
+#include <lwip/dhcp.h>
 #include <netif/etharp.h>
 #include <stdint.h>
 #ifdef RT_USING_NETDEV
@@ -320,6 +321,8 @@ void HAL_ETH_ErrorCallback(ETH_HandleTypeDef *heth)
     }
     if (dma_err & ETH_DMASR_TBUS)
     {
+        /* Release descriptor/bounce ownership so TX slots do not leak. */
+        HAL_ETH_ReleaseTxPacket(heth);
         rt_sem_release(tx_sem);
     }
     /* Only log fatal errors (FBE, access error, etc.).
@@ -721,6 +724,19 @@ static rt_err_t rt_acm32_eth_init(rt_device_t dev)
             macaddress[3] = chipsn[0] ^ chipsn[3];
             macaddress[4] = chipsn[1] ^ chipsn[4];
             macaddress[5] = chipsn[2] ^ chipsn[5];
+
+            /* Validated ChipSN may still be all-zero on unprogrammed parts. */
+            if (macaddress[3] == 0 && macaddress[4] == 0 && macaddress[5] == 0)
+            {
+                LOG_W("ChipSN unprogrammed, using default MAC");
+                macaddress[3] = 0x33;
+                macaddress[4] = 0x44;
+                macaddress[5] = 0x55;
+            }
+            else
+            {
+                LOG_I("MAC from ChipSN");
+            }
         }
         else
         {
@@ -785,6 +801,12 @@ static rt_err_t rt_acm32_eth_init(rt_device_t dev)
         uint8_t *mem;
         int i;
 
+        if (!System_OSPI_PSRAM_Ready())
+        {
+            LOG_E("ETH psram memheap unavailable (PSRAM init failed)");
+            return -RT_ENOMEM;
+        }
+
         mem = (uint8_t *)rt_memheap_alloc(&psram_heap, total);
         if (mem == RT_NULL)
         {
@@ -848,7 +870,8 @@ static rt_err_t rt_acm32_eth_init(rt_device_t dev)
     TxConfig.CRCPadCtrl = ETH_CRC_PAD_INSERT;
 
     /* PHY reset & init */
-    phy_soft_reset(&EthHandle);
+    if (phy_soft_reset(&EthHandle) != HAL_OK)
+        LOG_W("PHY soft reset failed, continuing");
 
     /* Wait for PHY to stabilize */
     HAL_Delay(300);
@@ -886,7 +909,7 @@ static rt_err_t rt_acm32_eth_init(rt_device_t dev)
 
     if (phy_state == PHY_LINK_DOWN)
     {
-        LOG_W("PHY link down, using defaults");
+        LOG_W("PHY link down, using defaults (link thread will retry)");
         speed = ETH_SPEED_100M;
         duplex = ETH_FULLDUPLEX_MODE;
     }
@@ -923,8 +946,9 @@ static rt_err_t rt_acm32_eth_init(rt_device_t dev)
         return -RT_ERROR;
     }
 
-    /* Mark link up */
-    eth_device_linkchange(&acm32_eth_device.parent, RT_TRUE);
+    /* Report real PHY state; link thread will retry while down. */
+    eth_device_linkchange(&acm32_eth_device.parent,
+                          phy_state == PHY_LINK_DOWN ? RT_FALSE : RT_TRUE);
 
     LOG_I("ready: %s %s",
           speed == ETH_SPEED_100M ? "100M" : "10M",
@@ -1048,6 +1072,10 @@ static int rt_hw_acm32_eth_init(void)
             IP4_ADDR(&netmask, BSP_ETH_STATIC_NM0, BSP_ETH_STATIC_NM1,
                               BSP_ETH_STATIC_NM2, BSP_ETH_STATIC_NM3);
             netifapi_netif_set_addr(netif, &ipaddr, &netmask, &gw);
+#ifdef RT_LWIP_DHCP
+            /* lwIP port starts DHCP during netif init; keep static IP effective. */
+            netifapi_dhcp_stop(netif);
+#endif
             LOG_I("Static IP: %d.%d.%d.%d",
                   BSP_ETH_STATIC_IP0, BSP_ETH_STATIC_IP1,
                   BSP_ETH_STATIC_IP2, BSP_ETH_STATIC_IP3);
@@ -1072,7 +1100,6 @@ INIT_DEVICE_EXPORT(rt_hw_acm32_eth_init);
 #include <lwip/netif.h>
 #include <lwip/ip4_addr.h>
 #include <lwip/prot/ip4.h>
-#include <lwip/dhcp.h>
 #include <lwip/netifapi.h>
 
 static int eth_ifconfig(int argc, char **argv)

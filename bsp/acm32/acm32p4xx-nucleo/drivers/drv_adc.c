@@ -206,7 +206,7 @@ static rt_err_t _adc_enabled(struct rt_adc_device *device, rt_int8_t channel, rt
 
         adcObj->handle.Init.ChannelEn &= ~(1U << ch);
         /* 同步硬件：调用 HAL_ADC_Init 更新通道使能配置 */
-        HAL_ADC_Init(&adcObj->handle);
+        rt_err_t disable_rc = (HAL_ADC_Init(&adcObj->handle) == HAL_OK) ? RT_EOK : -RT_ERROR;
         /* 使用临界区保护 ChannelNum 的原子操作 */
         rt_enter_critical();
         if (adcObj->handle.ChannelNum > 0)
@@ -216,6 +216,8 @@ static rt_err_t _adc_enabled(struct rt_adc_device *device, rt_int8_t channel, rt
         rt_exit_critical();
 
         rt_mutex_release(&adcObj->lock);
+        if (disable_rc != RT_EOK)
+            return disable_rc;
     }
 
     return RT_EOK;

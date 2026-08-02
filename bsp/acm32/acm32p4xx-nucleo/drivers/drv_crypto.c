@@ -28,12 +28,16 @@ static const struct hwcrypto_rng_ops rng_ops =
     .update = _rng_update,
 };
 
+static rt_uint32_t rng_ref_count;
+
 static rt_err_t _crypto_create(struct rt_hwcrypto_ctx *ctx)
 {
     switch (ctx->type & HWCRYPTO_MAIN_TYPE_MASK)
     {
     case HWCRYPTO_TYPE_RNG:
-        HAL_HRNG_Init();
+        if (rng_ref_count == 0)
+            HAL_HRNG_Init();
+        rng_ref_count++;
         ctx->contex = RT_NULL;
         ((struct hwcrypto_rng *)ctx)->ops = &rng_ops;
         LOG_D("HRNG created");
@@ -52,7 +56,10 @@ static void _crypto_destroy(struct rt_hwcrypto_ctx *ctx)
     switch (ctx->type & HWCRYPTO_MAIN_TYPE_MASK)
     {
     case HWCRYPTO_TYPE_RNG:
-        HAL_HRNG_DeInit();
+        if (rng_ref_count > 0)
+            rng_ref_count--;
+        if (rng_ref_count == 0)
+            HAL_HRNG_DeInit();
         LOG_D("HRNG destroyed");
         break;
 

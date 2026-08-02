@@ -13,6 +13,7 @@
 #include <rtthread.h>
 #include "board.h"
 #include <rtdevice.h>
+#include "system_accelerate.h"
 
 #define SOC_SRAM_END_ADDR   (SOC_SRAM_START_ADDR + SOC_SRAM_SIZE * 1024)
 
@@ -68,12 +69,16 @@ void rt_hw_board_init(void)
 #ifdef DATA_IN_ExtSRAM
     /* Full OSPI PSRAM init after HCLK is final (not only BAUD retune) */
     System_OSPI_PSRAM_Reclock();
+    if (!System_OSPI_PSRAM_Ready())
+        rt_kprintf("WARNING: OSPI PSRAM init failed, psram memheap disabled\n");
 #endif
 
     /* Re-configure SysTick for RT-Thread (overriding HAL_InitTick) */
     SysTick_Config(SystemCoreClock / RT_TICK_PER_SECOND);
 
 #ifdef RT_USING_HEAP
+    /* Heap spans DTCM + SRAM1; make sure the SRAM1 AHB1 clock is enabled. */
+    __HAL_RCC_SRAM1_CLK_ENABLE();
 #if defined(__ARMCC_VERSION)
     rt_system_heap_init((void *)&Image$$RW_DTCM$$ZI$$Limit, (void *)SOC_SRAM_END_ADDR);
 #elif __ICCARM__
@@ -82,7 +87,8 @@ void rt_hw_board_init(void)
     rt_system_heap_init((void *)&__bss_end, (void *)SOC_SRAM_END_ADDR);
 #endif
 #if defined(DATA_IN_ExtSRAM) && defined(RT_USING_MEMHEAP)
-    rt_memheap_init(&psram_heap, "psram", (void *)0x80000000, 0x200000);
+    if (System_OSPI_PSRAM_Ready())
+        rt_memheap_init(&psram_heap, "psram", (void *)0x80000000, 0x200000);
 #endif
 #endif /* RT_USING_HEAP */
 

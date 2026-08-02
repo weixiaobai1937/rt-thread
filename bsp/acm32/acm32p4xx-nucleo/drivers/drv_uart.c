@@ -19,13 +19,14 @@
 #include <drivers/dev_serial_v2.h>
 #include "board.h"
 #include "uart_config.h"
+#include "system_accelerate.h"
 
 #ifdef RT_USING_SERIAL_V2
 
 /* ==================== 常量 ==================== */
 
 #define UART_FIFO_DEPTH         16
-#define UART_MAX_COUNT          10      /* USART1-8 + LPUART1-2 */
+#define UART_MAX_COUNT          6       /* USART1-4 + LPUART1-2 */
 
 /* UART 类型 */
 enum { UART_TYPE_USART = 0, UART_TYPE_LPUART };
@@ -220,14 +221,6 @@ static void acm32_uart_periph_clk_enable(void *inst)
         __HAL_RCC_USART3_CLK_ENABLE();
     else if (inst == USART4)
         __HAL_RCC_USART4_CLK_ENABLE();
-    else if (inst == USART5)
-        __HAL_RCC_USART5_CLK_ENABLE();
-    else if (inst == USART6)
-        __HAL_RCC_USART6_CLK_ENABLE();
-    else if (inst == USART7)
-        __HAL_RCC_USART7_CLK_ENABLE();
-    else if (inst == USART8)
-        __HAL_RCC_USART8_CLK_ENABLE();
     else if (inst == LPUART1)
         __HAL_RCC_LPUART1_CLK_ENABLE();
     else if (inst == LPUART2)
@@ -311,6 +304,9 @@ static void _dma_rx_report_tail(struct acm32_uart *uart)
 
     if (cur_pos == uart->rx_dma_last_pos)
         return;
+
+    System_InvalidateDAccelerate_by_Addr((volatile void *)uart->rx_dma_ping_buf,
+                                         (int32_t)uart->rx_dma_bufsz);
 
     if (cur_pos > uart->rx_dma_last_pos)
         tail = cur_pos - uart->rx_dma_last_pos;
@@ -545,7 +541,8 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
             uart->handle.usart.Init.Parity = UART_PARITY_NONE;
         uart->handle.usart.Init.Mode       = UART_MODE_TX_RX;
         uart->handle.usart.Init.HwFlowCtl  = UART_HWCONTROL_NONE;
-        HAL_UART_Init(&uart->handle.usart);
+        if (HAL_UART_Init(&uart->handle.usart) != HAL_OK)
+            return -RT_ERROR;
     }
     else
     {
@@ -562,7 +559,8 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
         uart->handle.lpuart.Init.Mode         = LPUART_MODE_TXRX;
         uart->handle.lpuart.Init.Polarity     = 0;
         uart->handle.lpuart.Init.ClockSource  = 0;
-        HAL_LPUART_Init(&uart->handle.lpuart);
+        if (HAL_LPUART_Init(&uart->handle.lpuart) != HAL_OK)
+            return -RT_ERROR;
     }
 
     if (type == UART_TYPE_USART)
@@ -779,6 +777,7 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial,
             SET_BIT(((LPUART_TypeDef *)inst)->CR, LPUART_CR_DMA_EN);
 
         uart->dma_tx_busy = RT_TRUE;
+        System_CleanDAccelerate_by_Addr((volatile void *)buf, (int32_t)size);
         if (HAL_DMA_Start_IT(&uart->dma_tx,
                 (rt_uint32_t)buf,
                 (rt_uint32_t)(type == UART_TYPE_USART ?
@@ -881,6 +880,7 @@ static void uart_isr(struct acm32_uart *uart)
             uart_reg_ie_set(inst, type,
                 ie & ~_BIT(type, U_IE_TXI, L_IE_TXI));
             uart->int_mask &= ~_BIT(type, U_IE_TXI, L_IE_TXI);
+            ie &= ~_BIT(type, U_IE_TXI, L_IE_TXI);
         }
     }
 
@@ -892,6 +892,7 @@ static void uart_isr(struct acm32_uart *uart)
         uart_reg_ie_set(inst, type,
             ie & ~_BIT(type, U_IE_TCI, L_IE_TCI));
         uart->int_mask &= ~_BIT(type, U_IE_TCI, L_IE_TCI);
+        ie &= ~_BIT(type, U_IE_TCI, L_IE_TCI);
 
         uart->tx_buf = NULL;
         uart->tx_done = RT_TRUE;
@@ -1001,18 +1002,6 @@ enum {
 #ifdef BSP_USING_UART4
     UART4_INDEX,
 #endif
-#ifdef BSP_USING_UART5
-    UART5_INDEX,
-#endif
-#ifdef BSP_USING_UART6
-    UART6_INDEX,
-#endif
-#ifdef BSP_USING_UART7
-    UART7_INDEX,
-#endif
-#ifdef BSP_USING_UART8
-    UART8_INDEX,
-#endif
 #ifdef BSP_USING_LPUART1
     LPUART1_INDEX,
 #endif
@@ -1036,18 +1025,6 @@ static struct acm32_uart_config uart_config[] = {
 #endif
 #ifdef BSP_USING_UART4
     UART4_CONFIG,
-#endif
-#ifdef BSP_USING_UART5
-    UART5_CONFIG,
-#endif
-#ifdef BSP_USING_UART6
-    UART6_CONFIG,
-#endif
-#ifdef BSP_USING_UART7
-    UART7_CONFIG,
-#endif
-#ifdef BSP_USING_UART8
-    UART8_CONFIG,
 #endif
 #ifdef BSP_USING_LPUART1
     LPUART1_CONFIG,
@@ -1110,18 +1087,6 @@ UART_IRQ_HANDLER(USART3, &uart_obj[UART3_INDEX])
 #ifdef BSP_USING_UART4
 UART_IRQ_HANDLER(USART4, &uart_obj[UART4_INDEX])
 #endif
-#ifdef BSP_USING_UART5
-UART_IRQ_HANDLER(USART5, &uart_obj[UART5_INDEX])
-#endif
-#ifdef BSP_USING_UART6
-UART_IRQ_HANDLER(USART6, &uart_obj[UART6_INDEX])
-#endif
-#ifdef BSP_USING_UART7
-UART_IRQ_HANDLER(USART7, &uart_obj[UART7_INDEX])
-#endif
-#ifdef BSP_USING_UART8
-UART_IRQ_HANDLER(USART8, &uart_obj[UART8_INDEX])
-#endif
 #ifdef BSP_USING_LPUART1
 UART_IRQ_HANDLER(LPUART1, &uart_obj[LPUART1_INDEX])
 #endif
@@ -1160,7 +1125,9 @@ UART_IRQ_HANDLER(LPUART2, &uart_obj[LPUART2_INDEX])
     }
 
 /* DMA1 通道 0-3 */
+#ifndef BSP_USING_I2S1
 ACM32_DMA_IRQ_HANDLER(DMA1_CH0)
+#endif
 ACM32_DMA_IRQ_HANDLER(DMA1_CH1)
 ACM32_DMA_IRQ_HANDLER(DMA1_CH2)
 ACM32_DMA_IRQ_HANDLER(DMA1_CH3)

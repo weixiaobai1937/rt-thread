@@ -21,6 +21,18 @@ HAL_Driver/Src/hal_pmu.c
 HAL_Driver/Src/hal_efuse.c
 HAL_Driver/Src/hal_eth.c
 HAL_Driver/Src/hal_spi.c
+HAL_Driver/Src/hal_adc.c
+HAL_Driver/Src/hal_dac.c
+HAL_Driver/Src/hal_i2c.c
+HAL_Driver/Src/hal_fdcan.c
+HAL_Driver/Src/hal_rtc.c
+HAL_Driver/Src/hal_wdt.c
+HAL_Driver/Src/hal_iwdt.c
+HAL_Driver/Src/hal_sdmmc.c
+HAL_Driver/Src/hal_i2s.c
+HAL_Driver/Src/hal_lptim.c
+HAL_Driver/Src/hal_timer.c
+HAL_Driver/Src/hal_hrng.c
 """)
 
 if rtconfig.PLATFORM in ['gcc']:

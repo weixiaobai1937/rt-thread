@@ -84,8 +84,8 @@ enum acm32_phy_link_state
 
 /* ========== Constants for ETH driver ========== */
 /*
- * Bus masters (ETH/SDMMC/...) can access SRAM1 and OSPI external memory.
- * They cannot access DTCM (0x20000000-0x2000FFFF).
+ * ETH DMA cannot access DTCM (0x20000000-0x2000FFFF); it can access SRAM1
+ * and OSPI external memory. Other DMA masters may access DTCM.
  *
  * All ETH DMA memory (descriptors, TX bounce, RX pool) is allocated
  * from the psram memheap at runtime.

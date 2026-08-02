@@ -94,7 +94,11 @@ static rt_err_t _dac_enabled(struct rt_dac_device *device, rt_uint32_t channel)
     else
     {
         /* 重新调用 MspInit 配置新通道的 GPIO 引脚 */
-        HAL_DAC_Init(&dacObj->handle);
+        if (HAL_DAC_Init(&dacObj->handle) != HAL_OK)
+        {
+            dacObj->ch_enabled &= ~(1U << channel);
+            return -RT_ERROR;
+        }
     }
 
     /* Align with HAL SDK DAC_Config_OutPut_Voltage (DC output) */

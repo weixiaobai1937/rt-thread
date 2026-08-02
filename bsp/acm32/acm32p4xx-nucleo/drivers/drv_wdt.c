@@ -230,8 +230,9 @@ static rt_err_t wdt_control(rt_watchdog_t *wdt, int cmd, void *arg)
             if (obj->is_start)
             {
                 obj->handle.wdt.Instance = WDT;
-                HAL_WDT_Init(&obj->handle.wdt);
-                HAL_WDT_Refresh(&obj->handle.wdt);
+                if (HAL_WDT_Init(&obj->handle.wdt) != HAL_OK ||
+                    HAL_WDT_Refresh(&obj->handle.wdt) != HAL_OK)
+                    return -RT_ERROR;
             }
         }
         else
@@ -248,8 +249,9 @@ static rt_err_t wdt_control(rt_watchdog_t *wdt, int cmd, void *arg)
             if (obj->is_start)
             {
                 obj->handle.iwdt.Instance = IWDT;
-                HAL_IWDT_Init(&obj->handle.iwdt);
-                HAL_IWDT_Refresh(&obj->handle.iwdt);
+                if (HAL_IWDT_Init(&obj->handle.iwdt) != HAL_OK ||
+                    HAL_IWDT_Refresh(&obj->handle.iwdt) != HAL_OK)
+                    return -RT_ERROR;
             }
         }
         break;
@@ -303,7 +305,8 @@ static rt_err_t wdt_control(rt_watchdog_t *wdt, int cmd, void *arg)
             obj->handle.wdt.Instance = WDT;
             obj->handle.wdt.Init.Mode = WDT_MODE_RESET;
             obj->handle.wdt.Init.IntClrTime = 0xFFFF;
-            HAL_WDT_Init(&obj->handle.wdt);
+            if (HAL_WDT_Init(&obj->handle.wdt) != HAL_OK)
+                return -RT_ERROR;
         }
         else
         {
@@ -318,8 +321,9 @@ static rt_err_t wdt_control(rt_watchdog_t *wdt, int cmd, void *arg)
             obj->handle.iwdt.Instance = IWDT;
             obj->handle.iwdt.Init.Window = obj->handle.iwdt.Init.Reload;
             obj->handle.iwdt.Init.Wakeup = obj->handle.iwdt.Init.Reload;
-            HAL_IWDT_Init(&obj->handle.iwdt);
-            HAL_IWDT_Refresh(&obj->handle.iwdt);
+            if (HAL_IWDT_Init(&obj->handle.iwdt) != HAL_OK ||
+                HAL_IWDT_Refresh(&obj->handle.iwdt) != HAL_OK)
+                return -RT_ERROR;
         }
         obj->is_start = 1;
         break;

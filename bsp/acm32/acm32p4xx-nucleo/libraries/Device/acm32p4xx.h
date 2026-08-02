@@ -1301,6 +1301,11 @@ typedef struct
 #define SPI7                            ( (SPI_TypeDef *)SPI7_BASE_ADDR )
 #define ADC                             ( (ADC_TypeDef *)ADC_BASE_ADDR )
 #define DAC1                            ( (DAC_TypeDef *)DAC1_BASE_ADDR )
+typedef struct
+{
+    __IOM uint32_t CTRL;                /*!< Offset: 0x00 HRNG control register */
+    __IOM uint32_t LFSR;                /*!< Offset: 0x04 HRNG random data register */
+} HRNG_TypeDef;
 #define HRNG                            ( (HRNG_TypeDef *)HRNG_BASE_ADDR )
 #define OSPI1                           ( (OSPI_TypeDef *) OSPI1_BASE_ADDR )  
 #define OSPI2                           ( (OSPI_TypeDef *) OSPI2_BASE_ADDR ) 

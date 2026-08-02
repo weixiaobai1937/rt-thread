@@ -232,13 +232,13 @@ HAL_StatusTypeDef HAL_FDCAN_Start(FDCAN_HandleTypeDef *hfdcan)
     return HAL_OK;
 }
 
-#if 0
 HAL_StatusTypeDef HAL_FDCAN_Stop(FDCAN_HandleTypeDef *hfdcan)
 {
-    UNUSED(hfdcan);
+    /* Enter reset state to leave normal operation. */
+    __HAL_FDCAN_ENTER_RESET_STATE(hfdcan);
+    hfdcan->State = HAL_FDCAN_STATE_READY;
     return HAL_OK;
 }
-#endif
 
 
 

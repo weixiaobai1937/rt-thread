@@ -17,6 +17,7 @@
 #include "hal_dma.h"
 #include "hal_gpio.h"
 #include "hal_rcc.h"
+#include "system_accelerate.h"
 
 #define DBG_TAG "drv.i2s"
 #define DBG_LVL DBG_INFO
@@ -279,6 +280,8 @@ static rt_err_t acm32_i2s_start(struct rt_audio_device *audio, int stream)
     i2s_dev->running     = 1;
 
     rt_memset(i2s_dev->tx_buf[0], 0, I2S_TX_DMA_BLK_SIZE);
+    System_CleanDAccelerate_by_Addr((volatile void *)i2s_dev->tx_buf[0],
+                                    (int32_t)I2S_TX_DMA_BLK_SIZE);
     HAL_I2S_Transmit_DMA(hi2s, (const uint32_t *)i2s_dev->tx_buf[0],
                          (uint16_t)(I2S_TX_DMA_BLK_SIZE / sizeof(uint32_t)));
 
@@ -411,6 +414,8 @@ void HAL_I2S_DMATxCpltCallback(I2S_HandleTypeDef *hi2s)
 
     i2s_dev->tx_idx = (i2s_dev->tx_idx + 1) % I2S_TX_DMA_BLK_COUNT;
 
+    System_CleanDAccelerate_by_Addr((volatile void *)i2s_dev->tx_buf[i2s_dev->tx_idx],
+                                    (int32_t)I2S_TX_DMA_BLK_SIZE);
     HAL_I2S_Transmit_DMA(hi2s,
                          (const uint32_t *)i2s_dev->tx_buf[i2s_dev->tx_idx],
                          (uint16_t)(I2S_TX_DMA_BLK_SIZE / sizeof(uint32_t)));
@@ -426,7 +431,7 @@ void HAL_I2S_ErrorCallback(I2S_HandleTypeDef *hi2s)
     i2s_dev->running = 0;
 }
 
-void DMA1_Channel0_IRQHandler(void)
+void DMA1_CH0_IRQHandler(void)
 {
     rt_interrupt_enter();
     HAL_DMA_IRQHandler(&g_i2s_dev.dma_tx);

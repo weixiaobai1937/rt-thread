@@ -460,6 +460,66 @@
               <FilePath>libraries\HAL_Driver\Src\hal_spi.c</FilePath>
             </File>
             <File>
+              <FileName>hal_adc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>libraries\HAL_Driver\Src\hal_adc.c</FilePath>
+            </File>
+            <File>
+              <FileName>hal_dac.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>libraries\HAL_Driver\Src\hal_dac.c</FilePath>
+            </File>
+            <File>
+              <FileName>hal_i2c.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>libraries\HAL_Driver\Src\hal_i2c.c</FilePath>
+            </File>
+            <File>
+              <FileName>hal_fdcan.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>libraries\HAL_Driver\Src\hal_fdcan.c</FilePath>
+            </File>
+            <File>
+              <FileName>hal_rtc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>libraries\HAL_Driver\Src\hal_rtc.c</FilePath>
+            </File>
+            <File>
+              <FileName>hal_wdt.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>libraries\HAL_Driver\Src\hal_wdt.c</FilePath>
+            </File>
+            <File>
+              <FileName>hal_iwdt.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>libraries\HAL_Driver\Src\hal_iwdt.c</FilePath>
+            </File>
+            <File>
+              <FileName>hal_sdmmc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>libraries\HAL_Driver\Src\hal_sdmmc.c</FilePath>
+            </File>
+            <File>
+              <FileName>hal_i2s.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>libraries\HAL_Driver\Src\hal_i2s.c</FilePath>
+            </File>
+            <File>
+              <FileName>hal_lptim.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>libraries\HAL_Driver\Src\hal_lptim.c</FilePath>
+            </File>
+            <File>
+              <FileName>hal_timer.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>libraries\HAL_Driver\Src\hal_timer.c</FilePath>
+            </File>
+            <File>
+              <FileName>hal_hrng.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>libraries\HAL_Driver\Src\hal_hrng.c</FilePath>
+            </File>
+            <File>
               <FileName>startup_acm32p4xx.s</FileName>
               <FileType>2</FileType>
               <FilePath>libraries\Device\ARM\startup_acm32p4xx.s</FilePath>
@@ -548,11 +608,6 @@
               <FileName>uart_test.c</FileName>
               <FileType>1</FileType>
               <FilePath>applications\uart_test.c</FilePath>
-            </File>
-            <File>
-              <FileName>usb_test.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>applications\usb_test.c</FilePath>
             </File>
             <File>
               <FileName>wdt_test.c</FileName>
@@ -1482,11 +1537,6 @@
               <FileName>drv_uart.c</FileName>
               <FileType>1</FileType>
               <FilePath>drivers\drv_uart.c</FilePath>
-            </File>
-            <File>
-              <FileName>drv_usbd.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>drivers\drv_usbd.c</FilePath>
             </File>
             <File>
               <FileName>drv_wdt.c</FileName>

@@ -202,6 +202,8 @@ def _bsp_collect_dma(cfg):
            _bsp_enabled(cfg, 'BSP_USING_SPI%d_DMA' % n):
             entries.extend(_bsp_resolve_dma_pair(
                 cfg, 'BSP_SPI', n, dtx, drx, alt, atx, arx))
+    if _bsp_enabled(cfg, 'BSP_USING_I2S1'):
+        entries.append(('I2S1_TX', 1, 0))
     return entries
 
 
@@ -231,6 +233,24 @@ def _bsp_check_dma(cfg):
             lines.append('    %-10s -> DMA%d_CH%d' % (owner, unit, ch))
         infos.append('\n'.join(lines))
     return errors, infos
+
+
+def _bsp_check_timers(cfg):
+    """TIM1/2/3/10 must not be shared by clock timer, PWM, capture or encoder."""
+    conflicts = []
+    groups = [
+        ('TIM1', ['BSP_USING_TIM1', 'BSP_USING_PWM1']),
+        ('TIM2', ['BSP_USING_TIM2', 'BSP_USING_PWM2',
+                  'BSP_USING_CAPTURE2', 'BSP_USING_PULSE_ENCODER2']),
+        ('TIM3', ['BSP_USING_TIM3', 'BSP_USING_PWM3',
+                  'BSP_USING_CAPTURE3', 'BSP_USING_PULSE_ENCODER3']),
+        ('TIM10', ['BSP_USING_TIM10', 'BSP_USING_PWM10']),
+    ]
+    for name, users in groups:
+        enabled = [u for u in users if _bsp_enabled(cfg, u)]
+        if len(enabled) >= 2:
+            conflicts.append('%s shared by %s' % (name, ', '.join(enabled)))
+    return conflicts
 
 
 # Per-signal pin macro suffix → pin name for conflict detection.
@@ -281,6 +301,46 @@ _BSP_SPI_CS_PINS = {
 }
 
 _BSP_ETH_PINS = ('PA1', 'PA2', 'PA7', 'PB11', 'PB12', 'PB13', 'PC1', 'PC4', 'PC5')
+
+_BSP_PWM_PINS = {
+    'PWM1_CH1': ['PE9', 'PA8'],
+    'PWM1_CH2': ['PE11', 'PA9'],
+    'PWM1_CH3': ['PE13', 'PA10'],
+    'PWM1_CH4': ['PE14', 'PA11'],
+    'PWM2_CH1': ['PA0', 'PA5'],
+    'PWM2_CH2': ['PA1', 'PB3'],
+    'PWM2_CH3': ['PA2', 'PB10'],
+    'PWM2_CH4': ['PA3', 'PB11'],
+    'PWM3_CH1': ['PA6', 'PB4', 'PC6'],
+    'PWM3_CH2': ['PA7', 'PB5', 'PC7'],
+    'PWM3_CH3': ['PB0', 'PC8'],
+    'PWM3_CH4': ['PB1', 'PC9'],
+    'PWM10_CH1': ['PF7', 'PA4', 'PB8', 'PE3'],
+}
+
+_BSP_I2C_PINS = {
+    'I2C1_SCL': ['PA13', 'PF11', 'PB6'],
+    'I2C1_SDA': ['PA14', 'PF12', 'PB7'],
+    'I2C2_SCL': ['PB10', 'PG10', 'PE1'],
+    'I2C2_SDA': ['PB11', 'PG11', 'PE0'],
+}
+
+_BSP_FDCAN_PINS = {
+    'FDCAN1_TX': ['PB9', 'PA12', 'PD1'],
+    'FDCAN1_RX': ['PB8', 'PA11', 'PD0'],
+    'FDCAN2_TX': ['PD12', 'PE6'],
+    'FDCAN2_RX': ['PD11', 'PE5'],
+}
+
+_BSP_I2S_PINS = {
+    'I2S1_WS': ['PA15', 'PA4'],
+    'I2S1_CK': ['PC10', 'PB3', 'PA5'],
+    'I2S1_SDI': ['PC11', 'PB4', 'PA6'],
+    'I2S1_SDO': ['PB5', 'PD7', 'PC12'],
+    'I2S1_MCK': ['PC7', 'PC4'],
+}
+
+_BSP_SDMMC_PINS = ('PC8', 'PC9', 'PC10', 'PC11', 'PC12', 'PD2')
 
 
 def _bsp_pin_index_to_name(idx):
@@ -370,6 +430,70 @@ def _bsp_check_pins(cfg):
         add('ETH', eth_pins)
         info_lines.append('    ETH      (RMII board pins + PHY_RST=%s)' %
                           (rst if rst else '?'))
+
+    # PWM1-3/10 pins
+    for unit, enabled_name in [('PWM1', 'BSP_USING_PWM1'),
+                               ('PWM2', 'BSP_USING_PWM2'),
+                               ('PWM3', 'BSP_USING_PWM3'),
+                               ('PWM10', 'BSP_USING_PWM10')]:
+        if not _bsp_enabled(cfg, enabled_name):
+            continue
+        pins = []
+        for ch in range(1, 5):
+            key = '%s_CH%d' % (unit, ch)
+            if key not in _BSP_PWM_PINS:
+                continue
+            if not _bsp_enabled(cfg, 'BSP_USING_%s_CH%d' % (unit, ch)):
+                continue
+            pin = _bsp_scan_pin(cfg, 'BSP_%s_CH%d_' % (unit, ch),
+                                _BSP_PWM_PINS[key])
+            if pin:
+                add('%s_CH%d' % (unit, ch), [pin])
+                pins.append('%s=%s' % (ch, pin))
+        if pins:
+            info_lines.append('    %s     %s' % (unit, ' '.join(pins)))
+
+    # I2C1/2 pins
+    for n in [1, 2]:
+        if not _bsp_enabled(cfg, 'BSP_USING_I2C%d' % n):
+            continue
+        scl = _bsp_scan_pin(cfg, 'BSP_I2C%d_SCL_' % n, _BSP_I2C_PINS['I2C%d_SCL' % n])
+        sda = _bsp_scan_pin(cfg, 'BSP_I2C%d_SDA_' % n, _BSP_I2C_PINS['I2C%d_SDA' % n])
+        if scl:
+            add('I2C%d_SCL' % n, [scl])
+        if sda:
+            add('I2C%d_SDA' % n, [sda])
+        info_lines.append('    I2C%d    %s %s' % (n, scl or '?', sda or '?'))
+
+    # FDCAN1/2 pins
+    for n in [1, 2]:
+        if not _bsp_enabled(cfg, 'BSP_USING_FDCAN%d' % n):
+            continue
+        tx = _bsp_scan_pin(cfg, 'BSP_FDCAN%d_TX_' % n, _BSP_FDCAN_PINS['FDCAN%d_TX' % n])
+        rx = _bsp_scan_pin(cfg, 'BSP_FDCAN%d_RX_' % n, _BSP_FDCAN_PINS['FDCAN%d_RX' % n])
+        if tx:
+            add('FDCAN%d_TX' % n, [tx])
+        if rx:
+            add('FDCAN%d_RX' % n, [rx])
+        info_lines.append('    FDCAN%d %s %s' % (n, tx or '?', rx or '?'))
+
+    # I2S1 pins
+    if _bsp_enabled(cfg, 'BSP_USING_I2S1'):
+        pins = []
+        for key, label in [('I2S1_WS', 'WS'), ('I2S1_CK', 'CK'),
+                           ('I2S1_SDI', 'SDI'), ('I2S1_SDO', 'SDO'),
+                           ('I2S1_MCK', 'MCK')]:
+            pin = _bsp_scan_pin(cfg, 'BSP_%s_' % key, _BSP_I2S_PINS[key])
+            if pin:
+                add('I2S1_%s' % label, [pin])
+                pins.append('%s=%s' % (label, pin))
+        if pins:
+            info_lines.append('    I2S1     %s' % ' '.join(pins))
+
+    # SDMMC fixed pin group
+    if _bsp_enabled(cfg, 'BSP_USING_SDMMC1'):
+        add('SDMMC1', _BSP_SDMMC_PINS)
+        info_lines.append('    SDMMC1   %s' % ' '.join(_BSP_SDMMC_PINS))
 
     # Check conflicts
     for pin, owners in sorted(pin_map.items()):
@@ -524,6 +648,8 @@ def check_bsp_resources(rtconfig_path=None, fatal=False, quiet=False, show_map=T
     conflicts.extend(e)
     if show_map:
         infos.extend(w)
+
+    conflicts.extend(_bsp_check_timers(cfg))
 
     if not quiet:
         for info in infos:

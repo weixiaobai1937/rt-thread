@@ -20,9 +20,9 @@ static int lptim_test(int argc, char **argv)
 {
     (void)argc; (void)argv;
     rt_kprintf("=== LPTIMER ===\n");
-    rt_kprintf("  LPTIM1: initialized, ARR match interrupt enabled\n");
+    rt_kprintf("  LPTIM1: hardware initialized, timer stopped\n");
     rt_kprintf("  Clock: PCLK1, prescaler /128, period 0xFFFF\n");
-    rt_kprintf("  Use as low-power wakeup source in PM module.\n");
+    rt_kprintf("  PM tickless integration is not implemented yet.\n");
     return 0;
 }
 MSH_CMD_EXPORT(lptim_test, LPTIMER status info);

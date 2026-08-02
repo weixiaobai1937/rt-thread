@@ -6,12 +6,11 @@
  * Change Logs:
  * Date           Author       Notes
  * 2026-07-24     AisinoChip   ACM32P4xx LPTIMER driver
+ * 2026-08-01     AisinoChip   hardware init only; do not start empty periodic IRQ
  *
- * This driver initializes LPTIM1 hardware for low-power wakeup.
- * It registers as an INIT_DEVICE but does NOT register a standard
- * RT-Thread timer device (rt_lptimer).
- * To use LPTIM as a userspace timer, enable RT_USING_PM and use the
- * rt_lptimer software API.
+ * This driver initializes LPTIM1 hardware so a future PM/lptimer integration
+ * can use it. PM tickless support is not implemented yet, so no periodic
+ * interrupt is started here.
  */
 
 #include <board.h>
@@ -26,13 +25,6 @@
 
 static LPTIM_HandleTypeDef hlptim1;
 
-static void HAL_LPTIM_AutoReloadMatchCallback(LPTIM_HandleTypeDef *hlptim)
-{
-    RT_UNUSED(hlptim);
-    /* Placeholder for PM wakeup or user callback. */
-    /* The LPTIM ARR match flag is auto-cleared by HAL_LPTIM_IRQHandler. */
-}
-
 void LPTIM1_IRQHandler(void)
 {
     rt_interrupt_enter();
@@ -44,8 +36,6 @@ void HAL_LPTIM_MspInit(LPTIM_HandleTypeDef *hlptim)
 {
     RT_UNUSED(hlptim);
     __HAL_RCC_LPTIM1_CLK_ENABLE();
-    HAL_NVIC_SetPriority(LPTIM1_IRQn, 1, 0);
-    HAL_NVIC_EnableIRQ(LPTIM1_IRQn);
 }
 
 static int rt_hw_lptimer_init(void)
@@ -70,41 +60,16 @@ static int rt_hw_lptimer_init(void)
         return -RT_ERROR;
     }
 
-    if (HAL_LPTIM_RegisterCallback(&hlptim1, LPTIM_CALLBACKID_AUTORELOAD_MATCH,
-                                   HAL_LPTIM_AutoReloadMatchCallback) != HAL_OK)
-    {
-        LOG_E("LPTIM1 register callback failed");
-        HAL_LPTIM_DeInit(&hlptim1);
-        NVIC_DisableIRQ(LPTIM1_IRQn);
-        return -RT_ERROR;
-    }
-
     if (HAL_LPTIM_ConfigCountValue(&hlptim1, 0, 0xFFFF, 0) != HAL_OK)
     {
         LOG_E("LPTIM1 config count failed");
         HAL_LPTIM_DeInit(&hlptim1);
-        NVIC_DisableIRQ(LPTIM1_IRQn);
         return -RT_ERROR;
     }
 
-    if (HAL_LPTIM_EnableIT(&hlptim1, LPTIM_IT_ARRM) != HAL_OK)
-    {
-        LOG_E("LPTIM1 enable IT failed");
-        HAL_LPTIM_DeInit(&hlptim1);
-        NVIC_DisableIRQ(LPTIM1_IRQn);
-        return -RT_ERROR;
-    }
-
-    if (HAL_LPTIM_Timeout_Start(&hlptim1) != HAL_OK)
-    {
-        LOG_E("LPTIM1 start failed");
-        HAL_LPTIM_DeInit(&hlptim1);
-        NVIC_DisableIRQ(LPTIM1_IRQn);
-        return -RT_ERROR;
-    }
-
-    LOG_I("LPTIM1 init ok, pclk=%luHz, prescaler=128, period=0xFFFF",
+    LOG_I("LPTIM1 hardware init ok, pclk=%luHz, prescaler=128, period=0xFFFF",
           HAL_RCC_GetPCLK1Freq());
+    LOG_I("LPTIM1 not started: PM tickless integration is not implemented");
 
     return RT_EOK;
 }

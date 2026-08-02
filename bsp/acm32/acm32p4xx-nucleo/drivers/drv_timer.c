@@ -20,8 +20,7 @@
 #include "tim_config.h"
 
 /*
- * HAL_TIMER_MSP_Init 在 drv_pwm.c 中定义为非 static 函数，
- * 通过 SConscript 隐式链接。如果需要显式声明，可创建共享头文件。
+ * HAL_TIMER_MSP_Init 位于 drv_tim_utils.c，供 timer/capture/encoder/PWM 共享。
  */
 
 enum
@@ -165,15 +164,15 @@ static rt_err_t timer_ctrl(rt_clock_timer_t *timer, rt_uint32_t cmd, void *arg)
         {
             return -RT_EINVAL;
         }
+        if (freq > timer_clock)
+        {
+            return -RT_EINVAL;
+        }
 
         psc = timer_clock / freq;
-        if (psc == 0)
-        {
-            psc = 1;
-        }
         tim->Instance->PSC = psc - 1;
         tim->Instance->EGR |= TIM_EVENTSOURCE_UPDATE;
-        timer->freq = (rt_int32_t)freq;
+        timer->freq = (rt_int32_t)(timer_clock / psc);
     }
     break;
     default:

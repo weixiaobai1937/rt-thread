@@ -160,6 +160,16 @@ static rt_ssize_t _i2c_xfer(struct rt_i2c_bus_device *bus, struct rt_i2c_msg msg
     /* 获取互斥锁保护总线事务 */
     rt_mutex_take(&i2c_obj->lock, RT_WAITING_FOREVER);
 
+    /* HAL I2C master path only supports 7-bit addressing; reject 10-bit instead of truncating. */
+    for (i = 0; i < num; i++)
+    {
+        if (msgs[i].flags & RT_I2C_ADDR_10BIT)
+        {
+            rt_mutex_release(&i2c_obj->lock);
+            return -RT_EINVAL;
+        }
+    }
+
     /* 优化：检测 write-then-read 模式（同一设备），使用 HAL_I2C_Mem_Read 发送 Sr */
     if (num == 2 &&
         !(msgs[0].flags & RT_I2C_RD) && (msgs[1].flags & RT_I2C_RD) &&
@@ -245,8 +255,6 @@ void HAL_I2C_MspInit(I2C_HandleTypeDef *hi2c)
     GPIO_Handle.Alternate = cfg->scl_af;
     HAL_GPIO_Init(cfg->scl_port, &GPIO_Handle);
 
-    NVIC_ClearPendingIRQ(cfg->irq_type);
-    NVIC_EnableIRQ(cfg->irq_type);
 }
 
 int rt_hw_i2c_init(void)

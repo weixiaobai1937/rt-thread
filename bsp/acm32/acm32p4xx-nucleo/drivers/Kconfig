@@ -277,7 +277,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         config BSP_UART3_TX_PD8
             bool "PD8 AF3"
         config BSP_UART3_TX_PC10
-            bool "PC10 AF4"
+            bool "PC10 AF3"
     endchoice
 
     choice
@@ -289,7 +289,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         config BSP_UART3_RX_PD9
             bool "PD9 AF3"
         config BSP_UART3_RX_PC11
-            bool "PC11 AF4"
+            bool "PC11 AF3"
     endchoice
 
     choice
@@ -494,28 +494,6 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         default 0 if BSP_UART4_DMA_MAP_DEFAULT
         default 3 if BSP_UART4_DMA_MAP_DMA1
         default 0
-
-    config BSP_USING_UART5
-        bool "Enable UART5"
-        select RT_USING_SERIAL_V2
-        default n
-        help
-          Placeholder: fixed pins in drv_uart (extend like UART1-4 if needed).
-
-    config BSP_USING_UART6
-        bool "Enable UART6"
-        select RT_USING_SERIAL_V2
-        default n
-
-    config BSP_USING_UART7
-        bool "Enable UART7"
-        select RT_USING_SERIAL_V2
-        default n
-
-    config BSP_USING_UART8
-        bool "Enable UART8"
-        select RT_USING_SERIAL_V2
-        default n
 
     config BSP_USING_LPUART1
         bool "Enable LPUART1"
@@ -1160,6 +1138,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         config BSP_USING_PWM1
             bool "Enable PWM1 (TIM1)"
             select RT_USING_PWM
+            depends on !BSP_USING_TIM1
             default n
             help
               TIM1 PWM output. Complementary output available. Device name "pwm1".
@@ -1221,6 +1200,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         config BSP_USING_PWM2
             bool "Enable PWM2 (TIM2)"
             select RT_USING_PWM
+            depends on !BSP_USING_TIM2
             default n
             help
               TIM2 PWM output. Device name "pwm2".
@@ -1282,6 +1262,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         config BSP_USING_PWM3
             bool "Enable PWM3 (TIM3)"
             select RT_USING_PWM
+            depends on !BSP_USING_TIM3
             default n
             help
               TIM3 PWM output. Device name "pwm3".
@@ -1347,6 +1328,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         config BSP_USING_PWM10
             bool "Enable PWM10 (TIM10)"
             select RT_USING_PWM
+            depends on !BSP_USING_TIM10
             default n
             help
               TIM10 PWM output. Only one channel. Device name "pwm10".
@@ -1375,50 +1357,50 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         config BSP_USING_PULSE_ENCODER2
             bool "Enable Pulse Encoder2 (TIM2: PA0 A / PA1 B)"
             select RT_USING_PULSE_ENCODER
-            depends on !BSP_USING_TIM2
+            depends on !BSP_USING_TIM2 && !BSP_USING_PWM2 && !BSP_USING_CAPTURE2
             default n
             help
               AB phase encoder via TIM2 slave mode ENC3.
-              CH1=PA0(AF1), CH2=PA1(AF1). Conflicts with TIM2 clock timer.
+              CH1=PA0(AF2), CH2=PA1(AF2). Conflicts with TIM2 clock timer/PWM2.
 
         config BSP_USING_PULSE_ENCODER3
             bool "Enable Pulse Encoder3 (TIM3: PA6 A / PA7 B)"
             select RT_USING_PULSE_ENCODER
-            depends on !BSP_USING_TIM3
+            depends on !BSP_USING_TIM3 && !BSP_USING_PWM3 && !BSP_USING_CAPTURE3
             default n
             help
               AB phase encoder via TIM3 slave mode ENC3.
-              CH1=PA6(AF1), CH2=PA7(AF1). Conflicts with TIM3 clock timer.
+              CH1=PA6(AF1), CH2=PA7(AF1). Conflicts with TIM3 clock timer/PWM3.
     endmenu
 
     menu "Hardware Input Capture"
         config BSP_USING_CAPTURE2
             bool "Enable Input Capture2 (TIM2 CH1: PA0)"
             select RT_USING_INPUT_CAPTURE
-            depends on !BSP_USING_TIM2
+            depends on !BSP_USING_TIM2 && !BSP_USING_PWM2 && !BSP_USING_PULSE_ENCODER2
             default n
             help
-              Input capture via TIM2 CH1 on PA0(AF1).
-              Conflicts with TIM2 clock timer and pulse encoder 2.
+              Input capture via TIM2 CH1 on PA0(AF2).
+              Conflicts with TIM2 clock timer, PWM2 and pulse encoder 2.
 
         config BSP_USING_CAPTURE3
             bool "Enable Input Capture3 (TIM3 CH1: PA6)"
             select RT_USING_INPUT_CAPTURE
-            depends on !BSP_USING_TIM3
+            depends on !BSP_USING_TIM3 && !BSP_USING_PWM3 && !BSP_USING_PULSE_ENCODER3
             default n
             help
               Input capture via TIM3 CH1 on PA6(AF1).
-              Conflicts with TIM3 clock timer and pulse encoder 3.
+              Conflicts with TIM3 clock timer, PWM3 and pulse encoder 3.
     endmenu
 
     config BSP_USING_LPTIMER
         bool "Enable LPTIMER (Low Power Timer)"
-        select RT_USING_PM
         default n
         help
-            Low power timer using LPTIM1 for PM tickless/lptimer framework.
+            Initialize LPTIM1 hardware for future low-power use.
             Uses LPTIM1 with internal PCLK, prescaler 128, period 0xFFFF.
-            Enables RT_USING_PM to bring in the lptimer framework.
+            PM tickless/lptimer framework integration is not implemented yet.
+            No periodic interrupt is started by this driver.
 
     config BSP_USING_ADC
         bool "Enable ADC"
@@ -1532,17 +1514,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         default n
         help
             Enable hardware random number generator using HRNG peripheral.
-            Device registered as "hwcryto" via rt_hwcrypto_register.
-
-    config BSP_USING_FSUSB
-        bool "Enable FSUSB (USB Device)"
-        select RT_USING_USB_DEVICE
-        default n
-        help
-            Enable ACM32P4xx Full-Speed USB Device driver.
-            Pins: PA11=DM, PA12=DP (AF10, no pull, DRIVE_LEVEL4).
-            NOTE: Must uncomment #define HAL_FSUSB_MODULE_ENABLED in
-            libraries/Device/acm32p4xx_hal_conf.h before building.
+            Device registered as "hwcrypto" via rt_hwcrypto_register.
 
     config BSP_USING_I2S1
         bool "Enable I2S1 (Audio output)"

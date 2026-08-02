@@ -316,7 +316,7 @@ struct acm32_uart_config
 #elif defined(BSP_UART3_TX_PC10)
   #define UART3_TX_PORT     GPIOC
   #define UART3_TX_PIN      GPIO_PIN_10
-  #define UART3_TX_AF       GPIO_FUNCTION_4
+  #define UART3_TX_AF       GPIO_FUNCTION_3
   #define UART3_TX_HINT     "PC10"
 #else
   #define UART3_TX_PORT     GPIOB
@@ -339,7 +339,7 @@ struct acm32_uart_config
 #elif defined(BSP_UART3_RX_PC11)
   #define UART3_RX_PORT     GPIOC
   #define UART3_RX_PIN      GPIO_PIN_11
-  #define UART3_RX_AF       GPIO_FUNCTION_4
+  #define UART3_RX_AF       GPIO_FUNCTION_3
   #define UART3_RX_HINT     "PC11"
 #else
   #define UART3_RX_PORT     GPIOB
@@ -536,35 +536,6 @@ struct acm32_uart_config
       UART4_PIN_CFG, UART_DMA_NONE_FIELDS }
 #endif
 #endif /* BSP_USING_UART4 */
-
-/* ---- USART5-8 (placeholder pins; extend Kconfig when needed) ---- */
-#ifdef BSP_USING_UART5
-#define UART5_CONFIG \
-    { .name = "uart5", .uart_type = 0, .Instance = USART5, .irq_type = USART5_IRQn, \
-      UART_PIN_FIELDS(GPIOA, GPIO_PIN_0, GPIO_FUNCTION_1, GPIOA, GPIO_PIN_1, GPIO_FUNCTION_1), \
-      UART_DMA_NONE_FIELDS }
-#endif
-
-#ifdef BSP_USING_UART6
-#define UART6_CONFIG \
-    { .name = "uart6", .uart_type = 0, .Instance = USART6, .irq_type = USART6_IRQn, \
-      UART_PIN_FIELDS(GPIOB, GPIO_PIN_0, GPIO_FUNCTION_1, GPIOB, GPIO_PIN_1, GPIO_FUNCTION_1), \
-      UART_DMA_NONE_FIELDS }
-#endif
-
-#ifdef BSP_USING_UART7
-#define UART7_CONFIG \
-    { .name = "uart7", .uart_type = 0, .Instance = USART7, .irq_type = USART7_IRQn, \
-      UART_PIN_FIELDS(GPIOC, GPIO_PIN_0, GPIO_FUNCTION_1, GPIOC, GPIO_PIN_1, GPIO_FUNCTION_1), \
-      UART_DMA_NONE_FIELDS }
-#endif
-
-#ifdef BSP_USING_UART8
-#define UART8_CONFIG \
-    { .name = "uart8", .uart_type = 0, .Instance = USART8, .irq_type = USART8_IRQn, \
-      UART_PIN_FIELDS(GPIOD, GPIO_PIN_0, GPIO_FUNCTION_1, GPIOD, GPIO_PIN_1, GPIO_FUNCTION_1), \
-      UART_DMA_NONE_FIELDS }
-#endif
 
 /* ---- LPUART1 ---- */
 #ifdef BSP_USING_LPUART1

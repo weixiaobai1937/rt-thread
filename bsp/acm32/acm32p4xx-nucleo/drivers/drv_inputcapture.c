@@ -35,6 +35,8 @@ struct acm32_inputcapture
     char                         *name;
     rt_uint32_t                   pulsewidth_us;
     rt_uint32_t                   tim_clock_hz;
+    rt_uint32_t                   prev_capture;
+    rt_bool_t                     first_capture;
 };
 
 static struct acm32_inputcapture acm32_inputcapture_obj[] =
@@ -119,6 +121,9 @@ static rt_err_t capture_open(struct rt_inputcapture_device *inputcapture)
 
     dev = (struct acm32_inputcapture *)inputcapture;
 
+    dev->first_capture = RT_FALSE;
+    dev->prev_capture = 0;
+
     ic_cfg.ICPolarity = TIM_SLAVE_CAPTURE_ACTIVE_RISING_FALLING;
     ic_cfg.ICSelection = TIM_ICSELECTION_DIRECTTI;
     ic_cfg.ICPrescaler = TIM_IC1_PRESCALER_1;
@@ -191,7 +196,17 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
      */
     level = (htim->Instance->CCER & BIT1) ? RT_FALSE : RT_TRUE;
 
-    dev->pulsewidth_us = captured;
+    if (!dev->first_capture)
+    {
+        dev->pulsewidth_us = 0;
+        dev->first_capture = RT_TRUE;
+    }
+    else
+    {
+        /* Timer counts up at 1MHz; unsigned wrap handles overflow. */
+        dev->pulsewidth_us = captured - dev->prev_capture;
+    }
+    dev->prev_capture = captured;
 
     rt_hw_inputcapture_isr(&dev->parent, level);
 }

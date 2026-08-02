@@ -68,9 +68,6 @@ int main(void)
 #ifdef BSP_USING_SDMMC1
     rt_kprintf("Run 'sd_test' / 'sd_test read 0' (insert SD card)\n");
 #endif
-#ifdef BSP_USING_FSUSB
-    rt_kprintf("Run 'usb_test' for USB device info\n");
-#endif
 #ifdef DATA_IN_ExtSRAM
     rt_kprintf("Run 'psram_info' / 'psram_test' / 'psram_speed' for OSPI PSRAM\n");
 #endif
