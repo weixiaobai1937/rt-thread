@@ -170,15 +170,19 @@ static rt_ssize_t _i2c_xfer(struct rt_i2c_bus_device *bus, struct rt_i2c_msg msg
         }
     }
 
-    /* 优化：检测 write-then-read 模式（同一设备），使用 HAL_I2C_Mem_Read 发送 Sr */
+    /*
+     * Memory-read shortcut only when the write msg is purely a 1/2-byte register
+     * address (no extra write payload). Arbitrary write-then-read sequences must
+     * go through per-message transfers to avoid silent data corruption.
+     */
     if (num == 2 &&
         !(msgs[0].flags & RT_I2C_RD) && (msgs[1].flags & RT_I2C_RD) &&
         msgs[0].addr == msgs[1].addr &&
-        msgs[0].len > 0)
+        (msgs[0].len == 1 || msgs[0].len == 2))
     {
         addr8 = acm32_i2c_addr8(&msgs[0]);
-        rt_uint16_t mem_size = (msgs[0].len >= 2) ? I2C_MEMADD_SIZE_16BIT : I2C_MEMADD_SIZE_8BIT;
-        rt_uint16_t mem_addr = (msgs[0].len >= 2)
+        rt_uint16_t mem_size = (msgs[0].len == 2) ? I2C_MEMADD_SIZE_16BIT : I2C_MEMADD_SIZE_8BIT;
+        rt_uint16_t mem_addr = (msgs[0].len == 2)
             ? (rt_uint16_t)((msgs[0].buf[0] << 8) | msgs[0].buf[1])
             : (rt_uint16_t)msgs[0].buf[0];
 

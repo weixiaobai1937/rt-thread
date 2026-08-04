@@ -153,10 +153,9 @@ rt_inline rt_uint32_t uart_reg_isr(void *inst, int type)
         return ((LPUART_TypeDef *)inst)->SR;
 }
 
-/* USART 标志/中断/ISR 位（LPUART 对应值见下文） */
+/* USART 标志/中断/ISR 位 */
 #define U_FR_TXFF    USART_FR_TXFF
 #define U_FR_RXFE    USART_FR_RXFE
-#define U_FR_BUSY    USART_FR_BUSY
 
 #define U_IE_RXI     USART_IE_RXI
 #define U_IE_TXI     USART_IE_TXI
@@ -168,28 +167,46 @@ rt_inline rt_uint32_t uart_reg_isr(void *inst, int type)
 #define U_ISR_TCI    USART_ISR_TCI
 #define U_ISR_IDLEI  USART_ISR_IDLEI
 
-/* LPUART 位（与 USART 不同的定义） */
-#define L_FR_TXFF    (1 << 5)
-#define L_FR_RXFE    (1 << 4)
-#define L_FR_BUSY    (1 << 9)
+/*
+ * LPUART 使用官方位定义（勿用手写 magic number）。
+ * 注意 FR 语义与 USART 极性相反：
+ *   USART TXFF=1 满 / RXFE=1 空
+ *   LPUART TXE=1 可写 / RXF=1 有数据
+ */
+#define L_IE_RXI     LPUART_IE_RXIE
+#define L_IE_TXI     LPUART_IE_TXEIE
+#define L_IE_TCI     LPUART_IE_TCIE
+#define L_IE_IDLEI   LPUART_IE_IDLEIE
 
-#define L_IE_RXI     (1 << 4)
-#define L_IE_TXI     (1 << 7)
-#define L_IE_TCI     (1 << 8)
-#define L_IE_IDLEI   (1 << 3)
+#define L_ISR_RXI    LPUART_SR_RXIF
+#define L_ISR_TXI    LPUART_SR_TXEIF
+#define L_ISR_TCI    LPUART_SR_TCIF
+#define L_ISR_IDLEI  LPUART_SR_IDLEIF
 
-#define L_ISR_RXI    (1 << 4)
-#define L_ISR_TXI    (1 << 7)
-#define L_ISR_TCI    (1 << 8)
-#define L_ISR_IDLEI  (1 << 3)
-
-/* 按类型选择位 */
+/* 按类型选择位（仅用于 IE/ISR 等同极性位） */
 #define _BIT(type, usart_bit, lpuart_bit) \
     ((type) == UART_TYPE_USART ? (usart_bit) : (lpuart_bit))
 
 /* 错误位掩码（USART ISR / LPUART SR） */
 #define U_ERR_MASK   (USART_ISR_OEI | USART_ISR_BEI | USART_ISR_PEI | USART_ISR_FEI)
 #define L_ERR_MASK   (LPUART_SR_RXOVIF | LPUART_SR_FEIF | LPUART_SR_PEIF)
+
+/* FR 语义辅助：USART 与 LPUART 极性不同，不可共用 bit mask */
+rt_inline rt_bool_t uart_tx_full(void *inst, int type)
+{
+    if (type == UART_TYPE_USART)
+        return (uart_reg_fr(inst, type) & U_FR_TXFF) ? RT_TRUE : RT_FALSE;
+    /* LPUART: TXE=1 表示可写 */
+    return (uart_reg_fr(inst, type) & LPUART_SR_TXE) ? RT_FALSE : RT_TRUE;
+}
+
+rt_inline rt_bool_t uart_rx_empty(void *inst, int type)
+{
+    if (type == UART_TYPE_USART)
+        return (uart_reg_fr(inst, type) & U_FR_RXFE) ? RT_TRUE : RT_FALSE;
+    /* LPUART: RXF=1 表示有数据 */
+    return (uart_reg_fr(inst, type) & LPUART_SR_RXF) ? RT_FALSE : RT_TRUE;
+}
 
 /* ==================== 引脚 / 时钟（来自 uart_config Kconfig 组） ==================== */
 
@@ -289,21 +306,27 @@ static void _dma_clk_enable(DMA_Channel_TypeDef *ch)
         __HAL_RCC_DMA2_CLK_ENABLE();
 }
 
-/* HTC/TC/IDLE 共用：按 HW 当前位置上报 RX_DMADONE */
+/* HTC/TC/IDLE 共用：按 HW 当前位置上报 RX_DMADONE（必须原子，防双上报） */
 static void _dma_rx_report_tail(struct acm32_uart *uart)
 {
     rt_uint16_t cur_pos;
     rt_uint16_t tail;
+    rt_base_t level;
 
     if (uart->dma_rx.Instance == NULL || uart->rx_dma_bufsz == 0)
         return;
+
+    level = rt_hw_interrupt_disable();
 
     cur_pos = uart->rx_dma_bufsz -
         (rt_uint16_t)__HAL_DMA_GET_TRANSFER_SIZE(&uart->dma_rx);
     __DSB();
 
     if (cur_pos == uart->rx_dma_last_pos)
+    {
+        rt_hw_interrupt_enable(level);
         return;
+    }
 
     System_InvalidateDAccelerate_by_Addr((volatile void *)uart->rx_dma_ping_buf,
                                          (int32_t)uart->rx_dma_bufsz);
@@ -313,9 +336,11 @@ static void _dma_rx_report_tail(struct acm32_uart *uart)
     else
         tail = (uart->rx_dma_bufsz - uart->rx_dma_last_pos) + cur_pos;
 
+    uart->rx_dma_last_pos = cur_pos;
+    rt_hw_interrupt_enable(level);
+
     rt_hw_serial_isr(&uart->serial,
         RT_SERIAL_EVENT_RX_DMADONE | ((rt_uint32_t)tail << 8));
-    uart->rx_dma_last_pos = cur_pos;
 }
 
 static void _uart_dma_rx_stop(struct acm32_uart *uart)
@@ -721,9 +746,13 @@ static int _uart_putc(struct rt_serial_device *serial, char ch)
     struct acm32_uart *uart = raw_to_uart(serial);
     void *inst = uart->config->Instance;
     int type = uart->config->uart_type;
+    rt_uint32_t spins = 100000U;
 
-    rt_uint32_t txff = _BIT(type, U_FR_TXFF, L_FR_TXFF);
-    while (uart_reg_fr(inst, type) & txff);
+    while (uart_tx_full(inst, type))
+    {
+        if (--spins == 0)
+            return -RT_ETIMEOUT;
+    }
     uart_reg_dr_write(inst, type, (rt_uint8_t)ch);
     return 1;
 }
@@ -734,8 +763,7 @@ static int _uart_getc(struct rt_serial_device *serial)
     void *inst = uart->config->Instance;
     int type = uart->config->uart_type;
 
-    rt_uint32_t rxfe = _BIT(type, U_FR_RXFE, L_FR_RXFE);
-    if (!(uart_reg_fr(inst, type) & rxfe))
+    if (!uart_rx_empty(inst, type))
         return uart_reg_dr_read(inst, type);
     return -RT_EEMPTY;
 }
@@ -794,16 +822,19 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial,
 #endif
 
     /* 中断 TX 模式 */
+    if (uart->tx_buf != RT_NULL && !uart->tx_done)
+        return -RT_EBUSY;
+
     uart->tx_buf  = buf;
     uart->tx_size = size;
     uart->tx_pos  = 0;
     uart->tx_done = RT_FALSE;
 
     /* 预填充 FIFO */
-    rt_uint32_t txff = _BIT(type, U_FR_TXFF, L_FR_TXFF);
     while (uart->tx_pos < uart->tx_size)
     {
-        if (uart_reg_fr(inst, type) & txff) break;
+        if (uart_tx_full(inst, type))
+            break;
         uart_reg_dr_write(inst, type, buf[uart->tx_pos++]);
     }
 
@@ -852,8 +883,7 @@ static void uart_isr(struct acm32_uart *uart)
     {
         uart_reg_isr_clear(inst, type, _BIT(type, U_ISR_RXI, L_ISR_RXI));
 
-        rt_uint32_t rxfe = _BIT(type, U_FR_RXFE, L_FR_RXFE);
-        while (!(uart_reg_fr(inst, type) & rxfe))
+        while (!uart_rx_empty(inst, type))
         {
             rt_uint8_t ch = uart_reg_dr_read(inst, type);
             rt_hw_serial_control_isr(&uart->serial, RT_HW_SERIAL_CTRL_PUTC, &ch);
@@ -867,10 +897,10 @@ static void uart_isr(struct acm32_uart *uart)
     {
         uart_reg_isr_clear(inst, type, _BIT(type, U_ISR_TXI, L_ISR_TXI));
 
-        rt_uint32_t txff = _BIT(type, U_FR_TXFF, L_FR_TXFF);
         while (uart->tx_buf && uart->tx_pos < uart->tx_size)
         {
-            if (uart_reg_fr(inst, type) & txff) break;
+            if (uart_tx_full(inst, type))
+                break;
             uart_reg_dr_write(inst, type, uart->tx_buf[uart->tx_pos++]);
         }
 

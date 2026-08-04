@@ -19,6 +19,15 @@ extern "C" {
 #define BSP_ETH_PHY_RST_PIN         30  /* PB14 default */
 #endif
 
+/*
+ * Fallback when ChipSN/EFUSE is blank: locally administered MAC
+ * 02:00:00:XX:YY:ZZ with XX:YY:ZZ = BSP_ETH_MAC_LOCAL_SUFFIX.
+ * Override in rtconfig.h / project options if multiple blank boards share a LAN.
+ */
+#ifndef BSP_ETH_MAC_LOCAL_SUFFIX
+#define BSP_ETH_MAC_LOCAL_SUFFIX    0x00334455u
+#endif
+
 #define ETH_PHY_RST_PORT_IDX        ((BSP_ETH_PHY_RST_PIN) / 16)
 #define ETH_PHY_RST_PIN_NUM         ((BSP_ETH_PHY_RST_PIN) % 16)
 #define ETH_PHY_RST_PIN             ((uint32_t)(1UL << ETH_PHY_RST_PIN_NUM))

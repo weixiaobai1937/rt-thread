@@ -20,11 +20,13 @@ static int lptim_test(int argc, char **argv)
 {
     (void)argc; (void)argv;
     rt_kprintf("=== LPTIMER ===\n");
-    rt_kprintf("  LPTIM1: hardware initialized, timer stopped\n");
+    rt_kprintf("  LPTIM1: hardware initialized, timer NOT started\n");
     rt_kprintf("  Clock: PCLK1, prescaler /128, period 0xFFFF\n");
-    rt_kprintf("  PM tickless integration is not implemented yet.\n");
+    rt_kprintf("  Role: stub for future PM tickless / low-power wake\n");
+    rt_kprintf("  Status: no rt_device node, no periodic IRQ (by design)\n");
+    rt_kprintf("  See drivers/drv_lptimer.c and drivers/Kconfig help.\n");
     return 0;
 }
-MSH_CMD_EXPORT(lptim_test, LPTIMER status info);
+MSH_CMD_EXPORT(lptim_test, LPTIMER status (stub for PM));
 
 #endif /* BSP_USING_LPTIMER */

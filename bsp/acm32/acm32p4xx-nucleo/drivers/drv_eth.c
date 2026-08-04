@@ -14,6 +14,8 @@
 #include <rtdevice.h>
 #include <board.h>
 
+#ifdef BSP_USING_ETH
+
 #include <netif/ethernetif.h>
 #include <lwip/netifapi.h>
 #include <lwip/tcpip.h>
@@ -43,6 +45,7 @@ static uint8_t *rx_pool_memory;
 static uint32_t *rx_pool_bitmap;
 static uint8_t *tx_bounce_bufs[ETH_TX_BOUNCE_CNT];
 static volatile uint8_t tx_bounce_busy[ETH_TX_BOUNCE_CNT];
+static uint8_t *eth_dma_mem; /* single psram block for desc/bounce/rx pool */
 
 static ETH_HandleTypeDef EthHandle;
 static ETH_TxPacketConfigTypeDef TxConfig;
@@ -59,9 +62,11 @@ struct acm32_eth
 
 static struct acm32_eth acm32_eth_device;
 
-/* ===== Semaphores ===== */
+/* ===== Semaphores / locks ===== */
 
 static rt_sem_t tx_sem;
+/* Serialize link stop/start with TX so MAC is not torn down mid-Transmit_IT */
+static struct rt_mutex eth_lock;
 
 /* ===== RX allocation status ===== */
 
@@ -78,6 +83,10 @@ static volatile uint32_t eth_rx_alloc_fail = 0;
 static volatile uint32_t eth_rx_read_ok = 0;
 static volatile uint32_t eth_rx_err_count = 0;
 static volatile uint32_t eth_tx_count = 0;
+/* IRQ-path events: only count; log from thread / eth_ifconfig to avoid kprintf in ISR */
+static volatile uint32_t eth_fatal_err_count = 0;
+static volatile uint32_t eth_fatal_err_last = 0;
+static volatile uint32_t eth_rx_pool_exhaust_count = 0;
 
 /* ===== Forward declarations ===== */
 
@@ -307,9 +316,8 @@ void HAL_ETH_RxCpltCallback(ETH_HandleTypeDef *heth)
 void HAL_ETH_TxCpltCallback(ETH_HandleTypeDef *heth)
 {
     eth_tx_cplt_count++;
-    /* Release TX descriptors + bounce ownership (TxFreeCallback) */
+    /* Free TX descriptors + bounce; tx_sem released in TxFreeCallback per slot */
     HAL_ETH_ReleaseTxPacket(heth);
-    rt_sem_release(tx_sem);
 }
 
 void HAL_ETH_ErrorCallback(ETH_HandleTypeDef *heth)
@@ -321,15 +329,15 @@ void HAL_ETH_ErrorCallback(ETH_HandleTypeDef *heth)
     }
     if (dma_err & ETH_DMASR_TBUS)
     {
-        /* Release descriptor/bounce ownership so TX slots do not leak. */
+        /* Free descriptor/bounce ownership; sem released only in TxFreeCallback */
         HAL_ETH_ReleaseTxPacket(heth);
-        rt_sem_release(tx_sem);
     }
-    /* Only log fatal errors (FBE, access error, etc.).
-     * Non-fatal flags (AIS, ET, RBU, TBUS) are normal during operation. */
+    /* Do not LOG from IRQ; counters are shown by eth_ifconfig / link thread. */
     if (dma_err & (ETH_DMA_FLAG_FBE | ETH_DMA_FLAG_READWRITEERROR | ETH_DMA_FLAG_ACCESSERROR))
     {
-        LOG_E("ETH fatal: DMA=0x%08X", dma_err);
+        eth_fatal_err_count++;
+        eth_fatal_err_last = dma_err;
+        eth_rx_err_count++;
     }
 }
 
@@ -361,7 +369,8 @@ void HAL_ETH_RxAllocateCallback(uint8_t **buff)
         eth_rx_alloc_fail++;
         RxAllocStatus = RX_ALLOC_ERROR;
         *buff = NULL;
-        LOG_W("RX pool exhausted!");
+        /* Counter only in IRQ; eth_ifconfig prints fail count */
+        eth_rx_pool_exhaust_count++;
     }
 }
 
@@ -416,6 +425,9 @@ void HAL_ETH_TxFreeCallback(uint32_t *buff)
         if ((uint8_t *)buff == tx_bounce_bufs[i])
         {
             tx_bounce_busy[i] = 0;
+            /* One wake per freed bounce slot (not per IRQ) to avoid sem inflation */
+            if (tx_sem != RT_NULL)
+                rt_sem_release(tx_sem);
             return;
         }
     }
@@ -593,7 +605,7 @@ static int phy_get_link_state(ETH_HandleTypeDef *heth)
 
 /* ===== ETH TX callback (eth_device -> low_level_output) ===== */
 /*
- * Async IT TX + bounce ring in SRAM1.
+ * Async IT TX + bounce ring in PSRAM (same ETH DMA window as descriptors).
  * Do NOT busy-poll here: etx and erx share priority; spinning starves RX
  * and MAC drops frames under load (host sees ~256KB then tcp write failed).
  */
@@ -606,20 +618,27 @@ static rt_err_t rt_acm32_eth_tx(rt_device_t dev, struct pbuf *p)
     uint8_t *bounce;
 
     RT_ASSERT(p != RT_NULL);
+    RT_UNUSED(dev);
 
     eth_tx_count++;
 
     if (p->tot_len == 0 || p->tot_len > ETH_TX_BOUNCE_SIZE)
         return -RT_ERROR;
 
+    if (rt_mutex_take(&eth_lock, rt_tick_from_millisecond(ETHIF_TX_TIMEOUT)) != RT_EOK)
+        return -RT_ETIMEOUT;
+
     for (;;)
     {
         bi = eth_tx_alloc_bounce();
         if (bi >= 0)
             break;
-        /* Sleep until TxCplt frees a slot (allows erx to run) */
+        /* Sleep until TxFreeCallback frees a slot (allows erx to run) */
         if (rt_sem_take(tx_sem, rt_tick_from_millisecond(ETHIF_TX_TIMEOUT)) != RT_EOK)
+        {
+            rt_mutex_release(&eth_lock);
             return -RT_ETIMEOUT;
+        }
     }
     bounce = tx_bounce_bufs[bi];
 
@@ -627,6 +646,7 @@ static rt_err_t rt_acm32_eth_tx(rt_device_t dev, struct pbuf *p)
     if (copy_len != p->tot_len)
     {
         tx_bounce_busy[bi] = 0;
+        rt_mutex_release(&eth_lock);
         return -RT_ERROR;
     }
 
@@ -659,6 +679,7 @@ static rt_err_t rt_acm32_eth_tx(rt_device_t dev, struct pbuf *p)
             if (rt_sem_take(tx_sem, rt_tick_from_millisecond(ETHIF_TX_TIMEOUT)) != RT_EOK)
             {
                 tx_bounce_busy[bi] = 0;
+                rt_mutex_release(&eth_lock);
                 return -RT_ETIMEOUT;
             }
             errval = -RT_EBUSY;
@@ -670,6 +691,7 @@ static rt_err_t rt_acm32_eth_tx(rt_device_t dev, struct pbuf *p)
         }
     } while (errval == -RT_EBUSY);
 
+    rt_mutex_release(&eth_lock);
     return errval;
 }
 
@@ -693,6 +715,8 @@ static rt_err_t rt_acm32_eth_control(rt_device_t dev, int cmd, void *args)
     switch (cmd)
     {
     case NIOCTL_GADDR:
+        if (args == RT_NULL)
+            return -RT_ERROR;
         rt_memcpy(args, acm32_eth_device.dev_addr, 6);
         return RT_EOK;
 
@@ -704,72 +728,94 @@ static rt_err_t rt_acm32_eth_control(rt_device_t dev, int cmd, void *args)
     }
 }
 
+static void eth_dma_mem_release(void)
+{
+    int i;
+
+    if (eth_dma_mem != RT_NULL)
+    {
+        rt_memheap_free(eth_dma_mem);
+        eth_dma_mem = RT_NULL;
+    }
+    DMATxDscrTab = RT_NULL;
+    DMARxDscrTab = RT_NULL;
+    rx_pool_memory = RT_NULL;
+    rx_pool_bitmap = RT_NULL;
+    for (i = 0; i < ETH_TX_BOUNCE_CNT; i++)
+    {
+        tx_bounce_bufs[i] = RT_NULL;
+        tx_bounce_busy[i] = 0;
+    }
+}
+
 /* ===== ETH hardware init ===== */
 
 static rt_err_t rt_acm32_eth_init(rt_device_t dev)
 {
     uint8_t macaddress[6];
-
-    /* Generate unique MAC from chip EFUSE.
-     * OUI prefix 02:00:00 (locally administered), last 3 bytes from EFUSE data.
-     * Prefer validated ChipSN; fall back to raw EFUSE bytes if validation fails
-     * (e.g. unprogrammed EFUSE on dev boards). */
-    {
-        uint8_t chipsn[16] = {0};
-        if (System_Get_ChipSN(chipsn) == HAL_OK)
-        {
-            macaddress[0] = 0x02;
-            macaddress[1] = 0x00;
-            macaddress[2] = 0x00;
-            macaddress[3] = chipsn[0] ^ chipsn[3];
-            macaddress[4] = chipsn[1] ^ chipsn[4];
-            macaddress[5] = chipsn[2] ^ chipsn[5];
-
-            /* Validated ChipSN may still be all-zero on unprogrammed parts. */
-            if (macaddress[3] == 0 && macaddress[4] == 0 && macaddress[5] == 0)
-            {
-                LOG_W("ChipSN unprogrammed, using default MAC");
-                macaddress[3] = 0x33;
-                macaddress[4] = 0x44;
-                macaddress[5] = 0x55;
-            }
-            else
-            {
-                LOG_I("MAC from ChipSN");
-            }
-        }
-        else
-        {
-            /* EFUSE validation failed — try raw EFUSE bytes for entropy */
-            uint8_t raw[16] = {0};
-            HAL_EFUSE_ReadBytes(EFUSE1, 0x40, raw, 13, 500);
-
-            macaddress[0] = 0x02;
-            macaddress[1] = 0x00;
-            macaddress[2] = 0x00;
-            macaddress[3] = raw[0] ^ raw[3] ^ raw[6] ^ raw[9];
-            macaddress[4] = raw[1] ^ raw[4] ^ raw[7] ^ raw[10];
-            macaddress[5] = raw[2] ^ raw[5] ^ raw[8] ^ raw[12];
-
-            /* If all EFUSE bytes are zero (unprogrammed), use a fixed default */
-            if (macaddress[3] == 0 && macaddress[4] == 0 && macaddress[5] == 0)
-            {
-                LOG_W("EFUSE unprogrammed, using default MAC");
-                macaddress[3] = 0x33;
-                macaddress[4] = 0x44;
-                macaddress[5] = 0x55;
-            }
-            else
-            {
-                LOG_I("MAC from raw EFUSE (ChipSN validation failed)");
-            }
-        }
-    }
     uint16_t phy_id1, phy_id2;
     int phy_state;
     uint32_t wait;
     uint32_t speed, duplex;
     ETH_MACConfigTypeDef MACConf = {0};
+    extern struct rt_memheap psram_heap;
+    size_t desc_size;
+    size_t bounce_size;
+    size_t pool_size;
+    size_t bitmap_size;
+    size_t total;
+    uint8_t *mem;
+    int i;
+
+    RT_UNUSED(dev);
+
+    /* Generate unique MAC from chip EFUSE.
+     * OUI prefix 02:00:00 (locally administered), last 3 bytes from chip ID.
+     * Prefer validated ChipSN; fall back to raw EFUSE; last resort local suffix. */
+    {
+        uint8_t id[16] = {0};
+        const char *src = "ChipSN";
+        int i;
+
+        if (System_Get_ChipSN(id) != HAL_OK)
+        {
+            src = "EFUSE";
+            HAL_EFUSE_ReadBytes(EFUSE1, 0x40, id, 13, 500);
+        }
+
+        /* Fold all available ID bytes into 3 MAC octets */
+        macaddress[0] = 0x02;
+        macaddress[1] = 0x00;
+        macaddress[2] = 0x00;
+        macaddress[3] = 0;
+        macaddress[4] = 0;
+        macaddress[5] = 0;
+        for (i = 0; i < 16; i++)
+        {
+            macaddress[3 + (i % 3)] ^= id[i];
+        }
+
+        if (macaddress[3] == 0 && macaddress[4] == 0 && macaddress[5] == 0)
+        {
+            uint32_t suffix = (uint32_t)BSP_ETH_MAC_LOCAL_SUFFIX;
+            macaddress[3] = (uint8_t)((suffix >> 16) & 0xFF);
+            macaddress[4] = (uint8_t)((suffix >> 8) & 0xFF);
+            macaddress[5] = (uint8_t)(suffix & 0xFF);
+            /* Avoid all-zero NIC address after mask */
+            if (macaddress[3] == 0 && macaddress[4] == 0 && macaddress[5] == 0)
+            {
+                macaddress[3] = 0x33;
+                macaddress[4] = 0x44;
+                macaddress[5] = 0x55;
+            }
+            LOG_W("Chip ID blank, MAC suffix 0x%06X (set BSP_ETH_MAC_LOCAL_SUFFIX per board)",
+                  (unsigned)(suffix & 0xFFFFFFu));
+        }
+        else
+        {
+            LOG_I("MAC from %s", src);
+        }
+    }
 
     /* Copy MAC address to device struct and sync to lwIP netif / netdev */
     rt_memcpy(acm32_eth_device.dev_addr, macaddress, 6);
@@ -790,49 +836,52 @@ static rt_err_t rt_acm32_eth_init(rt_device_t dev)
           macaddress[0], macaddress[1], macaddress[2],
           macaddress[3], macaddress[4], macaddress[5]);
 
-    /* All ETH DMA memory from psram memheap */
+    /* All ETH DMA memory from psram memheap (reuse on re-init) */
+    desc_size = sizeof(ETH_DMADescTypeDef) * (ETH_RX_DESC_CNT + ETH_TX_DESC_CNT);
+    bounce_size = (size_t)ETH_TX_BOUNCE_CNT * ETH_TX_BOUNCE_SIZE;
+    pool_size = ETH_RX_POOL_SIZE;
+    bitmap_size = ((ETH_RX_BUFFER_CNT + 31) / 32) * sizeof(uint32_t);
+    total = ((desc_size + bounce_size + pool_size + bitmap_size + 31U) & ~31U);
+
+    if (!System_OSPI_PSRAM_Ready())
     {
-        extern struct rt_memheap psram_heap;
-        size_t desc_size = sizeof(ETH_DMADescTypeDef) * (ETH_RX_DESC_CNT + ETH_TX_DESC_CNT);
-        size_t bounce_size = (size_t)ETH_TX_BOUNCE_CNT * ETH_TX_BOUNCE_SIZE;
-        size_t pool_size = ETH_RX_POOL_SIZE;
-        size_t bitmap_size = ((ETH_RX_BUFFER_CNT + 31) / 32) * sizeof(uint32_t);
-        size_t total = ((desc_size + bounce_size + pool_size + bitmap_size + 31U) & ~31U);
-        uint8_t *mem;
-        int i;
+        LOG_E("ETH psram memheap unavailable (PSRAM init failed)");
+        return -RT_ENOMEM;
+    }
 
-        if (!System_OSPI_PSRAM_Ready())
-        {
-            LOG_E("ETH psram memheap unavailable (PSRAM init failed)");
-            return -RT_ENOMEM;
-        }
-
+    if (eth_dma_mem == RT_NULL)
+    {
         mem = (uint8_t *)rt_memheap_alloc(&psram_heap, total);
         if (mem == RT_NULL)
         {
             LOG_E("ETH psram alloc %u bytes failed", (unsigned)total);
             return -RT_ENOMEM;
         }
-
-        rt_memset(mem, 0, total);
-        System_CleanDAccelerate_by_Addr((volatile void *)mem, (int32_t)total);
-
-        DMATxDscrTab = (ETH_DMADescTypeDef *)mem;
-        DMARxDscrTab = (ETH_DMADescTypeDef *)(mem + sizeof(ETH_DMADescTypeDef) * ETH_TX_DESC_CNT);
-        for (i = 0; i < ETH_TX_BOUNCE_CNT; i++)
-        {
-            tx_bounce_bufs[i] = mem + desc_size + (size_t)i * ETH_TX_BOUNCE_SIZE;
-            tx_bounce_busy[i] = 0;
-        }
-
-        rx_pool_memory = mem + desc_size + bounce_size;
-        rx_pool_bitmap = (uint32_t *)(rx_pool_memory + pool_size);
-
-        LOG_I("ETH DMA psram=%p total=%u desc=%u bounce=%ux%u rx_pool=%u",
-              (void *)mem, (unsigned)total,
-              (unsigned)desc_size, (unsigned)ETH_TX_BOUNCE_CNT, (unsigned)ETH_TX_BOUNCE_SIZE,
-              (unsigned)pool_size);
+        eth_dma_mem = mem;
     }
+    else
+    {
+        mem = eth_dma_mem;
+    }
+
+    rt_memset(mem, 0, total);
+    System_CleanDAccelerate_by_Addr((volatile void *)mem, (int32_t)total);
+
+    DMATxDscrTab = (ETH_DMADescTypeDef *)mem;
+    DMARxDscrTab = (ETH_DMADescTypeDef *)(mem + sizeof(ETH_DMADescTypeDef) * ETH_TX_DESC_CNT);
+    for (i = 0; i < ETH_TX_BOUNCE_CNT; i++)
+    {
+        tx_bounce_bufs[i] = mem + desc_size + (size_t)i * ETH_TX_BOUNCE_SIZE;
+        tx_bounce_busy[i] = 0;
+    }
+
+    rx_pool_memory = mem + desc_size + bounce_size;
+    rx_pool_bitmap = (uint32_t *)(rx_pool_memory + pool_size);
+
+    LOG_I("ETH DMA psram=%p total=%u desc=%u bounce=%ux%u rx_pool=%u",
+          (void *)mem, (unsigned)total,
+          (unsigned)desc_size, (unsigned)ETH_TX_BOUNCE_CNT, (unsigned)ETH_TX_BOUNCE_SIZE,
+          (unsigned)pool_size);
 
     /* Configure ETH handle */
     EthHandle.Instance = ETH;
@@ -845,6 +894,7 @@ static rt_err_t rt_acm32_eth_init(rt_device_t dev)
     if (EthHandle.Init.RxBuffLen < 1524U)
     {
         LOG_E("RxBuffLen %u too small for max frame", (unsigned)EthHandle.Init.RxBuffLen);
+        eth_dma_mem_release();
         return -RT_ERROR;
     }
     LOG_I("RxBuffLen=%u (pbuf_custom=%u)",
@@ -855,6 +905,7 @@ static rt_err_t rt_acm32_eth_init(rt_device_t dev)
     if (HAL_ETH_Init(&EthHandle) != HAL_OK)
     {
         LOG_E("HAL_ETH_Init FAILED!");
+        eth_dma_mem_release();
         return -RT_ERROR;
     }
     LOG_I("HAL_ETH_Init OK");
@@ -943,6 +994,8 @@ static rt_err_t rt_acm32_eth_init(rt_device_t dev)
     if (HAL_ETH_Start_IT(&EthHandle) != HAL_OK)
     {
         LOG_E("HAL_ETH_Start_IT failed!");
+        HAL_ETH_DeInit(&EthHandle);
+        eth_dma_mem_release();
         return -RT_ERROR;
     }
 
@@ -972,7 +1025,16 @@ static void ethernet_link_thread(void *parameter)
 
         if (netif_is_link_up(netif) && (phy_state == PHY_LINK_DOWN))
         {
-            HAL_ETH_Stop_IT(&EthHandle);
+            /* Hold eth_lock so TX cannot run while MAC is stopped */
+            if (rt_mutex_take(&eth_lock, rt_tick_from_millisecond(ETHIF_TX_TIMEOUT)) == RT_EOK)
+            {
+                HAL_ETH_Stop_IT(&EthHandle);
+                rt_mutex_release(&eth_lock);
+            }
+            else
+            {
+                HAL_ETH_Stop_IT(&EthHandle);
+            }
             netifapi_netif_set_down(netif);
             netifapi_netif_set_link_down(netif);
             LOG_I("link down");
@@ -993,13 +1055,25 @@ static void ethernet_link_thread(void *parameter)
                 speed = ETH_SPEED_100M; duplex = ETH_FULLDUPLEX_MODE; break;
             }
 
-            HAL_ETH_GetMACConfig(&EthHandle, &MACConf);
-            MACConf.DuplexMode = duplex;
-            MACConf.Speed = speed;
-            HAL_ETH_SetMACConfig(&EthHandle, &MACConf);
+            if (rt_mutex_take(&eth_lock, rt_tick_from_millisecond(ETHIF_TX_TIMEOUT)) == RT_EOK)
+            {
+                HAL_ETH_GetMACConfig(&EthHandle, &MACConf);
+                MACConf.DuplexMode = duplex;
+                MACConf.Speed = speed;
+                HAL_ETH_SetMACConfig(&EthHandle, &MACConf);
 
-            if (HAL_ETH_Start_IT(&EthHandle) != HAL_OK)
-                LOG_E("link-up: HAL_ETH_Start_IT failed");
+                acm32_eth_device.eth_speed = speed;
+                acm32_eth_device.eth_mode  = duplex;
+
+                if (HAL_ETH_Start_IT(&EthHandle) != HAL_OK)
+                    LOG_E("link-up: HAL_ETH_Start_IT failed");
+                rt_mutex_release(&eth_lock);
+            }
+            else
+            {
+                LOG_W("link-up: eth_lock timeout");
+            }
+
             netifapi_netif_set_up(netif);
             netifapi_netif_set_link_up(netif);
             LOG_I("link up: %s %s",
@@ -1035,6 +1109,12 @@ static int rt_hw_acm32_eth_init(void)
     {
         LOG_E("sem create failed");
         return -RT_ENOMEM;
+    }
+
+    if (rt_mutex_init(&eth_lock, "eth_lk", RT_IPC_FLAG_PRIO) != RT_EOK)
+    {
+        LOG_E("eth mutex init failed");
+        return -RT_ERROR;
     }
 
     /* Set device ops */
@@ -1154,6 +1234,12 @@ static int eth_ifconfig(int argc, char **argv)
                    (unsigned)eth_tx_cplt_count, (unsigned)eth_rx_alloc_count,
                    (unsigned)eth_rx_alloc_fail, (unsigned)eth_rx_read_ok,
                    (unsigned)eth_rx_err_count, (unsigned)eth_tx_count);
+        if (eth_fatal_err_count)
+            rt_kprintf("  fatal_err count=%u last_DMA=0x%08X\n",
+                       (unsigned)eth_fatal_err_count, (unsigned)eth_fatal_err_last);
+        if (eth_rx_pool_exhaust_count)
+            rt_kprintf("  rx_pool_exhaust events=%u\n",
+                       (unsigned)eth_rx_pool_exhaust_count);
         rt_kprintf("  MAC speed=%s duplex=%s phy_state=%d\n",
                    acm32_eth_device.eth_speed == ETH_SPEED_100M ? "100M" : "10M",
                    acm32_eth_device.eth_mode == ETH_FULLDUPLEX_MODE ? "Full" : "Half",
@@ -1315,3 +1401,6 @@ static void arp(int argc, char **argv)
     }
 }
 MSH_CMD_EXPORT(arp, show ARP table);
+
+#endif /* BSP_USING_ETH */
+

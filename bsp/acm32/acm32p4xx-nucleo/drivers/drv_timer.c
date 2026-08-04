@@ -203,15 +203,18 @@ static const struct rt_clock_timer_ops _ops =
     .control = timer_ctrl,
 };
 
+/* ACM32 TIM SR: write 0 to clear a flag (same as __HAL_TIM_CLEAR_FLAG) */
+#define ACM32_TIM_CLEAR_UIF(TIMx)  ((TIMx)->SR = (uint32_t)(~TIMER_SR_UIF))
+
 #ifdef BSP_USING_TIM1
 void TIM1_BRK_UP_TRG_COM_IRQHandler(void)
 {
     rt_interrupt_enter();
     if (TIM1->SR & TIMER_SR_UIF)
     {
+        ACM32_TIM_CLEAR_UIF(TIM1);
         rt_clock_timer_isr(&acm32_clock_timer_obj[TIM1_INDEX].time_device);
     }
-    TIM1->SR = TIMER_SR_UIF;
     rt_interrupt_leave();
 }
 #endif
@@ -222,9 +225,9 @@ void TIM2_IRQHandler(void)
     rt_interrupt_enter();
     if (TIM2->SR & TIMER_SR_UIF)
     {
+        ACM32_TIM_CLEAR_UIF(TIM2);
         rt_clock_timer_isr(&acm32_clock_timer_obj[TIM2_INDEX].time_device);
     }
-    TIM2->SR = TIMER_SR_UIF;
     rt_interrupt_leave();
 }
 #endif
@@ -235,9 +238,9 @@ void TIM3_IRQHandler(void)
     rt_interrupt_enter();
     if (TIM3->SR & TIMER_SR_UIF)
     {
+        ACM32_TIM_CLEAR_UIF(TIM3);
         rt_clock_timer_isr(&acm32_clock_timer_obj[TIM3_INDEX].time_device);
     }
-    TIM3->SR = TIMER_SR_UIF;
     rt_interrupt_leave();
 }
 #endif
@@ -248,9 +251,9 @@ void TIM6_IRQHandler(void)
     rt_interrupt_enter();
     if (TIM6->SR & TIMER_SR_UIF)
     {
+        ACM32_TIM_CLEAR_UIF(TIM6);
         rt_clock_timer_isr(&acm32_clock_timer_obj[TIM6_INDEX].time_device);
     }
-    TIM6->SR = TIMER_SR_UIF;
     rt_interrupt_leave();
 }
 #endif
@@ -261,9 +264,9 @@ void TIM10_IRQHandler(void)
     rt_interrupt_enter();
     if (TIM10->SR & TIMER_SR_UIF)
     {
+        ACM32_TIM_CLEAR_UIF(TIM10);
         rt_clock_timer_isr(&acm32_clock_timer_obj[TIM10_INDEX].time_device);
     }
-    TIM10->SR = TIMER_SR_UIF;
     rt_interrupt_leave();
 }
 #endif

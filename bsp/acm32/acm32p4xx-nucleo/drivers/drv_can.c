@@ -43,6 +43,15 @@
  * 采样点 = (1+TS1) / (1+TS1+TS2) target 87.5%
  * SJW = min(4, TS2)
  */
+static uint32_t can_clock_hz(void)
+{
+#ifdef FDCAN_CLOCK_HZ
+    return (uint32_t)FDCAN_CLOCK_HZ;
+#else
+    return HAL_RCC_GetHCLKFreq();
+#endif
+}
+
 static rt_err_t can_baud_rate_calc(uint32_t baud_rate,
     uint32_t *prescaler, uint32_t *tseg1, uint32_t *tseg2, uint32_t *sjw)
 {
@@ -50,10 +59,14 @@ static rt_err_t can_baud_rate_calc(uint32_t baud_rate,
     uint32_t best_prescaler = 1;
     uint32_t best_tseg1 = 1;
     uint32_t best_tseg2 = 1;
+    uint32_t can_clk = can_clock_hz();
+
+    if ((baud_rate == 0) || (can_clk == 0))
+        return -RT_EINVAL;
 
     for (uint32_t presc = 1; presc <= 512; presc++)
     {
-        uint32_t total_tq = (FDCAN_CLOCK_HZ + presc * baud_rate / 2) / (presc * baud_rate);
+        uint32_t total_tq = (can_clk + presc * baud_rate / 2) / (presc * baud_rate);
         if (total_tq < 4 || total_tq > 258)
             continue;
 
@@ -70,7 +83,7 @@ static rt_err_t can_baud_rate_calc(uint32_t baud_rate,
         if (ts1 < 1 || ts1 > 256)
             continue;
 
-        uint32_t actual_baud = FDCAN_CLOCK_HZ / (presc * total_tq);
+        uint32_t actual_baud = can_clk / (presc * total_tq);
         uint32_t diff = (actual_baud > baud_rate) ?
                         (actual_baud - baud_rate) : (baud_rate - actual_baud);
 
@@ -109,13 +122,14 @@ static void filter_set_default(FDCAN_NewFilterTypeDef *filter)
     filter->Filter_Length = FDCAN_FILTER_LEN_16;
     filter->Filter_Count = 1;
 
+    /* Pass-all standard frames: code=0, mask=0 (don't-care all ID bits) */
     filter->filter16_0.basic.id = 0;
     filter->filter16_0.basic.IDE = 0;
     filter->filter16_0.basic.RTR = 0;
 
-    filter->mask16_0.basic.id = 0x7FF;
-    filter->mask16_0.basic.IDE = 1;
-    filter->mask16_0.basic.RTR = 1;
+    filter->mask16_0.basic.id = 0;
+    filter->mask16_0.basic.IDE = 0;
+    filter->mask16_0.basic.RTR = 0;
 }
 
 static void filter_set_from_item(FDCAN_NewFilterTypeDef *filter,
@@ -259,7 +273,8 @@ static rt_err_t _can_configure(struct rt_can_device *can, struct can_configure *
 
     if (can_baud_rate_calc(cfg->baud_rate, &prescaler, &tseg1, &tseg2, &sjw) != RT_EOK)
     {
-        LOG_E("baud rate %d not supported (CANCLK=%d Hz)", cfg->baud_rate, FDCAN_CLOCK_HZ);
+        LOG_E("baud rate %d not supported (CANCLK=%u Hz)",
+              cfg->baud_rate, (unsigned)can_clock_hz());
         return -RT_ERROR;
     }
 
@@ -489,6 +504,7 @@ static rt_ssize_t _can_sendmsg(struct rt_can_device *can, const void *buf, rt_ui
 
     RT_ASSERT(can);
     RT_ASSERT(buf);
+    RT_UNUSED(boxno);
 
     pdrv_can = (acm32_can_t *)can->parent.user_data;
     RT_ASSERT(pdrv_can);
@@ -497,18 +513,16 @@ static rt_ssize_t _can_sendmsg(struct rt_can_device *can, const void *buf, rt_ui
 
     fill_tx_header(&tx_header, pmsg);
 
+    /*
+     * Framework INT_TX path waits on completion; do not poll WaitTxCompleted
+     * here (it races with IRQ clearing the done flag). Completion is reported
+     * in HAL_FDCAN_TXPTBCompletedCallback via RT_CAN_EVENT_TX_DONE.
+     */
     if (HAL_FDCAN_TransmitMessageByPTB(&pdrv_can->fdcanHandle,
                                         &tx_header,
                                         pmsg->data) != HAL_OK)
     {
         return -RT_ERROR;
-    }
-
-    if (HAL_FDCAN_WaitTxCompleted(&pdrv_can->fdcanHandle,
-                                   FDCAN_TRANSMIT_PTB, 100) != HAL_OK)
-    {
-        LOG_W("tx timeout");
-        return -RT_EBUSY;
     }
 
     return RT_EOK;
@@ -601,13 +615,13 @@ void HAL_FDCAN_TXPTBCompletedCallback(FDCAN_HandleTypeDef *hfdcan)
     if (hfdcan->Instance == FDCAN1)
     {
 #ifdef BSP_USING_FDCAN1
-        rt_hw_can_isr(&st_DrvCan1.device, RT_CAN_EVENT_TX_DONE);
+        rt_hw_can_isr(&st_DrvCan1.device, RT_CAN_EVENT_TX_DONE | (0 << 8));
 #endif
     }
     else if (hfdcan->Instance == FDCAN2)
     {
 #ifdef BSP_USING_FDCAN2
-        rt_hw_can_isr(&st_DrvCan2.device, RT_CAN_EVENT_TX_DONE);
+        rt_hw_can_isr(&st_DrvCan2.device, RT_CAN_EVENT_TX_DONE | (0 << 8));
 #endif
     }
 }
@@ -617,13 +631,13 @@ void HAL_FDCAN_TXSTBCompletedCallback(FDCAN_HandleTypeDef *hfdcan)
     if (hfdcan->Instance == FDCAN1)
     {
 #ifdef BSP_USING_FDCAN1
-        rt_hw_can_isr(&st_DrvCan1.device, RT_CAN_EVENT_TX_DONE);
+        rt_hw_can_isr(&st_DrvCan1.device, RT_CAN_EVENT_TX_DONE | (0 << 8));
 #endif
     }
     else if (hfdcan->Instance == FDCAN2)
     {
 #ifdef BSP_USING_FDCAN2
-        rt_hw_can_isr(&st_DrvCan2.device, RT_CAN_EVENT_TX_DONE);
+        rt_hw_can_isr(&st_DrvCan2.device, RT_CAN_EVENT_TX_DONE | (0 << 8));
 #endif
     }
 }

@@ -6,6 +6,7 @@
  * Change Logs:
  * Date           Author       Notes
  * 2026-07-24     AisinoChip   ACM32P4xx CAN (FDCAN) MSH test
+ * 2026-08-04     AisinoChip   open device before read/write
  *
  * MSH:
  *   can_test                  list devices + info
@@ -24,6 +25,8 @@
 
 #if defined(RT_USING_CAN) && (defined(BSP_USING_FDCAN1) || defined(BSP_USING_FDCAN2))
 
+#define CAN_OPEN_FLAGS  (RT_DEVICE_FLAG_INT_RX | RT_DEVICE_FLAG_INT_TX)
+
 struct can_test_unit
 {
     const char *name;
@@ -41,6 +44,23 @@ static const struct can_test_unit g_can_units[] =
 #endif
 };
 
+static rt_device_t can_open(const char *dev_name)
+{
+    rt_device_t dev = rt_device_find(dev_name);
+    if (dev == RT_NULL)
+    {
+        rt_kprintf("can_test: %s not found\n", dev_name);
+        return RT_NULL;
+    }
+
+    if (rt_device_open(dev, CAN_OPEN_FLAGS) != RT_EOK)
+    {
+        rt_kprintf("can_test: open %s failed\n", dev_name);
+        return RT_NULL;
+    }
+    return dev;
+}
+
 static void can_test_info(void)
 {
     rt_kprintf("=== CAN Devices ===\n");
@@ -55,39 +75,63 @@ static int can_test_send(const char *dev_name, rt_uint32_t id,
                           const rt_uint8_t *data, rt_uint8_t len)
 {
     struct rt_can_msg msg = {0};
+    rt_device_t dev;
+    rt_size_t sz;
 
     msg.id  = id;
     msg.ide = RT_CAN_STDID;
     msg.rtr = RT_CAN_DTR;
     msg.len = len > 8 ? 8 : len;
-    if (len > 0) rt_memcpy(msg.data, data, msg.len);
+    if (len > 0)
+        rt_memcpy(msg.data, data, msg.len);
 
-    rt_device_t dev = rt_device_find(dev_name);
-    if (dev == RT_NULL) { rt_kprintf("can_test: %s not found\n", dev_name); return -1; }
+    dev = can_open(dev_name);
+    if (dev == RT_NULL)
+        return -1;
 
-    rt_size_t sz = rt_device_write(dev, 0, &msg, sizeof(msg));
-    if (sz <= 0) { rt_kprintf("can_test: send failed\n"); return -1; }
+    sz = rt_device_write(dev, 0, &msg, sizeof(msg));
+    if (sz == 0)
+    {
+        rt_kprintf("can_test: send failed\n");
+        rt_device_close(dev);
+        return -1;
+    }
 
     rt_kprintf("can_test: sent id=0x%03X len=%d:", id, msg.len);
-    for (int i = 0; i < msg.len; i++) rt_kprintf(" %02X", msg.data[i]);
+    for (int i = 0; i < msg.len; i++)
+        rt_kprintf(" %02X", msg.data[i]);
     rt_kprintf("\n");
+
+    rt_device_close(dev);
     return 0;
 }
 
 static int can_test_recv(const char *dev_name)
 {
     struct rt_can_msg msg = {0};
-    rt_device_t dev = rt_device_find(dev_name);
-    if (dev == RT_NULL) { rt_kprintf("can_test: %s not found\n", dev_name); return -1; }
+    rt_device_t dev;
+    rt_size_t sz;
 
-    rt_kprintf("can_test: waiting on %s (5s)...\n", dev_name);
-    rt_size_t sz = rt_device_read(dev, 0, &msg, sizeof(msg));
-    if (sz <= 0) { rt_kprintf("can_test: recv timeout\n"); return -1; }
+    dev = can_open(dev_name);
+    if (dev == RT_NULL)
+        return -1;
+
+    rt_kprintf("can_test: waiting on %s...\n", dev_name);
+    sz = rt_device_read(dev, 0, &msg, sizeof(msg));
+    if (sz == 0)
+    {
+        rt_kprintf("can_test: recv timeout\n");
+        rt_device_close(dev);
+        return -1;
+    }
 
     rt_kprintf("can_test: recv id=0x%03X %s len=%d:",
                msg.id, msg.ide ? "EXT" : "STD", msg.len);
-    for (int i = 0; i < msg.len; i++) rt_kprintf(" %02X", msg.data[i]);
+    for (int i = 0; i < msg.len; i++)
+        rt_kprintf(" %02X", msg.data[i]);
     rt_kprintf("\n");
+
+    rt_device_close(dev);
     return 0;
 }
 
@@ -95,8 +139,13 @@ static int can_test_loopback(const char *dev_name)
 {
     struct rt_can_msg msg = {0};
     rt_uint8_t data[] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88};
-    rt_device_t dev = rt_device_find(dev_name);
-    if (dev == RT_NULL) { rt_kprintf("can_test: %s not found\n", dev_name); return -1; }
+    rt_device_t dev;
+    rt_size_t sz;
+    rt_bool_t ok;
+
+    dev = can_open(dev_name);
+    if (dev == RT_NULL)
+        return -1;
 
     rt_device_control(dev, RT_CAN_CMD_SET_MODE, (void *)RT_CAN_MODE_LOOPBACK);
     rt_device_control(dev, RT_CAN_CMD_START, (void *)1);
@@ -109,23 +158,35 @@ static int can_test_loopback(const char *dev_name)
     msg.len = 8;
     rt_memcpy(msg.data, data, 8);
 
-    rt_size_t sz = rt_device_write(dev, 0, &msg, sizeof(msg));
-    if (sz <= 0) { rt_kprintf("can_test: loopback send failed\n"); return -1; }
+    sz = rt_device_write(dev, 0, &msg, sizeof(msg));
+    if (sz == 0)
+    {
+        rt_kprintf("can_test: loopback send failed\n");
+        rt_device_close(dev);
+        return -1;
+    }
 
     rt_kprintf("can_test: sent id=0x123, waiting echo...\n");
     rt_memset(&msg, 0, sizeof(msg));
     sz = rt_device_read(dev, 0, &msg, sizeof(msg));
-    if (sz <= 0) { rt_kprintf("can_test: loopback recv failed\n"); return -1; }
+    if (sz == 0)
+    {
+        rt_kprintf("can_test: loopback recv failed\n");
+        rt_device_close(dev);
+        return -1;
+    }
 
     rt_kprintf("can_test: loopback recv id=0x%03X len=%d:", msg.id, msg.len);
-    for (int i = 0; i < msg.len; i++) rt_kprintf(" %02X", msg.data[i]);
+    for (int i = 0; i < msg.len; i++)
+        rt_kprintf(" %02X", msg.data[i]);
     rt_kprintf("\n");
 
-    rt_bool_t ok = (msg.id == 0x123 && msg.len == 8 &&
-                    rt_memcmp(msg.data, data, 8) == 0);
+    ok = (msg.id == 0x123 && msg.len == 8 &&
+          rt_memcmp(msg.data, data, 8) == 0);
     rt_kprintf("can_test: loopback %s\n", ok ? "PASS" : "FAIL");
 
     rt_device_control(dev, RT_CAN_CMD_SET_MODE, (void *)RT_CAN_MODE_NORMAL);
+    rt_device_close(dev);
     return ok ? 0 : -1;
 }
 
@@ -157,7 +218,8 @@ static int can_test(int argc, char **argv)
         rt_uint32_t id = (rt_uint32_t)strtoul(argv[2], RT_NULL, 16);
         rt_uint8_t data[8];
         int len = argc - 3;
-        if (len > 8) len = 8;
+        if (len > 8)
+            len = 8;
         for (int i = 0; i < len; i++)
             data[i] = (rt_uint8_t)strtoul(argv[3 + i], RT_NULL, 16);
         return can_test_send("fdcan1", id, data, (rt_uint8_t)len);

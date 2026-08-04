@@ -37,15 +37,27 @@ struct acm32_inputcapture
     rt_uint32_t                   tim_clock_hz;
     rt_uint32_t                   prev_capture;
     rt_bool_t                     first_capture;
+    GPIO_TypeDef                 *gpio_port;
+    rt_uint32_t                   gpio_pin;
 };
 
 static struct acm32_inputcapture acm32_inputcapture_obj[] =
 {
 #ifdef BSP_USING_CAPTURE2
-    { .tim_handle.Instance = TIM2, .name = "capture2" },
+    {
+        .tim_handle.Instance = TIM2,
+        .name = "capture2",
+        .gpio_port = GPIOA,
+        .gpio_pin = GPIO_PIN_0,
+    },
 #endif
 #ifdef BSP_USING_CAPTURE3
-    { .tim_handle.Instance = TIM3, .name = "capture3" },
+    {
+        .tim_handle.Instance = TIM3,
+        .name = "capture3",
+        .gpio_port = GPIOA,
+        .gpio_pin = GPIO_PIN_6,
+    },
 #endif
 };
 
@@ -189,23 +201,24 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
     captured = HAL_TIMER_ReadCapturedValue(htim, TIM_CHANNEL_1);
 
     /*
-     * 使用定时器 CCER 寄存器的 CC1P 位检测捕获极性:
-     * CC1P=0 表示上升沿捕获 (当前电平为高)
-     * CC1P=1 表示下降沿捕获 (当前电平为低)
-     * 这比直接读 GPIO 更可靠，避免高频下的时序问题。
+     * 双边沿捕获时 CC1P 是配置位(BOTH=BIT1|BIT3)，不能用来判电平。
+     * 捕获后读 GPIO：脚已为低 → 刚完成高脉宽；脚已为高 → 刚完成低脉宽。
      */
-    level = (htim->Instance->CCER & BIT1) ? RT_FALSE : RT_TRUE;
+    if (HAL_GPIO_ReadPin(dev->gpio_port, dev->gpio_pin) == GPIO_PIN_RESET)
+        level = RT_TRUE;   /* high pulse just finished */
+    else
+        level = RT_FALSE;  /* low pulse just finished */
 
     if (!dev->first_capture)
     {
         dev->pulsewidth_us = 0;
         dev->first_capture = RT_TRUE;
+        dev->prev_capture = captured;
+        return; /* first edge: only arm timestamp */
     }
-    else
-    {
-        /* Timer counts up at 1MHz; unsigned wrap handles overflow. */
-        dev->pulsewidth_us = captured - dev->prev_capture;
-    }
+
+    /* Timer counts up at 1MHz; unsigned wrap handles overflow. */
+    dev->pulsewidth_us = captured - dev->prev_capture;
     dev->prev_capture = captured;
 
     rt_hw_inputcapture_isr(&dev->parent, level);
@@ -236,6 +249,7 @@ static int rt_hw_inputcapture_init(void)
 
     for (i = 0; i < (int)(sizeof(acm32_inputcapture_obj) / sizeof(acm32_inputcapture_obj[0])); i++)
     {
+        acm32_inputcapture_obj[i].parent.ops = &_ops;
         if (rt_device_inputcapture_register(&acm32_inputcapture_obj[i].parent,
                                             acm32_inputcapture_obj[i].name,
                                             RT_NULL) != RT_EOK)

@@ -36,8 +36,13 @@
 #define DBG_LVL DBG_INFO
 #include <rtdbg.h>
 
-/* HAL poll timeout is busy-spin count, not milliseconds */
-#define SPI_XFER_TIMEOUT_SPINS  1000U
+/*
+ * HAL poll timeout is a busy-spin count, not milliseconds.
+ * Scale with transfer length so long full-duplex polls do not false-timeout.
+ */
+#define SPI_XFER_TIMEOUT_BASE   10000U
+#define SPI_XFER_TIMEOUT_PER_B  256U
+#define SPI_POLL_TIMEOUT(len)   (SPI_XFER_TIMEOUT_BASE + (rt_uint32_t)(len) * SPI_XFER_TIMEOUT_PER_B)
 
 #ifdef ACM32_SPI_USING_DMA
 #define SPI_USING_RX_DMA_FLAG   (1U << 0)
@@ -380,31 +385,37 @@ static HAL_StatusTypeDef acm32_spi_dma_tx(struct acm32_spi *spi_drv,
     return st;
 }
 
+/*
+ * Master RX must clock SCK. HAL_SPI_Receive_DMA only arms RX DMA and does not
+ * push dummy TX bytes, so large RX-only transfers hang. Use TX DMA (0xFF dummy)
+ * + RX DMA together when both channels are available; otherwise poll.
+ */
 static HAL_StatusTypeDef acm32_spi_dma_rx(struct acm32_spi *spi_drv,
                                           rt_uint8_t *buf, rt_size_t len)
 {
     SPI_HandleTypeDef *hspi = &spi_drv->handle;
     HAL_StatusTypeDef st;
+    rt_size_t off = 0;
+    rt_uint8_t dummy_chunk[32];
 
-    /* Master HAL_SPI_Receive_DMA starts clock without dummy TX DMA.
-     * Invalidate DCache after DMA writes destination buffer. */
-    System_InvalidateDAccelerate_by_Addr((volatile void *)buf, (int32_t)len);
-
-    if (HAL_SPI_Receive_DMA(hspi, buf, len) != HAL_OK)
+    /*
+     * Master RX must generate SCK. HAL_SPI_Receive_DMA does not push dummy TX
+     * bytes, so use chunked TransmitReceive (0xFF dummy) instead.
+     */
+    RT_UNUSED(spi_drv);
+    rt_memset(dummy_chunk, 0xFF, sizeof(dummy_chunk));
+    while (off < len)
     {
-        acm32_spi_dma_rx_abort(spi_drv);
-        return HAL_ERROR;
+        rt_size_t chunk = len - off;
+        if (chunk > sizeof(dummy_chunk))
+            chunk = sizeof(dummy_chunk);
+        st = HAL_SPI_TransmitReceive(hspi, dummy_chunk, buf + off,
+                                     (uint32_t)chunk, SPI_POLL_TIMEOUT(chunk));
+        if (st != HAL_OK)
+            return st;
+        off += chunk;
     }
-
-    st = HAL_SPI_WaitRxTimeout(hspi, acm32_spi_dma_spins(len));
-    if (st != HAL_OK)
-    {
-        acm32_spi_dma_rx_abort(spi_drv);
-        return st;
-    }
-
-    System_InvalidateDAccelerate_by_Addr((volatile void *)buf, (int32_t)len);
-    return st;
+    return HAL_OK;
 }
 #endif
 
@@ -520,19 +531,35 @@ static rt_ssize_t spixfer(struct rt_spi_device *device, struct rt_spi_message *m
         {
             /* full-duplex: always poll (HAL has no TransmitReceive_DMA) */
             state = HAL_SPI_TransmitReceive(hspi, (uint8_t *)send_buf, recv_buf,
-                                            message->length, SPI_XFER_TIMEOUT_SPINS);
+                                            message->length,
+                                            SPI_POLL_TIMEOUT(message->length));
         }
         else if (send_buf)
         {
             /* length < SPI_DMA_MIN_SIZE or no DMA */
             state = HAL_SPI_Transmit(hspi, (uint8_t *)send_buf,
-                                     message->length, SPI_XFER_TIMEOUT_SPINS);
+                                     message->length,
+                                     SPI_POLL_TIMEOUT(message->length));
         }
         else if (recv_buf)
         {
-            /* short RX poll: master HAL clocks without dummy TX buffer */
-            state = HAL_SPI_Receive(hspi, recv_buf, message->length,
-                                    SPI_XFER_TIMEOUT_SPINS);
+            /* Master RX: TransmitReceive with 0xFF dummy generates SCK correctly */
+            {
+                rt_size_t off = 0;
+                rt_uint8_t dummy_chunk[32];
+                rt_memset(dummy_chunk, 0xFF, sizeof(dummy_chunk));
+                state = HAL_OK;
+                while (off < message->length && state == HAL_OK)
+                {
+                    rt_size_t chunk = message->length - off;
+                    if (chunk > sizeof(dummy_chunk))
+                        chunk = sizeof(dummy_chunk);
+                    state = HAL_SPI_TransmitReceive(hspi, dummy_chunk,
+                                                    recv_buf + off, (uint32_t)chunk,
+                                                    SPI_POLL_TIMEOUT(chunk));
+                    off += chunk;
+                }
+            }
         }
     }
 

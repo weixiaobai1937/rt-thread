@@ -13,12 +13,16 @@
 /* Entry Point */
 ENTRY(Reset_Handler)
 
-/* Highest address of the user mode stack */
-_estack = ORIGIN(DTCM) + LENGTH(DTCM);    /* top of DTCM */
+/*
+ * Memory layout (matches board.h / acm32p4xx.sct):
+ *   DTCM  0x20000000-0x2000FFFF  .data/.bss + MSP stack (top = _estack)
+ *   SRAM1 0x20010000-0x2001FFFF  RT-Thread system heap (runtime, not linked)
+ *   PSRAM 0x80000000             optional memheap (runtime)
+ */
+_estack = ORIGIN(DTCM) + LENGTH(DTCM);    /* top of DTCM — MSP grows down */
 
-/* Generate a link error if heap and stack don't fit into RAM */
-_Min_Heap_Size = 0x200;      /* required amount of heap  */
-_Min_Stack_Size = 0x400;    /* required amount of stack */
+/* Link-time check: enough DTCM left for MSP after .data/.bss */
+_Min_Stack_Size = 0x400;
 
 /* Memories definition */
 MEMORY
@@ -141,13 +145,12 @@ SECTIONS
     __bss_end = _ebss;
   } >DTCM
 
-  /* User_heap_stack section, used to check that there is enough RAM left */
-  ._user_heap_stack :
+  /* Reserve MSP stack room in DTCM; system heap lives in SRAM1 at runtime */
+  ._user_stack :
   {
     . = ALIGN(8);
     PROVIDE ( end = . );
     PROVIDE ( _end = . );
-    . = . + _Min_Heap_Size;
     . = . + _Min_Stack_Size;
     . = ALIGN(8);
   } >DTCM

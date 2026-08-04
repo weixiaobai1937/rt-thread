@@ -535,7 +535,12 @@ int rt_hw_sdio_init(void)
     sdmmc1_handle.Init.CardType = SD_CARD;
     sdmmc1_handle.Init.TransMode = SDMMC_MODE_SDR;
     sdmmc1_handle.Init.TransBW = SDMMC_TRANS_BW_1;
-    sdmmc1_handle.Init.IDmaEn = 1;
+    /*
+     * FIFO mode (IDmaEn=0): HAL IDMA builds descriptors on the stack without
+     * D-Cache clean; with D-Cache enabled that is unsafe. FIFO path copies
+     * through sdmmc_cache_buf which already does Clean/Invalidate.
+     */
+    sdmmc1_handle.Init.IDmaEn = 0;
     sdmmc1_handle.Init.SDVConvEn = 0;
     sdmmc1_handle.Init.SDSigVoltage = SD_IO_VCC_3V3;
     sdmmc1_handle.Init.BusClk = 400000;

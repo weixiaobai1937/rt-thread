@@ -286,10 +286,24 @@ static rt_err_t acm32_pwm_control(struct rt_device_pwm *device, int cmd, void *a
 {
     struct rt_pwm_configuration *cfg = (struct rt_pwm_configuration *)arg;
     TIM_HandleTypeDef *htim;
+    struct acm32_pwm *pwm;
+    rt_uint8_t ch_bit;
 
     RT_ASSERT(device != RT_NULL);
+    RT_ASSERT(cfg != RT_NULL);
 
     htim = (TIM_HandleTypeDef *)device->parent.user_data;
+    pwm = rt_container_of(device, struct acm32_pwm, pwm_device);
+
+    if (cfg->channel < 1 || cfg->channel > 4)
+        return -RT_EINVAL;
+
+    ch_bit = (rt_uint8_t)(1U << (cfg->channel - 1));
+    if ((pwm->channel_mask & ch_bit) == 0)
+    {
+        LOG_E("%s channel %u not enabled in Kconfig", pwm->name, cfg->channel);
+        return -RT_EINVAL;
+    }
 
     switch (cmd)
     {

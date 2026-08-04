@@ -27,61 +27,60 @@
 #define I2S_TX_DMA_BLK_COUNT   2U
 #define I2S_TX_DMA_BUF_TOTAL   (I2S_TX_DMA_BLK_SIZE * I2S_TX_DMA_BLK_COUNT)
 
-/* I2S1 pin definitions: all AF7, verified against GPIO AF table */
-/* Per-signal pin selection via Kconfig */
+/* I2S1 pin definitions: all AF7; defaults avoid DAC/SDMMC/ETH pins */
 
-/* WS */
-#ifdef BSP_I2S1_WS_PA15
-#define I2S1_WS_PORT     GPIOA
-#define I2S1_WS_PIN      GPIO_PIN_15
-#else
+/* WS: prefer PA15 over PA4 (PA4 is DAC1_OUT1) */
+#ifdef BSP_I2S1_WS_PA4
 #define I2S1_WS_PORT     GPIOA
 #define I2S1_WS_PIN      GPIO_PIN_4
+#else
+#define I2S1_WS_PORT     GPIOA
+#define I2S1_WS_PIN      GPIO_PIN_15
 #endif
 
-/* CK */
-#ifdef BSP_I2S1_CK_PC10
-#define I2S1_CK_PORT     GPIOC
-#define I2S1_CK_PIN      GPIO_PIN_10
-#elif defined(BSP_I2S1_CK_PB3)
-#define I2S1_CK_PORT     GPIOB
-#define I2S1_CK_PIN      GPIO_PIN_3
-#else
+/* CK: prefer PB3 over PA5 (PA5 is DAC1_OUT2) */
+#ifdef BSP_I2S1_CK_PA5
 #define I2S1_CK_PORT     GPIOA
 #define I2S1_CK_PIN      GPIO_PIN_5
+#elif defined(BSP_I2S1_CK_PC10)
+#define I2S1_CK_PORT     GPIOC
+#define I2S1_CK_PIN      GPIO_PIN_10
+#else
+#define I2S1_CK_PORT     GPIOB
+#define I2S1_CK_PIN      GPIO_PIN_3
 #endif
 
 /* SDI */
 #ifdef BSP_I2S1_SDI_PC11
 #define I2S1_SDI_PORT    GPIOC
 #define I2S1_SDI_PIN     GPIO_PIN_11
-#elif defined(BSP_I2S1_SDI_PB4)
-#define I2S1_SDI_PORT    GPIOB
-#define I2S1_SDI_PIN     GPIO_PIN_4
-#else
+#elif defined(BSP_I2S1_SDI_PA6)
 #define I2S1_SDI_PORT    GPIOA
 #define I2S1_SDI_PIN     GPIO_PIN_6
+#else
+#define I2S1_SDI_PORT    GPIOB
+#define I2S1_SDI_PIN     GPIO_PIN_4
 #endif
 
-/* SDO */
-#ifdef BSP_I2S1_SDO_PB5
-#define I2S1_SDO_PORT    GPIOB
-#define I2S1_SDO_PIN     GPIO_PIN_5
+/* SDO: prefer PB5/PD7 over PC12 (PC12 is SDMMC CLK) */
+#ifdef BSP_I2S1_SDO_PC12
+#define I2S1_SDO_PORT    GPIOC
+#define I2S1_SDO_PIN     GPIO_PIN_12
 #elif defined(BSP_I2S1_SDO_PD7)
 #define I2S1_SDO_PORT    GPIOD
 #define I2S1_SDO_PIN     GPIO_PIN_7
 #else
-#define I2S1_SDO_PORT    GPIOC
-#define I2S1_SDO_PIN     GPIO_PIN_12
+#define I2S1_SDO_PORT    GPIOB
+#define I2S1_SDO_PIN     GPIO_PIN_5
 #endif
 
-/* MCK */
-#ifdef BSP_I2S1_MCK_PC7
-#define I2S1_MCK_PORT    GPIOC
-#define I2S1_MCK_PIN     GPIO_PIN_7
-#else
+/* MCK: prefer PC7 over PC4 (PC4 is ETH RMII RXD0) */
+#ifdef BSP_I2S1_MCK_PC4
 #define I2S1_MCK_PORT    GPIOC
 #define I2S1_MCK_PIN     GPIO_PIN_4
+#else
+#define I2S1_MCK_PORT    GPIOC
+#define I2S1_MCK_PIN     GPIO_PIN_7
 #endif
 
 struct acm32_i2s
@@ -90,11 +89,12 @@ struct acm32_i2s
     DMA_HandleTypeDef         dma_tx;
     struct rt_audio_device    audio_dev;
     struct rt_audio_configure config;
-    rt_uint8_t                tx_buf[I2S_TX_DMA_BLK_COUNT][I2S_TX_DMA_BLK_SIZE];
+    rt_align(32) rt_uint8_t   tx_buf[I2S_TX_DMA_BLK_COUNT][I2S_TX_DMA_BLK_SIZE];
     rt_uint8_t                tx_idx;       /* 当前 DMA 传输的缓冲区索引 */
     rt_uint8_t                tx_next_idx;  /* 下一个待填充的缓冲区索引 */
     rt_uint8_t                running;
     rt_uint8_t                hal_inited;   /* HAL + DMA 已初始化，下次 start 跳过 */
+    rt_uint32_t               last_samplerate;
 };
 
 static struct acm32_i2s g_i2s_dev;
@@ -234,49 +234,66 @@ static rt_err_t acm32_i2s_start(struct rt_audio_device *audio, int stream)
     hi2s->Init.IOSwitch      = I2S_IO_SWITCH_DISABLE;
     hi2s->Init.AudioFreq     = (uint32_t)i2s_dev->config.samplerate;
 
-    if (!i2s_dev->hal_inited)
+    /* Re-init HAL when first start or sample rate changes */
+    if (!i2s_dev->hal_inited ||
+        i2s_dev->last_samplerate != i2s_dev->config.samplerate)
     {
+        if (i2s_dev->hal_inited)
+            HAL_I2S_DeInit(hi2s);
+
         if (HAL_I2S_Init(hi2s) != HAL_OK)
         {
             LOG_E("HAL_I2S_Init failed");
             return -RT_ERROR;
         }
 
-        __HAL_RCC_DMA1_CLK_ENABLE();
-
-        hi2s->hdmatx                           = &i2s_dev->dma_tx;
-        i2s_dev->dma_tx.Instance               = DMA1_Channel0;
-        i2s_dev->dma_tx.Channel                = 0U;
-        i2s_dev->dma_tx.DMA                    = DMA1;
-        i2s_dev->dma_tx.Parent                 = (void *)hi2s;
-        i2s_dev->dma_tx.Init.Mode              = DMA_MODE_NORMAL;
-        i2s_dev->dma_tx.Init.DataFlow          = DMA_DATAFLOW_M2P;
-        i2s_dev->dma_tx.Init.ReqID             = DMA1_REQ_I2S1_TX;
-        i2s_dev->dma_tx.Init.SrcIncDec         = DMA_SRCINCDEC_INC;
-        i2s_dev->dma_tx.Init.DestIncDec        = DMA_DESTINCDEC_DISABLE;
-        i2s_dev->dma_tx.Init.SrcWidth          = DMA_SRCWIDTH_WORD;
-        i2s_dev->dma_tx.Init.DestWidth         = DMA_DESTWIDTH_WORD;
-        i2s_dev->dma_tx.Init.SrcBurst          = DMA_SRCBURST_1;
-        i2s_dev->dma_tx.Init.DestBurst         = DMA_DESTBURST_1;
-        i2s_dev->dma_tx.Init.SrcMaster         = DMA_SRCMASTER_1;
-        i2s_dev->dma_tx.Init.DestMaster        = DMA_DESTMASTER_1;
-        i2s_dev->dma_tx.Init.Lock              = 0U;
-        i2s_dev->dma_tx.Init.NextMaster        = 0U;
-
-        if (HAL_DMA_Init(&i2s_dev->dma_tx) != HAL_OK)
+        if (!i2s_dev->hal_inited)
         {
-            LOG_E("DMA_Init failed");
-            return -RT_ERROR;
+            __HAL_RCC_DMA1_CLK_ENABLE();
+
+            hi2s->hdmatx                           = &i2s_dev->dma_tx;
+            i2s_dev->dma_tx.Instance               = DMA1_Channel0;
+            i2s_dev->dma_tx.Channel                = 0U;
+            i2s_dev->dma_tx.DMA                    = DMA1;
+            i2s_dev->dma_tx.Parent                 = (void *)hi2s;
+            i2s_dev->dma_tx.Init.Mode              = DMA_MODE_NORMAL;
+            i2s_dev->dma_tx.Init.DataFlow          = DMA_DATAFLOW_M2P;
+            i2s_dev->dma_tx.Init.ReqID             = DMA1_REQ_I2S1_TX;
+            i2s_dev->dma_tx.Init.SrcIncDec         = DMA_SRCINCDEC_INC;
+            i2s_dev->dma_tx.Init.DestIncDec        = DMA_DESTINCDEC_DISABLE;
+            i2s_dev->dma_tx.Init.SrcWidth          = DMA_SRCWIDTH_WORD;
+            i2s_dev->dma_tx.Init.DestWidth         = DMA_DESTWIDTH_WORD;
+            i2s_dev->dma_tx.Init.SrcBurst          = DMA_SRCBURST_1;
+            i2s_dev->dma_tx.Init.DestBurst         = DMA_DESTBURST_1;
+            i2s_dev->dma_tx.Init.SrcMaster         = DMA_SRCMASTER_1;
+            i2s_dev->dma_tx.Init.DestMaster        = DMA_DESTMASTER_1;
+            i2s_dev->dma_tx.Init.Lock              = 0U;
+            i2s_dev->dma_tx.Init.NextMaster        = 0U;
+
+            if (HAL_DMA_Init(&i2s_dev->dma_tx) != HAL_OK)
+            {
+                LOG_E("DMA_Init failed");
+                return -RT_ERROR;
+            }
+
+            NVIC_SetPriority(DMA1_CH0_IRQn, 2);
+            NVIC_EnableIRQ(DMA1_CH0_IRQn);
+        }
+        else
+        {
+            hi2s->hdmatx = &i2s_dev->dma_tx;
         }
 
-        NVIC_SetPriority(DMA1_CH0_IRQn, 2);
-        NVIC_EnableIRQ(DMA1_CH0_IRQn);
-
         i2s_dev->hal_inited = 1;
+        i2s_dev->last_samplerate = i2s_dev->config.samplerate;
     }
 
+    /*
+     * Double-buffer: DMA plays buf[0] (silence), app fills buf[1] first.
+     * tx_idx = buffer currently under DMA; tx_next_idx = free buffer to fill.
+     */
     i2s_dev->tx_idx      = 0;
-    i2s_dev->tx_next_idx = 0;
+    i2s_dev->tx_next_idx = 1;
     i2s_dev->running     = 1;
 
     rt_memset(i2s_dev->tx_buf[0], 0, I2S_TX_DMA_BLK_SIZE);
@@ -328,18 +345,24 @@ static rt_ssize_t acm32_i2s_transmit(struct rt_audio_device *audio,
     if (size > I2S_TX_DMA_BLK_SIZE)
         size = I2S_TX_DMA_BLK_SIZE;
 
-    /* 检查下一个缓冲区是否正被 DMA 使用（双缓冲竞态保护） */
+    /* Free slot is the one not currently under DMA */
     if (i2s_dev->tx_next_idx == i2s_dev->tx_idx)
     {
-        /* 缓冲区已满，DMA 尚未完成当前传输，无法写入 */
+        /* Both slots busy: app filled the free one before DMA advanced */
         return 0;
     }
 
-    /* 写入下一个可用缓冲区，避免覆盖正在传输的缓冲区 */
     rt_memcpy(i2s_dev->tx_buf[i2s_dev->tx_next_idx], writeBuf, size);
+    if (size < I2S_TX_DMA_BLK_SIZE)
+        rt_memset(i2s_dev->tx_buf[i2s_dev->tx_next_idx] + size, 0,
+                  I2S_TX_DMA_BLK_SIZE - size);
 
-    /* 更新下一个缓冲区索引 */
-    i2s_dev->tx_next_idx = (i2s_dev->tx_next_idx + 1) % I2S_TX_DMA_BLK_COUNT;
+    System_CleanDAccelerate_by_Addr(
+        (volatile void *)i2s_dev->tx_buf[i2s_dev->tx_next_idx],
+        (int32_t)I2S_TX_DMA_BLK_SIZE);
+
+    /* Mark this slot filled; next free becomes the other index only after DMA advances */
+    i2s_dev->tx_next_idx = i2s_dev->tx_idx;
 
     return (rt_ssize_t)size;
 }
@@ -399,20 +422,28 @@ void HAL_I2S_MspInit(I2S_HandleTypeDef *hi2s)
     gpio.Pin = I2S1_SDO_PIN;
     HAL_GPIO_Init(I2S1_SDO_PORT, &gpio);
 
-    gpio.Pin = I2S1_MCK_PIN;
-    HAL_GPIO_Init(I2S1_MCK_PORT, &gpio);
+    /* Only mux MCK when HAL is configured to output it */
+    if (hi2s->Init.MCLKOutput == I2S_MCLKOUT_ENABLE)
+    {
+        gpio.Pin = I2S1_MCK_PIN;
+        HAL_GPIO_Init(I2S1_MCK_PORT, &gpio);
+    }
 }
 
 void HAL_I2S_DMATxCpltCallback(I2S_HandleTypeDef *hi2s)
 {
     struct acm32_i2s *i2s_dev = &g_i2s_dev;
+    rt_uint8_t finished;
 
     if (!i2s_dev->running)
         return;
 
-    rt_audio_tx_complete(&i2s_dev->audio_dev);
+    finished = i2s_dev->tx_idx;
+    /* Free the finished slot for the next transmit fill */
+    i2s_dev->tx_next_idx = finished;
+    i2s_dev->tx_idx = (finished + 1) % I2S_TX_DMA_BLK_COUNT;
 
-    i2s_dev->tx_idx = (i2s_dev->tx_idx + 1) % I2S_TX_DMA_BLK_COUNT;
+    rt_audio_tx_complete(&i2s_dev->audio_dev);
 
     System_CleanDAccelerate_by_Addr((volatile void *)i2s_dev->tx_buf[i2s_dev->tx_idx],
                                     (int32_t)I2S_TX_DMA_BLK_SIZE);

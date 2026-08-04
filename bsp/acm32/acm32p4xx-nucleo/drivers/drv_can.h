@@ -20,10 +20,11 @@
 extern "C" {
 #endif
 
-/* FDCAN clock = AHB1 bus clock, configurable per BSP */
-#ifndef FDCAN_CLOCK_HZ
-#define FDCAN_CLOCK_HZ          60000000U
-#endif
+/*
+ * FDCAN kernel clock follows HCLK on this SoC.
+ * Override FDCAN_CLOCK_HZ only for unusual clock trees; otherwise baud
+ * calc uses HAL_RCC_GetHCLKFreq() at runtime (board default ~180 MHz).
+ */
 
 #ifdef BSP_USING_FDCAN1
 #ifdef BSP_FDCAN1_TX_PD1

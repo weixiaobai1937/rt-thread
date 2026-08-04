@@ -54,10 +54,10 @@ int main(void)
     rt_kprintf("Run 'hwrng_test' for HW random numbers\n");
 #endif
 #if defined(RT_USING_PULSE_ENCODER)
-    rt_kprintf("Run 'enc_test' / 'enc_test count enc2' / 'enc_test clear enc2'\n");
+    rt_kprintf("Run 'enc_test' / 'enc_test count pulse2' / 'enc_test clear pulse2'\n");
 #endif
 #if defined(RT_USING_INPUT_CAPTURE)
-    rt_kprintf("Run 'cap_test' / 'cap_test read cap2'\n");
+    rt_kprintf("Run 'cap_test' / 'cap_test read capture2'\n");
 #endif
 #ifdef BSP_USING_LPTIMER
     rt_kprintf("Run 'lptim_test' for LPTIM1 info\n");
@@ -76,9 +76,13 @@ int main(void)
 #endif
 
     rt_pin_mode(LED_PIN_NUM, PIN_MODE_OUTPUT);
+    rt_pin_write(LED_PIN_NUM, PIN_LOW);
 
     while (1)
     {
-        rt_thread_delay(RT_TICK_PER_SECOND / 2);
+        rt_pin_write(LED_PIN_NUM, PIN_HIGH);
+        rt_thread_mdelay(500);
+        rt_pin_write(LED_PIN_NUM, PIN_LOW);
+        rt_thread_mdelay(500);
     }
 }

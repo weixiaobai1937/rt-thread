@@ -6,13 +6,12 @@ cwd = GetCurrentDir()
 src = Glob('*.c')
 CPPPATH = [cwd]
 
-# add lwIP include path when ETH is enabled
+# ETH driver is optional: drop source + only add lwIP headers when enabled
 if GetDepend('BSP_USING_ETH'):
     CPPPATH += [RTT_ROOT + '/components/net/lwip/lwip-2.1.2/src/include',
                 RTT_ROOT + '/components/net/lwip/port']
-
-# remove other no use files
-# SrcRemove(src, '*.c')
+else:
+    SrcRemove(src, 'drv_eth.c')
 
 group = DefineGroup('Drivers', src, depend = [''], CPPPATH = CPPPATH)
 

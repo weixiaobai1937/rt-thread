@@ -257,6 +257,19 @@ static int psram_info(int argc, char **argv)
 
     if (argc >= 2 && !strcmp(argv[1], "reinit"))
     {
+#ifdef BSP_USING_ETH
+        /*
+         * ETH DMA descriptors/buffers live in the first 2MB of PSRAM.
+         * Reclocking OSPI while ETH is active will corrupt DMA traffic.
+         * Require explicit "force" after the user has stopped network use.
+         */
+        if (argc < 3 || strcmp(argv[2], "force") != 0)
+        {
+            rt_kprintf("PSRAM reinit refused: ETH uses PSRAM DMA zone.\n");
+            rt_kprintf("  Use 'psram_info reinit force' only if ETH is idle.\n");
+            return -1;
+        }
+#endif
         System_OSPI_PSRAM_Reclock();
         rt_kprintf("PSRAM reinit done\n");
     }

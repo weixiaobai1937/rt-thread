@@ -6,10 +6,11 @@
  * Change Logs:
  * Date           Author       Notes
  * 2026-07-24     AisinoChip   ACM32P4xx Pulse Encoder test
+ * 2026-08-04     AisinoChip   fix device names + open/read API
  *
  * MSH:
  *   enc_test                  list encoder devices
- *   enc_test count [dev]      read count (default enc2)
+ *   enc_test count [dev]      read count (default pulse2)
  *   enc_test clear [dev]      clear count
  */
 
@@ -19,6 +20,8 @@
 #include <stdlib.h>
 
 #if defined(RT_USING_PULSE_ENCODER) && (defined(BSP_USING_PULSE_ENCODER2) || defined(BSP_USING_PULSE_ENCODER3))
+
+#include <drivers/pulse_encoder.h>
 
 struct enc_unit
 {
@@ -30,38 +33,63 @@ struct enc_unit
 static const struct enc_unit g_encs[] =
 {
 #ifdef BSP_USING_PULSE_ENCODER2
-    {"enc2", "PA0", "PA1"},
+    {"pulse2", "PA0", "PA1"},
 #endif
 #ifdef BSP_USING_PULSE_ENCODER3
-    {"enc3", "PA6", "PA7"},
+    {"pulse3", "PA6", "PA7"},
 #endif
 };
 
 static int enc_test_count(const char *name)
 {
-    rt_device_t dev = rt_device_find(name);
+    rt_device_t dev;
+    rt_int32_t cnt = 0;
+
+    dev = rt_device_find(name);
     if (dev == RT_NULL)
     {
         rt_kprintf("enc_test: %s not found\n", name);
         return -1;
     }
 
-    rt_int32_t cnt = rt_device_read(dev, 0, RT_NULL, 0);
+    if (rt_device_open(dev, RT_DEVICE_FLAG_RDONLY) != RT_EOK)
+    {
+        rt_kprintf("enc_test: open %s failed\n", name);
+        return -1;
+    }
+
+    if (rt_device_read(dev, 0, &cnt, sizeof(cnt)) <= 0)
+    {
+        rt_kprintf("enc_test: read %s failed\n", name);
+        rt_device_close(dev);
+        return -1;
+    }
+
     rt_kprintf("enc_test: %s count=%ld\n", name, (long)cnt);
+    rt_device_close(dev);
     return 0;
 }
 
 static int enc_test_clear(const char *name)
 {
-    rt_device_t dev = rt_device_find(name);
+    rt_device_t dev;
+
+    dev = rt_device_find(name);
     if (dev == RT_NULL)
     {
         rt_kprintf("enc_test: %s not found\n", name);
         return -1;
     }
 
+    if (rt_device_open(dev, RT_DEVICE_FLAG_RDWR) != RT_EOK)
+    {
+        rt_kprintf("enc_test: open %s failed\n", name);
+        return -1;
+    }
+
     rt_device_control(dev, PULSE_ENCODER_CMD_CLEAR_COUNT, RT_NULL);
     rt_kprintf("enc_test: %s cleared\n", name);
+    rt_device_close(dev);
     return 0;
 }
 
@@ -83,10 +111,10 @@ static int enc_test(int argc, char **argv)
     }
 
     if (rt_strcmp(argv[1], "count") == 0)
-        return enc_test_count((argc >= 3) ? argv[2] : "enc2");
+        return enc_test_count((argc >= 3) ? argv[2] : "pulse2");
 
     if (rt_strcmp(argv[1], "clear") == 0)
-        return enc_test_clear((argc >= 3) ? argv[2] : "enc2");
+        return enc_test_clear((argc >= 3) ? argv[2] : "pulse2");
 
     enc_list();
     return 0;

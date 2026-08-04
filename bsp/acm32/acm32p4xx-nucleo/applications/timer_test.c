@@ -6,12 +6,13 @@
  * Change Logs:
  * Date           Author       Notes
  * 2026-07-24     AisinoChip   ACM32P4xx clock_timer MSH test
+ * 2026-08-04     AisinoChip   tick measures hardware timer count
  *
  * MSH:
  *   timer_test                 list all timers
  *   timer_test info [name]     detail for one timer (default timer1)
  *   timer_test freq <name> <hz>  set frequency
- *   timer_test tick <name> [ms]  count 1s ticks from timer
+ *   timer_test tick <name> [ms]  measure hardware counter over delay
  */
 
 #include <rtthread.h>
@@ -21,6 +22,8 @@
 
 #if defined(RT_USING_CLOCK_TIME) && (defined(BSP_USING_TIM1) || defined(BSP_USING_TIM2) || \
     defined(BSP_USING_TIM3) || defined(BSP_USING_TIM6) || defined(BSP_USING_TIM10))
+
+#include <drivers/clock_time.h>
 
 struct timer_unit
 {
@@ -110,20 +113,34 @@ static int timer_test_freq(const char *name, rt_uint32_t freq)
         return -1;
     }
 
+    if (rt_device_open(dev, RT_DEVICE_OFLAG_RDWR) != RT_EOK)
+    {
+        rt_kprintf("timer_test: open %s failed\n", name);
+        return -1;
+    }
+
     if (rt_device_control(dev, CLOCK_TIMER_CTRL_FREQ_SET, &freq) == RT_EOK)
     {
-        rt_kprintf("timer_test: %s freq set to %u Hz\n", name, freq);
+        rt_kprintf("timer_test: %s freq set to %u Hz\n", name, (unsigned)freq);
+        rt_device_close(dev);
         return 0;
     }
     rt_kprintf("timer_test: freq set failed\n");
+    rt_device_close(dev);
     return -1;
 }
 
+/*
+ * Measure hardware timer elapsed time via device read (count_get + overflow).
+ * Starts a long period so the free-running counter advances during mdelay.
+ */
 static int timer_test_tick(const char *name, int ms)
 {
     rt_device_t dev;
-    rt_tick_t start_tick, end_tick;
-    rt_tick_t timeout;
+    rt_clock_timerval_t t0, t1, period;
+    rt_uint32_t freq = 1000000U; /* 1 MHz count clock */
+    rt_int64_t us0, us1, dus;
+    rt_err_t err;
 
     dev = rt_device_find(name);
     if (dev == RT_NULL)
@@ -132,16 +149,60 @@ static int timer_test_tick(const char *name, int ms)
         return -1;
     }
 
-    if (ms < 100) ms = 100;
+    if (ms < 100)
+        ms = 100;
 
-    /* get current counter before and after */
-    rt_kprintf("timer_test: %s measuring ~%dms...\n", name, ms);
-    start_tick = rt_tick_get();
+    if (rt_device_open(dev, RT_DEVICE_OFLAG_RDWR) != RT_EOK)
+    {
+        rt_kprintf("timer_test: open %s failed\n", name);
+        return -1;
+    }
+
+    rt_device_control(dev, CLOCK_TIMER_CTRL_FREQ_SET, &freq);
+
+    /* Period ~1s at 1 MHz so overflow is rare during short mdelay */
+    period.sec = 1;
+    period.usec = 0;
+    if (rt_device_write(dev, 0, &period, sizeof(period)) == 0)
+    {
+        rt_kprintf("timer_test: start %s failed\n", name);
+        rt_device_close(dev);
+        return -1;
+    }
+
+    if (rt_device_read(dev, 0, &t0, sizeof(t0)) != sizeof(t0))
+    {
+        rt_kprintf("timer_test: read t0 failed\n");
+        rt_device_control(dev, CLOCK_TIMER_CTRL_STOP, RT_NULL);
+        rt_device_close(dev);
+        return -1;
+    }
+
+    rt_kprintf("timer_test: %s HW measure ~%d ms (freq=%u)...\n",
+               name, ms, (unsigned)freq);
     rt_thread_mdelay(ms);
-    end_tick = rt_tick_get();
 
-    rt_kprintf("timer_test: %s elapsed %u ticks (~%d ms)\n",
-               name, (rt_uint32_t)(end_tick - start_tick), ms);
+    if (rt_device_read(dev, 0, &t1, sizeof(t1)) != sizeof(t1))
+    {
+        rt_kprintf("timer_test: read t1 failed\n");
+        rt_device_control(dev, CLOCK_TIMER_CTRL_STOP, RT_NULL);
+        rt_device_close(dev);
+        return -1;
+    }
+
+    us0 = (rt_int64_t)t0.sec * 1000000 + t0.usec;
+    us1 = (rt_int64_t)t1.sec * 1000000 + t1.usec;
+    dus = us1 - us0;
+    if (dus < 0)
+        dus = -dus;
+
+    rt_kprintf("timer_test: %s HW elapsed %ld us (expect ~%d000 us)\n",
+               name, (long)dus, ms);
+    rt_kprintf("timer_test: systick window %d ms (for comparison)\n", ms);
+
+    err = rt_device_control(dev, CLOCK_TIMER_CTRL_STOP, RT_NULL);
+    RT_UNUSED(err);
+    rt_device_close(dev);
     return 0;
 }
 
@@ -151,7 +212,7 @@ static void timer_usage(void)
     rt_kprintf("  timer_test                   list timers\n");
     rt_kprintf("  timer_test info [name]       info (default timer1)\n");
     rt_kprintf("  timer_test freq <name> <Hz>  set frequency\n");
-    rt_kprintf("  timer_test tick <name> [ms]  measure delay with systick\n");
+    rt_kprintf("  timer_test tick <name> [ms]  measure HW counter over delay\n");
 }
 
 static int timer_test(int argc, char **argv)
@@ -177,7 +238,7 @@ static int timer_test(int argc, char **argv)
 
     if (rt_strcmp(argv[1], "tick") == 0 && argc >= 3)
     {
-        int ms = (argc >= 4) ? atoi(argv[4]) : 1000;
+        int ms = (argc >= 4) ? atoi(argv[3]) : 1000;
         return timer_test_tick(argv[2], ms);
     }
 

@@ -25,12 +25,17 @@ menu "ACM32P4xx Chip Configuration"
         default 0x80
 
     config SOC_FLASH_START_ADDR
-        hex "Flash Start Address"
-        default 0x08000000
+        hex "Flash Start Address (app image; matches linker 0x08002000)"
+        default 0x08002000
+        help
+          Application vector table / image base. Bootloader/ROM may own
+          0x08000000..0x08001FFF; linker scripts use 0x08002000.
 
     config SOC_FLASH_SIZE
-        hex "Flash Size(KBytes)"
-        default 0x400
+        hex "Flash Size(KBytes) available for app"
+        default 0xFE0
+        help
+          ~1016 KB when image starts at 0x08002000 on 1MB flash parts.
 
 endmenu
 
@@ -1171,7 +1176,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
                 depends on BSP_USING_PWM1_CH2
                 default BSP_PWM1_CH2_PE11
                 config BSP_PWM1_CH2_PE11
-            bool "PE11 AF3 (default)"
+                    bool "PE11 AF3 (default)"
                 config BSP_PWM1_CH2_PA9
                     bool "PA9 AF2"
             endchoice
@@ -1409,13 +1414,18 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         help
           Single ADC instance (device "adc1"). Channel pin map follows
           ACM32P4 table 32-4, e.g. CH3=PA4, CH1=PA5, CH9=PA6, CH7=PA7.
+          Note: CH1=PA5 and CH3=PA4 share DAC pins — do not enable both
+          ADC on those channels and DAC at the same time.
 
     config BSP_USING_DAC
         bool "Enable DAC1"
         select RT_USING_DAC
+        depends on !BSP_USING_ADC
         default n
         help
           DAC1 CH1=PA4, CH2=PA5. Device name "dac1", channels 1/2.
+          Disabled when ADC is on (shared PA4/PA5). If you need both,
+          avoid ADC CH1/CH3 or pick alternate DAC routing in board design.
 
     config BSP_USING_RTC
         bool "Enable RTC"
@@ -1519,73 +1529,78 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
     config BSP_USING_I2S1
         bool "Enable I2S1 (Audio output)"
         select RT_USING_AUDIO
+        depends on !BSP_USING_SDMMC1
         default n
+        help
+          Default pins avoid DAC (PA4/5) and SDMMC CLK (PC12).
+          Mutually exclusive with SDMMC1 default pinout (PC12).
 
     choice
         prompt "I2S1 WS pin"
         depends on BSP_USING_I2S1
-        default BSP_I2S1_WS_PA4
-        config BSP_I2S1_WS_PA4
-            bool "PA4 AF7 (default)"
+        default BSP_I2S1_WS_PA15
         config BSP_I2S1_WS_PA15
-            bool "PA15 AF7"
+            bool "PA15 AF7 (default, avoids DAC PA4)"
+        config BSP_I2S1_WS_PA4
+            bool "PA4 AF7 (conflicts with DAC1_OUT1)"
     endchoice
 
     choice
         prompt "I2S1 CK pin"
         depends on BSP_USING_I2S1
-        default BSP_I2S1_CK_PA5
+        default BSP_I2S1_CK_PB3
+        config BSP_I2S1_CK_PB3
+            bool "PB3 AF7 (default, avoids DAC PA5)"
         config BSP_I2S1_CK_PA5
-            bool "PA5 AF7 (default)"
+            bool "PA5 AF7 (conflicts with DAC1_OUT2)"
         config BSP_I2S1_CK_PC10
             bool "PC10 AF7"
-        config BSP_I2S1_CK_PB3
-            bool "PB3 AF7"
     endchoice
 
     choice
         prompt "I2S1 SDI pin"
         depends on BSP_USING_I2S1
-        default BSP_I2S1_SDI_PA6
+        default BSP_I2S1_SDI_PB4
+        config BSP_I2S1_SDI_PB4
+            bool "PB4 AF7 (default)"
         config BSP_I2S1_SDI_PA6
-            bool "PA6 AF7 (default)"
+            bool "PA6 AF7"
         config BSP_I2S1_SDI_PC11
             bool "PC11 AF7"
-        config BSP_I2S1_SDI_PB4
-            bool "PB4 AF7"
     endchoice
 
     choice
         prompt "I2S1 SDO pin"
         depends on BSP_USING_I2S1
-        default BSP_I2S1_SDO_PC12
-        config BSP_I2S1_SDO_PC12
-            bool "PC12 AF7 (default)"
+        default BSP_I2S1_SDO_PB5
         config BSP_I2S1_SDO_PB5
-            bool "PB5 AF7"
+            bool "PB5 AF7 (default, avoids SDMMC PC12)"
         config BSP_I2S1_SDO_PD7
             bool "PD7 AF7"
+        config BSP_I2S1_SDO_PC12
+            bool "PC12 AF7 (conflicts with SDMMC CLK)"
     endchoice
 
     choice
         prompt "I2S1 MCK pin"
         depends on BSP_USING_I2S1
-        default BSP_I2S1_MCK_PC4
-        config BSP_I2S1_MCK_PC4
-            bool "PC4 AF7 (default)"
+        default BSP_I2S1_MCK_PC7
         config BSP_I2S1_MCK_PC7
-            bool "PC7 AF7"
+            bool "PC7 AF7 (default, avoids ETH PC4)"
+        config BSP_I2S1_MCK_PC4
+            bool "PC4 AF7 (conflicts with ETH RMII RXD0)"
     endchoice
 
     config BSP_USING_ETH
         bool "Enable Ethernet (LAN8720A, RMII)"
         select RT_USING_ETH
         select RT_USING_LWIP
-        select RT_LWIP_DHCP
         select RT_USING_MEMHEAP
         default n
         help
-            Enable ETH driver for ACM32P4xx-Nucleo.
+            Enable ETH driver for ACM32P4xx-Nucleo (RMII + OSPI PSRAM DMA buffers).
+            IP mode: see "Use static IP" below (default static). Enable
+            RT_LWIP_DHCP in the Network menu if you need DHCP instead.
             PHY: LAN8720A, Interface: RMII, Pins: all AF6.
             Enables lwIP protocol stack with DHCP.
 
@@ -1683,11 +1698,13 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
     config BSP_USING_SDMMC1
         bool "Enable SDMMC1 (SD card via SDIO)"
         select RT_USING_SDIO
+        depends on !BSP_USING_I2S1
         default n
         help
             Enable SD/MMC driver for SD card slot.
             Pins: PC8=DAT0, PC9=DAT1, PC10=DAT2, PC11=DAT3, PC12=CLK, PD2=CMD (all AF12).
-            Uses HAL SDMMC with IDMA, polling mode.
+            Mutually exclusive with I2S1 (default I2S SDO also wants PC12).
+            Uses HAL SDMMC FIFO mode (polling) for D-Cache safety.
 
 endmenu
 

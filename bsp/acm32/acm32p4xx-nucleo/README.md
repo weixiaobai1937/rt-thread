@@ -2,65 +2,113 @@
 
 ## Overview
 
-This BSP supports the ACM32P4xx series MCU from AisinoChip, based on the Cortex-M33 core.
+This BSP targets the **ACM32P4xx-Nucleo** board (AisinoChip Cortex-M33).
 
-The ACM32P4xx is a high-performance 32-bit microcontroller featuring:
-- ARM Cortex-M33 core with FPU (Star-MC1), up to 180MHz
-- Up to 128KB SRAM
-- Up to 1MB Flash
-- Rich peripherals: UART, SPI, I2C, I2S, CAN-FD, Ethernet, USB, OSPI, etc.
+| Item | Value |
+|------|--------|
+| Core | ARM Cortex-M33 (Star-MC1) + FPU, up to 180 MHz |
+| RAM | DTCM 64 KB + SRAM1 64 KB (128 KB total) |
+| Flash | App image at `0x08002000` (~1016 KB usable of 1 MB) |
+| Ext. mem | OSPI PSRAM 8 MB @ `0x80000000` (`DATA_IN_ExtSRAM`) |
 
-## Supported Boards
+> Not the same as `acm32p4xx-coreboard` (minimal UART-only BSP).
 
-- ACM32P4xx-Nucleo (ACM32P4xx Core Board)
+## Default-enabled features (`rtconfig.h`)
+
+| Feature | Detail |
+|---------|--------|
+| Console | UART1 PA9/PA10 @ `uart1` |
+| UART2 + DMA | PD5/PD6, TX DMA1_CH3 / RX DMA2_CH0 |
+| SPI1 + DMA | PE12/11/10/13, soft CS |
+| Ethernet | RMII + LAN8720A-class PHY, zero-copy RX in PSRAM |
+| lwIP | Static IP default `192.168.16.50` (see menuconfig) |
+| PSRAM | First 2 MB = `psram` memheap (ETH DMA); rest free for tests |
+
+Other drivers (I2C, TIM/PWM, CAN, ADC/DAC, RTC, WDT, SDMMC, I2S, …) are available via **menuconfig**.
+
+## Memory map
+
+| Region | Address | Use |
+|--------|---------|-----|
+| DTCM | `0x20000000`–`0x2000FFFF` | `.data` / `.bss` + MSP stack |
+| SRAM1 | `0x20010000`–`0x2001FFFF` | RT-Thread system heap |
+| PSRAM | `0x80000000`–`0x801FFFFF` (2 MB heap) | ETH DMA + optional app |
+| PSRAM rest | `0x80200000`–`0x807FFFFF` | `psram_test` region |
 
 ## Quick Start
 
 ### Prerequisites
 
-- RT-Thread source code
-- GCC ARM Embedded toolchain (arm-none-eabi-gcc)
-- Python 3.x with SCons
+- This RT-Thread tree
+- `arm-none-eabi-gcc` + Python 3 + SCons  
+  or Keil MDK (`template.uvprojx` / `project.uvprojx`)
 
-### Build
+### Build (GCC / SCons)
 
 ```bash
-# Set the RTT_ROOT environment variable (optional)
-export RTT_ROOT=/path/to/rt-thread
+cd bsp/acm32/acm32p4xx-nucleo
 
-# Set the toolchain path
-export RTT_EXEC_PATH=/path/to/gcc-arm-none-eabi/bin
+# Windows example (MSYS2 toolchain)
+set RTT_EXEC_PATH=C:/msys64/ucrt64/bin
 
-# Build
-scons
+# Linux / macOS
+# export RTT_EXEC_PATH=/path/to/gcc-arm-none-eabi/bin
+
+scons -j8
 ```
+
+Outputs: `rtthread_acm32p4xx.elf`, `rtthread.bin`.
+
+### Configure
+
+```bash
+scons --menuconfig
+# then regenerate: source env setup if needed, or use ENV tool
+```
+
+SCons runs a **DMA/pin resource check** and appends a map into `rtconfig.h` (`BEGIN_BSP_RESOURCE_CHECK`).
 
 ### Flash
 
-```bash
-# Using J-Link or ST-Link, flash the generated rtthread.bin
-# The binary is located at: rtthread.bin
-```
+Program `rtthread.bin` with J-Link / OpenOCD / vendor tools.  
+Vector table / app base: **`0x08002000`**.
 
-## Board Resources
+## Board resources (default)
 
-| Resource | Configuration |
-|----------|---------------|
-| LED      | PA0           |
-| UART1 TX | PA9           |
-| UART1 RX | PA10          |
+| Resource | Pins / notes |
+|----------|----------------|
+| LED | PA0 |
+| UART1 console | PA9 TX, PA10 RX |
+| UART2 | PD5 TX, PD6 RX (+ DMA) |
+| SPI1 | PE12 SCK, PE11 MOSI, PE10 MISO, PE13 CS |
+| ETH RMII | PA1/2/7, PB11/12/13, PC1/4/5 |
+| PHY nRST | default PB14 (`BSP_ETH_PHY_RST_PIN=30`) |
+| OSPI PSRAM | board OSPI1 wiring (see `system_acm32p4xx.c`) |
 
-## Pin Map
+## MSH smoke tests
 
-| Pin Number | GPIO   | Pin Number | GPIO   |
-|-----------|--------|-----------|--------|
-| 0         | PA0    | 16        | PB0    |
-| 1         | PA1    | 17        | PB1    |
-| 2         | PA2    | 18        | PB2    |
-| ...       | ...    | ...       | ...    |
-| 15        | PA15   | 31        | PB15   |
+| Command | Purpose |
+|---------|---------|
+| `uart_test` / `spi_test` | Serial / SPI |
+| `eth_ifconfig` / `eth_test` / `dping` | Ethernet |
+| `psram_info` / `psram_test` / `psram_speed` | OSPI PSRAM |
+| `list_device` | Registered devices |
+
+When more peripherals are enabled: `i2c_test`, `can_test`, `adc_test`, `pwm_test`, `timer_test`, `wdt_test`, etc. (prompts also print from `main`).
+
+## Important notes
+
+1. **ETH requires working OSPI PSRAM.** Descriptors / bounce / RX pool allocate from `psram` memheap.
+2. **Do not** run `psram_info reinit` while ETH is active (needs `force` and idle network).
+3. **USB**: chip HAL sources exist, but this BSP has **no** RT-Thread USB device/host driver yet; FSUSB module is disabled in `acm32p4xx_hal_conf.h`.
+4. **I2S vs SDMMC / DAC**: Kconfig mutual exclusion / alternate pins — see `drivers/Kconfig`.
+5. **LPTIM**: hardware init only; PM tickless not integrated.
+
+## Pin index map (GPIO)
+
+`rt_pin` index: `PXn = port * 16 + n` (PA0=0 … PE15=79, PF0=80 … PG15=111).
 
 ## Reference
 
-- [ACM32P4xx Datasheet](https://www.aisinochip.com)
-- [RT-Thread Documentation](https://www.rt-thread.io/document/site/)
+- [AisinoChip](https://www.aisinochip.com)
+- [RT-Thread docs](https://www.rt-thread.io/document/site/)

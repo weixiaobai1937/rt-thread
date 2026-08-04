@@ -133,8 +133,16 @@ static rt_err_t pulse_encoder_init(struct rt_pulse_encoder_device *pulse_encoder
 static rt_int32_t pulse_encoder_get_count(struct rt_pulse_encoder_device *pulse_encoder)
 {
     struct acm32_pulse_encoder *dev;
+    rt_uint32_t cnt;
+
     dev = (struct acm32_pulse_encoder *)pulse_encoder;
-    return (rt_int32_t)dev->tim_handle.Instance->CNT;
+    cnt = dev->tim_handle.Instance->CNT;
+
+    /* TIM3 is 16-bit: sign-extend so reverse rotation reports negative */
+    if (dev->tim_handle.Instance == TIM3)
+        return (rt_int32_t)(rt_int16_t)(cnt & 0xFFFFU);
+
+    return (rt_int32_t)cnt;
 }
 
 static rt_err_t pulse_encoder_clear_count(struct rt_pulse_encoder_device *pulse_encoder)
