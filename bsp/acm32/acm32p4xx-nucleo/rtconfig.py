@@ -1,5 +1,6 @@
 import os
 import re
+import shutil
 import sys
 
 # toolchains options
@@ -30,6 +31,13 @@ elif CROSS_TOOL == 'iar':
 
 if os.getenv('RTT_EXEC_PATH'):
     EXEC_PATH = os.getenv('RTT_EXEC_PATH')
+elif PLATFORM == 'gcc' and not os.path.isdir(EXEC_PATH):
+    # Default EXEC_PATH '/usr/bin' does not exist on Windows; fall back to
+    # arm-none-eabi-gcc found in PATH so plain `scons` works out of the box.
+    # Linux/CI keeps '/usr/bin' when it exists (no behavior change).
+    _gcc = shutil.which('arm-none-eabi-gcc')
+    if _gcc:
+        EXEC_PATH = os.path.dirname(os.path.abspath(_gcc))
 
 BUILD = 'debug'
 #BUILD = 'release'
