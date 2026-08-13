@@ -77,6 +77,9 @@ int main(void)
 #ifdef BSP_USING_FSUSB
     rt_kprintf("USB FS device enabled: run 'list_device' to see 'vcom' (CDC)\n");
 #endif
+#ifdef BSP_USING_ONCHIP_FLASH
+    rt_kprintf("Run 'fs_mkfs' / 'fs_mount' to use on-chip elmfat ('flash_info' for FAL)\n");
+#endif
 
     rt_pin_mode(LED_PIN_NUM, PIN_MODE_OUTPUT);
     rt_pin_write(LED_PIN_NUM, PIN_LOW);

@@ -8,10 +8,11 @@
  * 2026-07-28     AisinoChip   on-chip 1MB Flash FAL device via HAL_NORFLASH
  */
 
-#ifdef BSP_USING_ONCHIP_FLASH
-#include <fal.h>
 #include <rtthread.h>
 #include "board.h"
+
+#ifdef BSP_USING_ONCHIP_FLASH
+#include <fal.h>
 #include "hal_norflash.h"
 
 #define FLASH_BASE_ADDR     0x08000000UL
