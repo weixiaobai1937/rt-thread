@@ -94,8 +94,9 @@
 #endif
 //#define HAL_PUF_MODULE_ENABLED 
 //#define HAL_CDE_MODULE_ENABLED 
-//#define HAL_NORFLASH_MODULE_ENABLED
-//#define HAL_CRC_MODULE_ENABLED 
+/* NORFLASH/CRC: unconditional here (HAL .c sources only compiled when the BSP option is on) */
+#define HAL_NORFLASH_MODULE_ENABLED
+#define HAL_CRC_MODULE_ENABLED
 //#define HAL_DIVIDER_MODULE_ENABLED 
 //#define HAL_AES_MODULE_ENABLED  
 #define HAL_HRNG_MODULE_ENABLED  
