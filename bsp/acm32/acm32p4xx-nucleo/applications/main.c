@@ -74,6 +74,9 @@ int main(void)
 #ifdef BSP_USING_ETH
     rt_kprintf("Run 'eth_test' / 'eth_test iperf -s' for Ethernet; eth_ifconfig\n");
 #endif
+#ifdef BSP_USING_FSUSB
+    rt_kprintf("USB FS device enabled: run 'list_device' to see 'vcom' (CDC)\n");
+#endif
 
     rt_pin_mode(LED_PIN_NUM, PIN_MODE_OUTPUT);
     rt_pin_write(LED_PIN_NUM, PIN_LOW);

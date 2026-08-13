@@ -23,6 +23,7 @@ This BSP targets the **ACM32P4xx-Nucleo** board (AisinoChip Cortex-M33).
 | Ethernet | RMII + LAN8720A-class PHY, zero-copy RX in PSRAM |
 | lwIP | Static IP default `192.168.16.50` (see menuconfig) |
 | PSRAM | First 2 MB = `psram` memheap (ETH DMA); rest free for tests |
+| FSUSB (opt-in) | PA11/PA12 USB 2.0 FS device, CDC VCOM `vcom` (`BSP_USING_FSUSB`) |
 
 Other drivers (I2C, TIM/PWM, CAN, ADC/DAC, RTC, WDT, SDMMC, I2S, …) are available via **menuconfig**.
 
@@ -98,9 +99,9 @@ When more peripherals are enabled: `i2c_test`, `can_test`, `adc_test`, `pwm_test
 
 ## Important notes
 
-1. **ETH requires working OSPI PSRAM.** Descriptors / bounce / RX pool allocate from `psram` memheap.
+1. **ETH requires working OSPI PSRAM.** RX pool / bitmap allocate from `psram` memheap; DMA descriptors + TX bounce allocate from SRAM1 system heap (PSRAM-only TX bounce measured ~0.9 Mbps, SRAM1 bounce required for throughput).
 2. **Do not** run `psram_info reinit` while ETH is active (needs `force` and idle network).
-3. **USB**: chip HAL sources exist, but this BSP has **no** RT-Thread USB device/host driver yet; FSUSB module is disabled in `acm32p4xx_hal_conf.h`.
+3. **USB**: CDC virtual COM (`vcom`) implemented on FSUSB (`BSP_USING_FSUSB`). `HAL_FSUSB_MODULE_ENABLED` is enabled automatically by that option. USB host is not supported.
 4. **I2S vs SDMMC / DAC**: Kconfig mutual exclusion / alternate pins — see `drivers/Kconfig`.
 5. **LPTIM**: hardware init only; PM tickless not integrated.
 
