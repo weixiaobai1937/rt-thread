@@ -35,6 +35,9 @@ HAL_Driver/Src/hal_timer.c
 HAL_Driver/Src/hal_hrng.c
 """)
 
+if GetDepend('BSP_USING_FSUSB'):
+    src += ['HAL_Driver/Src/hal_fsusb.c']
+
 if rtconfig.PLATFORM in ['gcc']:
     src += ['Device/GCC/startup_acm32p4xx.S']
 elif rtconfig.PLATFORM in ['armcc', 'armclang']:

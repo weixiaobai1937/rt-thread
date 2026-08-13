@@ -13,6 +13,11 @@ if GetDepend('BSP_USING_ETH'):
 else:
     SrcRemove(src, 'drv_eth.c')
 
+# USB device (FSUSB): <drivers/usb_device.h> lives in components/drivers/include
+# (also added by serial/i2c/... sub-SConscripts; explicit for clarity).
+if GetDepend('BSP_USING_FSUSB'):
+    CPPPATH += [RTT_ROOT + '/components/drivers/include']
+
 group = DefineGroup('Drivers', src, depend = [''], CPPPATH = CPPPATH)
 
 Return('group')

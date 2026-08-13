@@ -1542,6 +1542,15 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         endchoice
     endmenu
 
+    config BSP_USING_FSUSB
+        bool "Enable FSUSB (USB 2.0 Full-Speed Device, CDC VCOM)"
+        select RT_USING_USB_DEVICE
+        select RT_USB_DEVICE_CDC
+        default n
+        help
+          USB device (CDC virtual COM, device name "vcom").
+          Pins: PA11=DM, PA12=DP. Mutually exclusive with FDCAN1 PA11/PA12 pin options.
+
     config BSP_USING_HWCRYPTO
         bool "Enable HWRNG (True Random Number Generator)"
         select RT_USING_HWCRYPTO

@@ -88,8 +88,10 @@
 #define HAL_TIMER_MODULE_ENABLED
 #define HAL_ADC_MODULE_ENABLED
 #define HAL_DAC_MODULE_ENABLED
-/* USB FS HAL present on disk but no RT-Thread USB driver in this BSP yet */
-//#define HAL_FSUSB_MODULE_ENABLED
+/* USB FS HAL: enabled when the BSP USB device (CDC VCOM) driver is on */
+#ifdef BSP_USING_FSUSB
+#define HAL_FSUSB_MODULE_ENABLED
+#endif
 //#define HAL_PUF_MODULE_ENABLED 
 //#define HAL_CDE_MODULE_ENABLED 
 //#define HAL_NORFLASH_MODULE_ENABLED
