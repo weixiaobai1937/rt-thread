@@ -18,6 +18,10 @@ else:
 if GetDepend('BSP_USING_FSUSB'):
     CPPPATH += [RTT_ROOT + '/components/drivers/include']
 
+# FAL: fal_cfg.h lives in this drivers/ dir
+if GetDepend('BSP_USING_ONCHIP_FLASH'):
+    CPPPATH += [cwd]
+
 group = DefineGroup('Drivers', src, depend = [''], CPPPATH = CPPPATH)
 
 Return('group')

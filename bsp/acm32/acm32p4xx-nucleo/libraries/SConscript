@@ -38,6 +38,15 @@ HAL_Driver/Src/hal_hrng.c
 if GetDepend('BSP_USING_FSUSB'):
     src += ['HAL_Driver/Src/hal_fsusb.c']
 
+if GetDepend('BSP_USING_ONCHIP_FLASH'):
+    src += ['HAL_Driver/Src/hal_norflash.c']
+
+if GetDepend('BSP_USING_HWCRYPTO'):
+    src += ['HAL_Driver/Src/hal_aes_20230713.lib',
+            'HAL_Driver/Src/hal_sha1_20250120.lib',
+            'HAL_Driver/Src/hal_sha256_20230713.lib',
+            'HAL_Driver/Src/hal_crc.c']
+
 if rtconfig.PLATFORM in ['gcc']:
     src += ['Device/GCC/startup_acm32p4xx.S']
 elif rtconfig.PLATFORM in ['armcc', 'armclang']:

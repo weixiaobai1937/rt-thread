@@ -1551,14 +1551,27 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
           USB device (CDC virtual COM, device name "vcom").
           Pins: PA11=DM, PA12=DP. Mutually exclusive with FDCAN1 PA11/PA12 pin options.
 
-    config BSP_USING_HWCRYPTO
-        bool "Enable HWRNG (True Random Number Generator)"
-        select RT_USING_HWCRYPTO
-        select RT_USING_HWCRYPTO_RNG
+    config BSP_USING_ONCHIP_FLASH
+        bool "Enable on-chip Flash (FAL + elmfat filesystem)"
+        select RT_USING_FAL
+        select RT_USING_DFS_ELMFAT
         default n
         help
-            Enable hardware random number generator using HRNG peripheral.
-            Device registered as "hwcrypto" via rt_hwcrypto_register.
+          1MB on-chip Flash (0x08000000) via HAL_NORFLASH, FAL partitions:
+          boot(8K)/app(504K)/filesystem(512K). MSH: 'fs_mkfs' / 'fs_mount'.
+
+    config BSP_USING_HWCRYPTO
+        bool "Enable HW crypto (RNG/AES/SHA1/SHA256/CRC)"
+        select RT_USING_HWCRYPTO
+        select RT_USING_HWCRYPTO_RNG
+        select RT_HWCRYPTO_USING_AES
+        select RT_HWCRYPTO_USING_SHA1
+        select RT_HWCRYPTO_USING_SHA2
+        select RT_HWCRYPTO_USING_CRC
+        default n
+        help
+            Hardware crypto via hwcrypto: RNG (HRNG), AES (ECB/CBC/CFB/CTR/OFB),
+            SHA1, SHA256, CRC. Device registered as "hwcrypto".
 
     config BSP_USING_I2S1
         bool "Enable I2S1 (Audio output)"
