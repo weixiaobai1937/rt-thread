@@ -114,9 +114,15 @@ static rt_err_t sdmmc_send_no_data_cmd(SDMMC_HandleTypeDef *hsdmmc, uint32_t cmd
 }
 
 /*
- * 注意: sdmmc_cache_buf 是共享缓冲区，RT-Thread mmcsd 框架通过 host->lock
- * 保证同一时刻只有一个请求在处理，因此无需额外的互斥保护。
- * 如果未来需要支持多线程并发访问，需要添加互斥锁。
+ * Note: sdmmc_cache_buf is a shared buffer; the RT-Thread mmcsd framework
+ * guarantees only one request is processed at a time via host->lock,
+ * so no extra mutex protection is needed.
+ * Add a mutex if multi-threaded concurrent access is required in the future.
+ *
+ * WARNING: this buffer lives in .bss (DTCM, 0x20000000 region). SDMMC runs
+ * in FIFO mode (IDmaEn=0, CPU-driven FIFO access), which is safe. If the
+ * controller's internal DMA (IDmaEn=1) is ever enabled, the buffer MUST be
+ * moved to SRAM1 (or PSRAM) first: bus masters cannot access DTCM.
  */
 rt_align(SDIO_ALIGN_LEN)
 static rt_uint32_t sdmmc_cache_buf[SDIO_BUFF_SIZE / sizeof(rt_uint32_t)];
@@ -407,7 +413,7 @@ static void sdmmc_set_iocfg(struct rt_mmcsd_host *host, struct rt_mmcsd_io_cfg *
      * div should satisfy: clk >= SrcClk / (2 * div), so div >= SrcClk / (2 * clk)
      * Adding 2 to match HAL_SD_Enum's pattern: div = SrcClk/400000 + 4 / 2
      */
-    div = (src_clk + 2 * clk - 1) / (2 * clk);  /* 向上取整，确保实际时钟不超过请求值 */
+    div = (src_clk + 2 * clk - 1) / (2 * clk);  /* round up so actual clock never exceeds the requested value */
     if (div == 0)
         div = 1;
     if (div > 0xFF)
@@ -553,7 +559,7 @@ int rt_hw_sdio_init(void)
         return -RT_ERROR;
     }
 
-    /* SDMMC 使用轮询模式，不需要 NVIC 中断使能 */
+    /* SDMMC uses polling mode, no NVIC interrupt enable needed */
 
     LOG_I("enumerating SD card ...");
     status = HAL_SD_Enum(&sdmmc1_handle, SDMMC_CLOCK_FREQ);

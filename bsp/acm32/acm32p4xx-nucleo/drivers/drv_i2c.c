@@ -111,16 +111,21 @@ static rt_uint16_t acm32_i2c_addr8(struct rt_i2c_msg *msg)
     return (rt_uint16_t)(msg->addr << 1);
 }
 
-/* 根据数据长度和时钟速度计算 I2C 操作超时时间（ms） */
+/*
+ * HAL I2C treats Timeout as a spin-loop count: I2C_WaitOnFlagUntilTimeout
+ * spins Timeout*0xFF iterations (~55ns each at 180MHz). Return a value
+ * scaled by 100 so the effective wait is >= the requested milliseconds
+ * regardless of compiler/optimization variations.
+ */
 static uint32_t acm32_i2c_calc_timeout(struct acm32_i2c *hi2c, rt_uint16_t data_byte)
 {
-    /* 最坏情况：每字节 10 bits (8 data + ACK + 开销)，加上 start/stop */
+    /* Worst case: 10 bits per byte (8 data + ACK + overhead), plus start/stop */
     rt_uint32_t bits = 10UL * data_byte + 20UL;
-    rt_uint32_t timeout = (bits * 1000UL) / (hi2c->config->clock_speed / 1000UL);
-    /* 至少 10ms，最多 1000ms */
-    if (timeout < 10) timeout = 10;
-    if (timeout > 1000) timeout = 1000;
-    return timeout;
+    rt_uint32_t ms = (bits * 1000UL) / (hi2c->config->clock_speed / 1000UL);
+    /* At least 10ms, at most 1000ms */
+    if (ms < 10) ms = 10;
+    if (ms > 1000) ms = 1000;
+    return ms * 100U;
 }
 
 static int acm32_i2c_read(struct acm32_i2c *hi2c, rt_uint16_t slave_address,
@@ -157,7 +162,7 @@ static rt_ssize_t _i2c_xfer(struct rt_i2c_bus_device *bus, struct rt_i2c_msg msg
 
     i2c_obj = rt_container_of(bus, struct acm32_i2c, i2c_bus);
 
-    /* 获取互斥锁保护总线事务 */
+    /* Take the mutex to protect bus transactions */
     rt_mutex_take(&i2c_obj->lock, RT_WAITING_FOREVER);
 
     /* HAL I2C master path only supports 7-bit addressing; reject 10-bit instead of truncating. */
@@ -193,7 +198,7 @@ static rt_ssize_t _i2c_xfer(struct rt_i2c_bus_device *bus, struct rt_i2c_msg msg
             rt_mutex_release(&i2c_obj->lock);
             return 2;
         }
-        /* Mem_Read 失败，回退到逐消息传输 */
+        /* Mem_Read failed, fall back to per-message transfers */
     }
 
     for (i = 0; i < num; i++)
@@ -272,7 +277,7 @@ int rt_hw_i2c_init(void)
         i2c_objs[i].handle.Instance = i2c_config[i].Instance;
         i2c_objs[i].i2c_bus.ops = &i2c_ops;
 
-        /* 初始化互斥锁 */
+        /* Init mutex */
         rt_mutex_init(&i2c_objs[i].lock, i2c_config[i].name, RT_IPC_FLAG_FIFO);
 
         /* Align with HAL SDK I2C Master example (app.c / MspInit) */

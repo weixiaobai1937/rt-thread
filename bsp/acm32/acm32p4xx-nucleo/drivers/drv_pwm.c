@@ -136,6 +136,7 @@ static rt_err_t drv_pwm_set(TIM_HandleTypeDef *htim, struct rt_pwm_configuration
     rt_uint64_t timer_clk;
     rt_uint32_t period, pulse, hal_ch;
     uint32_t psc;
+    uint32_t saved_cr1, saved_ccer;
 
     if (cfg->period == 0)
     {
@@ -147,6 +148,11 @@ static rt_err_t drv_pwm_set(TIM_HandleTypeDef *htim, struct rt_pwm_configuration
 
     period = (rt_uint64_t)cfg->period * timer_clk / 1000ULL;
     psc = (period + PWM_MAX_PERIOD - 1) / PWM_MAX_PERIOD;
+    if (psc == 0)
+    {
+        /* Tiny period (<1 tick): force prescaler to 1 to avoid divide-by-zero */
+        psc = 1;
+    }
     if (psc > 0x10000U)
     {
         return -RT_EINVAL;
@@ -171,6 +177,15 @@ static rt_err_t drv_pwm_set(TIM_HandleTypeDef *htim, struct rt_pwm_configuration
     hal_ch = hal_channel_from_rt_ch(cfg->channel);
     if (hal_ch == 0xFFFFFFFF)
         return -RT_EINVAL;
+
+    /*
+     * HAL_TIMER_Base_Init resets CR1 (CEN=0) and HAL_TIMER_Output_Config
+     * clears the channel's CCxE. Save/restore them so a running PWM keeps
+     * running across rt_pwm_set (runtime period/pulse change). Base_Init
+     * already triggered a UEV (EGR) so the new PSC/ARR take effect at once.
+     */
+    saved_cr1  = htim->Instance->CR1;
+    saved_ccer = htim->Instance->CCER;
 
     htim->Init.Prescaler         = psc - 1;
     htim->Init.Period            = period - 1;
@@ -206,6 +221,9 @@ static rt_err_t drv_pwm_set(TIM_HandleTypeDef *htim, struct rt_pwm_configuration
     htim->Instance->CNT = 0;
     htim->Instance->EGR |= TIM_EVENTSOURCE_UPDATE;
 
+    htim->Instance->CCER = saved_ccer;
+    htim->Instance->CR1  = saved_cr1;
+
     return RT_EOK;
 }
 
@@ -227,16 +245,13 @@ static rt_err_t drv_pwm_enable(TIM_HandleTypeDef *htim, struct rt_pwm_configurat
     }
     else
     {
-        if (cfg->complementary)
-        {
-            /* No OCxN stop API in this HAL; clear the CCER output-enable bit. */
-            htim->Instance->CCER &= ~(1U << (hal_ch * 4U + 2U));
-        }
-        else
-        {
-            HAL_TIMER_OC_Stop(htim->Instance, hal_ch);
-        }
-        /* 检查是否所有通道均已禁用，若是则停止定时器基计数器以省电 */
+        /*
+         * Clear this channel's CCxE/CCxNE only. Do NOT use HAL_TIMER_OC_Stop:
+         * it clears BDTR.MOE on TIM1 (silencing every other channel) and
+         * stops the counter even when other channels still output.
+         */
+        htim->Instance->CCER &= ~((1U << (hal_ch * 4U)) | (1U << (hal_ch * 4U + 2U)));
+        /* Stop the timer base counter to save power if all channels are disabled */
         if ((htim->Instance->CCER & 0x5555U) == 0)
         {
             HAL_TIMER_Base_Stop(htim->Instance);

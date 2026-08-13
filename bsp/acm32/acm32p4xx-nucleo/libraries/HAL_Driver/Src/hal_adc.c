@@ -629,7 +629,11 @@ HAL_StatusTypeDef HAL_ADC_Polling(ADC_HandleTypeDef* hadc, uint32_t* pData, uint
         if(tmp_hal_status & ADC_SR_EOG)
         {
             hadc->Instance->SR = ADC_SR_EOG;
-            break;
+            if (Length == 0)
+                break;
+            /* EOG can arrive before the final EOC on this chip: keep polling
+             * so the last conversion result is read (fix: EOG-only break left
+             * *pData unwritten while returning HAL_OK). */
         }
 
         if(uiTimeout)
@@ -1423,10 +1427,10 @@ void HAL_ADC_OverSamplingConfig(ADC_TypeDef* ADCx, ADC_OversamplingTypeDef *hOve
     assert_param(IS_ADC_RIGHTBITSHIFT(hOversampling->RightBitShift));
     assert_param(IS_ADC_OVERSAMPLING_TRIGER(hOversampling->TriggeredMode));
     
-    /* Clear OVSR¡¢OVSS¡¢TROVS bits */
+    /* Clear OVSRï¿½ï¿½OVSSï¿½ï¿½TROVS bits */
     ADCx->CR2 &= ~(ADC_CR2_OVSR_Msk | ADC_CR2_OVSS_Msk | ADC_CR2_TROVS_Msk);
       
-    /* set new rate¡¢right shift¡¢Triger Mode */   
+    /* set new rateï¿½ï¿½right shiftï¿½ï¿½Triger Mode */   
     ADCx->CR2 |= (hOversampling->Ratio << ADC_CR2_OVSR_Pos) | (hOversampling->RightBitShift << ADC_CR2_OVSS_Pos) | ADC_CR2_TROVS; 
 
 }
@@ -1791,10 +1795,10 @@ void HAL_ADC_VrefpConfig(uint8_t mode, uint8_t voltage)
         {
             HAL_EFUSE_ReadBytes(EFUSE1, EFUSE1_ADC_VREFBUF_TRIM, (uint8_t *)&TrimValue, 3, 100000);//Read VREFBUF VTRIM.
             /*
-                [4:0]   VREFBIÎª1.5VÊÇVTRIM
-                [9:5]   VREFBIÎª1.8VÊÇVTRIM
-                [14:10] VREFBIÎª2.0VÊÇVTRIM
-                [19:15] VREFBIÎª2.5VÊÇVTRIM
+                [4:0]   VREFBIÎª1.5Vï¿½ï¿½VTRIM
+                [9:5]   VREFBIÎª1.8Vï¿½ï¿½VTRIM
+                [14:10] VREFBIÎª2.0Vï¿½ï¿½VTRIM
+                [19:15] VREFBIÎª2.5Vï¿½ï¿½VTRIM
             */
             if(voltage == VREFP_INTERN_1V5)
             {

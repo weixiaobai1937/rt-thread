@@ -16,7 +16,7 @@
 #define DBG_LVL DBG_INFO
 #include <rtdbg.h>
 
-/* ==================== 常量 ==================== */
+/* ==================== Constants ==================== */
 
 #define CAN_BAUD_1M      1000000U
 #define CAN_BAUD_800K     800000U
@@ -31,16 +31,16 @@
 #define FDCAN_FILTER_LEN_16    16
 #define FDCAN_FILTER_LEN_32    32
 
-/* CAN 采样点配置（千分比，875 = 87.5%），可在 rtconfig.h 或 Kconfig 中覆盖 */
+/* CAN sample point configuration (per mille, 875 = 87.5%), overridable in rtconfig.h or Kconfig */
 #ifndef CAN_SAMPLE_POINT_PER_THOUSAND
 #define CAN_SAMPLE_POINT_PER_THOUSAND   875U
 #endif
 
-/* ==================== 波特率计算 ==================== */
+/* ==================== Baud Rate Calculation ==================== */
 
 /*
  * baud = CANCLK / (Prescaler * (1+TS1+TS2))
- * 采样点 = (1+TS1) / (1+TS1+TS2) target 87.5%
+ * sample point = (1+TS1) / (1+TS1+TS2) target 87.5%
  * SJW = min(4, TS2)
  */
 static uint32_t can_clock_hz(void)
@@ -104,7 +104,7 @@ static rt_err_t can_baud_rate_calc(uint32_t baud_rate,
     return (best_diff <= (baud_rate / 100U)) ? RT_EOK : -RT_ERROR;
 }
 
-/* ==================== DLC 转换 ==================== */
+/* ==================== DLC Conversion ==================== */
 
 static uint8_t len_to_dlc(uint8_t len)
 {
@@ -112,7 +112,7 @@ static uint8_t len_to_dlc(uint8_t len)
     return (len > 8) ? 8 : len;
 }
 
-/* ==================== 过滤器辅助 ==================== */
+/* ==================== Filter Helpers ==================== */
 
 static void filter_set_default(FDCAN_NewFilterTypeDef *filter)
 {
@@ -130,6 +130,26 @@ static void filter_set_default(FDCAN_NewFilterTypeDef *filter)
     filter->mask16_0.basic.id = 0;
     filter->mask16_0.basic.IDE = 0;
     filter->mask16_0.basic.RTR = 0;
+}
+
+static void filter_set_default_ext(FDCAN_NewFilterTypeDef *filter)
+{
+    rt_memset(filter, 0, sizeof(*filter));
+    filter->FilterIndex = 1;
+    filter->FilterMask_Enable = 1;
+    filter->Filter_Length = FDCAN_FILTER_LEN_32;
+    filter->Filter_Count = 1;
+
+    /* Pass-all extended frames: code=0, mask=0 (don't-care all 29 ID bits).
+     * RTR in mask must be 0 too, otherwise remote frames are rejected
+     * (mask bit 1 means "must match"). */
+    filter->filter32_0.ext.id = 0;
+    filter->filter32_0.ext.IDE = 1;
+    filter->filter32_0.ext.RTR = 0;
+
+    filter->mask32_0.ext.id = 0;
+    filter->mask32_0.ext.IDE = 1;
+    filter->mask32_0.ext.RTR = 0;
 }
 
 static void filter_set_from_item(FDCAN_NewFilterTypeDef *filter,
@@ -184,7 +204,7 @@ static void filter_set_from_item(FDCAN_NewFilterTypeDef *filter,
     }
 }
 
-/* ==================== 实例 ==================== */
+/* ==================== Instances ==================== */
 
 #ifdef BSP_USING_FDCAN1
 static acm32_can_t st_DrvCan1 =
@@ -202,7 +222,7 @@ static acm32_can_t st_DrvCan2 =
 };
 #endif
 
-/* ==================== MSP 初始化 ==================== */
+/* ==================== MSP Init ==================== */
 
 static void fdcan_msp_init(FDCAN_HandleTypeDef *hfdcan)
 {
@@ -318,11 +338,13 @@ static rt_err_t _can_configure(struct rt_can_device *can, struct can_configure *
         return -RT_ERROR;
     }
 
-    /* default filter: pass all standard frames */
+    /* default filters: pass all standard (idx 0) + extended (idx 1) frames */
     filter_set_default(&pdrv_can->FilterConfig);
     HAL_FDCAN_NewConfigFilter(&pdrv_can->fdcanHandle, &pdrv_can->FilterConfig);
+    filter_set_default_ext(&pdrv_can->FilterConfig);
+    HAL_FDCAN_NewConfigFilter(&pdrv_can->fdcanHandle, &pdrv_can->FilterConfig);
 
-    /* init TxHeader (默认标准帧，与 filter_set_default 一致) */
+    /* init TxHeader (default standard frame, consistent with filter_set_default) */
     pdrv_can->TxHeader.ID.w = 0;
     pdrv_can->TxHeader.FrameInfo.w = 0;
     pdrv_can->TxHeader.FrameInfo.b.DLC = FDCAN_DLC_BYTES_8;
@@ -350,6 +372,9 @@ static rt_err_t _can_control(struct rt_can_device *can, int cmd, void *arg)
         if (RT_NULL == arg)
         {
             filter_set_default(&pdrv_can->FilterConfig);
+            HAL_FDCAN_NewConfigFilter(&pdrv_can->fdcanHandle,
+                                       &pdrv_can->FilterConfig);
+            filter_set_default_ext(&pdrv_can->FilterConfig);
             HAL_FDCAN_NewConfigFilter(&pdrv_can->fdcanHandle,
                                        &pdrv_can->FilterConfig);
         }
@@ -478,7 +503,7 @@ static rt_err_t _can_control(struct rt_can_device *can, int cmd, void *arg)
     return RT_EOK;
 }
 
-/* 填充 FDCAN 发送报文头（阻塞/非阻塞发送共用） */
+/* Fill FDCAN TX message header (shared by blocking/non-blocking TX) */
 static void fill_tx_header(FDCAN_TxHeaderTypeDef *hdr, const struct rt_can_msg *pmsg)
 {
     hdr->ID.w = 0;
@@ -518,11 +543,39 @@ static rt_ssize_t _can_sendmsg(struct rt_can_device *can, const void *buf, rt_ui
      * here (it races with IRQ clearing the done flag). Completion is reported
      * in HAL_FDCAN_TXPTBCompletedCallback via RT_CAN_EVENT_TX_DONE.
      */
-    if (HAL_FDCAN_TransmitMessageByPTB(&pdrv_can->fdcanHandle,
-                                        &tx_header,
-                                        pmsg->data) != HAL_OK)
+    /*
+     * PTB (priority transmit buffer) is single-slot: while a previous frame
+     * is in flight (CR.TPE set) HAL returns HAL_BUSY. Wait for release with
+     * a timeout instead of dropping the frame, otherwise high-frequency TX
+     * loses frames. Runs in thread context (rt_device_write path).
+     *
+     * While retrying, clear the framework's sndchange bit for this box: a
+     * completion interrupt from the previous frame would otherwise complete
+     * this frame's completion prematurely (dev_can.c pairs TX_DONE with the
+     * box number and only clears sndchange on the timeout path). The bit is
+     * re-set immediately after this frame is written to the PTB.
+     */
     {
-        return -RT_ERROR;
+        rt_base_t level = rt_hw_interrupt_disable();
+        pdrv_can->device.status.sndchange &= ~(1U << boxno);
+        rt_hw_interrupt_enable(level);
+    }
+    {
+        rt_tick_t start_tick = rt_tick_get();
+        while (HAL_FDCAN_TransmitMessageByPTB(&pdrv_can->fdcanHandle,
+                                               &tx_header,
+                                               pmsg->data) != HAL_OK)
+        {
+            if (rt_tick_get() - start_tick > rt_tick_from_millisecond(100))
+            {
+                LOG_E("can TX timeout (PTB busy)");
+                return -RT_ETIMEOUT;
+            }
+            rt_thread_mdelay(1);
+        }
+        level = rt_hw_interrupt_disable();
+        pdrv_can->device.status.sndchange |= (1U << boxno);
+        rt_hw_interrupt_enable(level);
     }
 
     return RT_EOK;
@@ -592,7 +645,7 @@ static const struct rt_can_ops _can_ops =
     _can_sendmsg_nonblocking,
 };
 
-/* ==================== HAL 中断回调 ==================== */
+/* ==================== HAL Interrupt Callbacks ==================== */
 
 void HAL_FDCAN_RxBufferNewMessageCallback(FDCAN_HandleTypeDef *hfdcan)
 {
@@ -653,6 +706,15 @@ void HAL_FDCAN_ErrorCallback(FDCAN_HandleTypeDef *hfdcan)
         st_DrvCan1.device.status.rcverrcnt = ecc.b.RECNT;
         st_DrvCan1.device.status.snderrcnt = ecc.b.TECNT;
         st_DrvCan1.device.status.lasterrtype = ecc.b.KOER;
+
+        /* Bus-off recovery: write-1 to BUSOFF triggers protocol init and
+         * returns the controller to normal operation. */
+        if (hfdcan->Instance->CR & FDCAN_CR_BUSOFF)
+        {
+            SET_BIT(hfdcan->Instance->CR, FDCAN_CR_BUSOFF);
+            LOG_W("FDCAN1 bus-off recovered (TEC=%u)", (unsigned)ecc.b.TECNT);
+        }
+
         rt_hw_can_isr(&st_DrvCan1.device, RT_CAN_EVENT_TX_FAIL);
 #endif
     }
@@ -662,12 +724,21 @@ void HAL_FDCAN_ErrorCallback(FDCAN_HandleTypeDef *hfdcan)
         st_DrvCan2.device.status.rcverrcnt = ecc.b.RECNT;
         st_DrvCan2.device.status.snderrcnt = ecc.b.TECNT;
         st_DrvCan2.device.status.lasterrtype = ecc.b.KOER;
+
+        /* Bus-off recovery: write-1 to BUSOFF triggers protocol init and
+         * returns the controller to normal operation. */
+        if (hfdcan->Instance->CR & FDCAN_CR_BUSOFF)
+        {
+            SET_BIT(hfdcan->Instance->CR, FDCAN_CR_BUSOFF);
+            LOG_W("FDCAN2 bus-off recovered (TEC=%u)", (unsigned)ecc.b.TECNT);
+        }
+
         rt_hw_can_isr(&st_DrvCan2.device, RT_CAN_EVENT_TX_FAIL);
 #endif
     }
 }
 
-/* ==================== 中断服务函数 ==================== */
+/* ==================== Interrupt Service Routines ==================== */
 
 #ifdef BSP_USING_FDCAN1
 void FDCAN1_IRQHandler(void)
@@ -687,7 +758,7 @@ void FDCAN2_IRQHandler(void)
 }
 #endif
 
-/* ==================== 设备注册 ==================== */
+/* ==================== Device Registration ==================== */
 
 static int rt_hw_can_init(void)
 {

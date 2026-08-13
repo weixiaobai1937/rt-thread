@@ -19,7 +19,7 @@
 
 extern int  rt_application_init(void);
 
-extern void rt_hw_uart_init(void);
+extern rt_err_t rt_hw_uart_init(void);
 extern volatile uint32_t SystemCoreClock;
 
 #if defined(DATA_IN_ExtSRAM) && defined(RT_USING_MEMHEAP)
@@ -81,6 +81,7 @@ void rt_hw_board_init(void)
      * System heap is SRAM1 only (0x20010000..SOC_SRAM_END).
      * DTCM holds .data/.bss and MSP stack (grows down from 0x20010000);
      * never hand DTCM residual to rt_malloc or it collides with MSP.
+     * Same layout across GCC/Keil/IAR (all link scripts keep SRAM1 free).
      */
     __HAL_RCC_SRAM1_CLK_ENABLE();
     rt_system_heap_init((void *)SOC_SRAM1_START_ADDR, (void *)SOC_SRAM_END_ADDR);
@@ -90,7 +91,13 @@ void rt_hw_board_init(void)
 #endif
 #endif /* RT_USING_HEAP */
 
-    rt_hw_uart_init();
+    if (rt_hw_uart_init() != RT_EOK)
+    {
+        /* UART registration failed: hang (no console available anyway) */
+        while (1)
+        {
+        }
+    }
     rt_console_set_device(RT_CONSOLE_DEVICE_NAME);
 
     if (psram_warn)

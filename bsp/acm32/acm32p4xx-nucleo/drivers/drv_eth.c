@@ -45,7 +45,10 @@ static uint8_t *rx_pool_memory;
 static uint32_t *rx_pool_bitmap;
 static uint8_t *tx_bounce_bufs[ETH_TX_BOUNCE_CNT];
 static volatile uint8_t tx_bounce_busy[ETH_TX_BOUNCE_CNT];
-static uint8_t *eth_dma_mem; /* single psram block for desc/bounce/rx pool */
+static uint8_t *eth_dma_mem_orig; /* raw rt_malloc block (SRAM1) */
+static uint8_t *eth_dma_mem;      /* 32B-aligned: desc + TX bounce */
+static uint8_t *eth_rx_mem_orig;  /* raw psram memheap block */
+static uint8_t *eth_rx_mem;       /* 32B-aligned: RX pool + bitmap */
 
 static ETH_HandleTypeDef EthHandle;
 static ETH_TxPacketConfigTypeDef TxConfig;
@@ -552,7 +555,6 @@ static int phy_get_link_state(ETH_HandleTypeDef *heth)
 {
     uint32_t bsr, bcr, anar, anlpar, scsr;
     int state;
-    uint16_t id1 = 0, id2 = 0;
 
     if (HAL_ETH_ReadPHYRegister(heth, ETH_PHY_ADDR, PHY_REG_BSR, &bsr) != HAL_OK)
         return PHY_LINK_DOWN;
@@ -605,7 +607,7 @@ static int phy_get_link_state(ETH_HandleTypeDef *heth)
 
 /* ===== ETH TX callback (eth_device -> low_level_output) ===== */
 /*
- * Async IT TX + bounce ring in PSRAM (same ETH DMA window as descriptors).
+ * Async IT TX + bounce ring in SRAM1 (allocated in rt_acm32_eth_init).
  * Do NOT busy-poll here: etx and erx share priority; spinning starves RX
  * and MAC drops frames under load (host sees ~256KB then tcp write failed).
  */
@@ -662,9 +664,9 @@ static rt_err_t rt_acm32_eth_tx(rt_device_t dev, struct pbuf *p)
     do {
         if (HAL_ETH_Transmit_IT(&EthHandle, &TxConfig) == HAL_OK)
         {
-            /* PSRAM is non-cacheable; OSPI write buffer may delay OWN=1 completion.
-             * Read-back the descriptor to force OSPI write buffer drain before
-             * re-triggering TX poll, so DMA sees the updated OWN bit. */
+            /* Read back the just-armed descriptor before re-triggering the
+             * TX poll. Desc lives in SRAM1 (non-cacheable background region);
+             * the read acts as a barrier so DMA sees the updated OWN bit. */
             {
                 uint32_t prev_idx = (EthHandle.TxDescList.CurTxDesc - 1U + ETH_TX_DESC_CNT)
                                     % ETH_TX_DESC_CNT;
@@ -732,10 +734,17 @@ static void eth_dma_mem_release(void)
 {
     int i;
 
-    if (eth_dma_mem != RT_NULL)
+    if (eth_dma_mem_orig != RT_NULL)
     {
-        rt_memheap_free(eth_dma_mem);
+        rt_free(eth_dma_mem_orig);
+        eth_dma_mem_orig = RT_NULL;
         eth_dma_mem = RT_NULL;
+    }
+    if (eth_rx_mem_orig != RT_NULL)
+    {
+        rt_memheap_free(eth_rx_mem_orig);
+        eth_rx_mem_orig = RT_NULL;
+        eth_rx_mem = RT_NULL;
     }
     DMATxDscrTab = RT_NULL;
     DMARxDscrTab = RT_NULL;
@@ -836,52 +845,68 @@ static rt_err_t rt_acm32_eth_init(rt_device_t dev)
           macaddress[0], macaddress[1], macaddress[2],
           macaddress[3], macaddress[4], macaddress[5]);
 
-    /* All ETH DMA memory from psram memheap (reuse on re-init) */
+    /* Hybrid DMA layout (validated on hardware):
+     *   - desc + TX bounce: SRAM1 system heap (fast DMA access, 32B aligned)
+     *   - RX pool + bitmap: PSRAM memheap (large zero-copy RX, 32B aligned)
+     * PSRAM-only TX bounce measured ~0.9 Mbps; SRAM1 bounce is required.
+     * DMA descriptors must be 32-byte aligned; heap allocators only
+     * guarantee 8B, so overallocate and align manually. */
     desc_size = sizeof(ETH_DMADescTypeDef) * (ETH_RX_DESC_CNT + ETH_TX_DESC_CNT);
     bounce_size = (size_t)ETH_TX_BOUNCE_CNT * ETH_TX_BOUNCE_SIZE;
     pool_size = ETH_RX_POOL_SIZE;
     bitmap_size = ((ETH_RX_BUFFER_CNT + 31) / 32) * sizeof(uint32_t);
-    total = ((desc_size + bounce_size + pool_size + bitmap_size + 31U) & ~31U);
+    total = ((desc_size + bounce_size + 31U) & ~31U);
+
+    if (eth_dma_mem_orig == RT_NULL)
+    {
+        eth_dma_mem_orig = (uint8_t *)rt_malloc(total + 32U);
+        if (eth_dma_mem_orig == RT_NULL)
+        {
+            LOG_E("ETH SRAM1 alloc %u bytes failed", (unsigned)(total + 32U));
+            return -RT_ENOMEM;
+        }
+        eth_dma_mem = (uint8_t *)(((uintptr_t)eth_dma_mem_orig + 31U) & ~31U);
+    }
+    mem = eth_dma_mem;
+    rt_memset(mem, 0, total);
 
     if (!System_OSPI_PSRAM_Ready())
     {
         LOG_E("ETH psram memheap unavailable (PSRAM init failed)");
+        eth_dma_mem_release();
         return -RT_ENOMEM;
     }
 
-    if (eth_dma_mem == RT_NULL)
+    if (eth_rx_mem_orig == RT_NULL)
     {
-        mem = (uint8_t *)rt_memheap_alloc(&psram_heap, total);
-        if (mem == RT_NULL)
+        eth_rx_mem_orig = (uint8_t *)rt_memheap_alloc(&psram_heap, pool_size + bitmap_size + 32U);
+        if (eth_rx_mem_orig == RT_NULL)
         {
-            LOG_E("ETH psram alloc %u bytes failed", (unsigned)total);
+            LOG_E("ETH psram alloc %u bytes failed", (unsigned)(pool_size + bitmap_size + 32U));
+            eth_dma_mem_release();
             return -RT_ENOMEM;
         }
-        eth_dma_mem = mem;
+        eth_rx_mem = (uint8_t *)(((uintptr_t)eth_rx_mem_orig + 31U) & ~31U);
     }
-    else
-    {
-        mem = eth_dma_mem;
-    }
+    mem = eth_rx_mem;
+    rt_memset(mem, 0, pool_size + bitmap_size);
+    System_CleanDAccelerate_by_Addr((volatile void *)mem, (int32_t)(pool_size + bitmap_size));
 
-    rt_memset(mem, 0, total);
-    System_CleanDAccelerate_by_Addr((volatile void *)mem, (int32_t)total);
-
-    DMATxDscrTab = (ETH_DMADescTypeDef *)mem;
-    DMARxDscrTab = (ETH_DMADescTypeDef *)(mem + sizeof(ETH_DMADescTypeDef) * ETH_TX_DESC_CNT);
+    DMATxDscrTab = (ETH_DMADescTypeDef *)eth_dma_mem;
+    DMARxDscrTab = (ETH_DMADescTypeDef *)(eth_dma_mem + sizeof(ETH_DMADescTypeDef) * ETH_TX_DESC_CNT);
     for (i = 0; i < ETH_TX_BOUNCE_CNT; i++)
     {
-        tx_bounce_bufs[i] = mem + desc_size + (size_t)i * ETH_TX_BOUNCE_SIZE;
+        tx_bounce_bufs[i] = eth_dma_mem + desc_size + (size_t)i * ETH_TX_BOUNCE_SIZE;
         tx_bounce_busy[i] = 0;
     }
 
-    rx_pool_memory = mem + desc_size + bounce_size;
-    rx_pool_bitmap = (uint32_t *)(rx_pool_memory + pool_size);
+    rx_pool_memory = eth_rx_mem;
+    rx_pool_bitmap = (uint32_t *)(eth_rx_mem + pool_size);
 
-    LOG_I("ETH DMA psram=%p total=%u desc=%u bounce=%ux%u rx_pool=%u",
-          (void *)mem, (unsigned)total,
-          (unsigned)desc_size, (unsigned)ETH_TX_BOUNCE_CNT, (unsigned)ETH_TX_BOUNCE_SIZE,
-          (unsigned)pool_size);
+    LOG_I("ETH DMA sram=%p (%u) psram=%p rx_pool=%u bounce=%ux%u",
+          (void *)eth_dma_mem, (unsigned)total,
+          (void *)eth_rx_mem, (unsigned)pool_size,
+          (unsigned)ETH_TX_BOUNCE_CNT, (unsigned)ETH_TX_BOUNCE_SIZE);
 
     /* Configure ETH handle */
     EthHandle.Instance = ETH;

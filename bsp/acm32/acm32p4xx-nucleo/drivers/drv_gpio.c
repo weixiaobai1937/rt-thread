@@ -15,8 +15,8 @@
 
 
 /*
-GPIO复用功能映射表
-| 引脚名称 | AF0          | AF1          | AF2          | AF3          | AF4       | AF5        | AF6                             | AF7         | 附加功能                       |
+GPIO alternate function mapping table
+| Pin name | AF0          | AF1          | AF2          | AF3          | AF4       | AF5        | AF6                             | AF7         | Additional functions           |
 | -------- | ------------ | ------------ | ------------ | ------------ | --------- | ---------- | ------------------------------- | ----------- | ------------------------------ |
 | PA0      | LPTIM1_OUT   | UART2_CTS    | TIM2_CH1_ETR | UART4_TX     | TIM5_CH1  | TIM8_ETR   | ETH_MII_CRS                     | —           | ADC_INP16, RTC_TAMP2, WKUP0    |
 | PA1      | SDMMC1_D6    | UART2_RTS_DE | TIM2_CH2     | UART4_RX     | TIM5_CH2  | OSPI2_DQS  | ETH_MII_RX_CLK/ETH_RMII_REF_CLK | I2C1_SDA    | ADC_INN16, ADC_INP17           |
@@ -149,11 +149,6 @@ GPIO复用功能映射表
 #define __ACM32_PIN(index, gpio, gpio_index)                                \
     {                                                                       \
         index, GPIO##gpio, GPIO_PIN_##gpio_index                            \
-    }
-
-#define __ACM32_PIN_RESERVE                                                 \
-    {                                                                       \
-        -1, RT_NULL, 0                                                      \
     }
 
 /* ACM32 GPIO driver */
@@ -544,7 +539,7 @@ static rt_err_t _pin_irq_enable(struct rt_device *device, rt_base_t pin,
         if (pin_irq_hdr_tab[irqindex].pin == -1)
         {
             rt_hw_interrupt_enable(level);
-            return -RT_EPERM;  /* 未 attach 中断回调 */
+            return -RT_EPERM;  /* interrupt callback not attached */
         }
 
         pin_irq_map[irqindex].gpio = index->gpio;
@@ -565,11 +560,15 @@ static rt_err_t _pin_irq_enable(struct rt_device *device, rt_base_t pin,
             return -RT_EINVAL;
         }
 
-        HAL_EXTI_SetConfigLine(index->gpio, pin_irq_map[irqindex].line, exti_mode);
+        if (HAL_EXTI_SetConfigLine(index->gpio, pin_irq_map[irqindex].line, exti_mode) != HAL_OK)
+        {
+            rt_hw_interrupt_enable(level);
+            return -RT_ERROR;
+        }
 
         pin_irq_enable_mask |= 1 << irqindex;
 
-        /* 使能对应 EXTI NVIC 通道 */
+        /* Enable the corresponding EXTI NVIC channel */
         if (irqindex <= 4)
             NVIC_EnableIRQ((IRQn_Type)(EXTI0_IRQn + irqindex));
         else if (irqindex <= 9)
@@ -583,7 +582,7 @@ static rt_err_t _pin_irq_enable(struct rt_device *device, rt_base_t pin,
     {
         if ((pin_irq_enable_mask & (1 << irqindex)) == 0)
         {
-            return -RT_EPERM;  /* 中断未使能，不能禁用 */
+            return -RT_EPERM;  /* interrupt not enabled, cannot disable */
         }
 
         level = rt_hw_interrupt_disable();
@@ -592,7 +591,7 @@ static rt_err_t _pin_irq_enable(struct rt_device *device, rt_base_t pin,
 
         pin_irq_enable_mask &= ~(1 << irqindex);
 
-        /* 若该共享 IRQ 组内无其他使能的线，禁能 NVIC */
+        /* Disable NVIC if no other line is enabled in this shared IRQ group */
         if (irqindex <= 4)
         {
             NVIC_DisableIRQ((IRQn_Type)(EXTI0_IRQn + irqindex));
@@ -710,7 +709,7 @@ void EXTI4_IRQHandler(void)
 void EXTI9_5_IRQHandler(void)
 {
     rt_interrupt_enter();
-    uint32_t pdr = EXTI->PDR;  /* 在 HAL 清除前捕获 PDR 状态 */
+    uint32_t pdr = EXTI->PDR;  /* capture PDR state before HAL clears it */
     HAL_EXTI_IRQHandler(EXTI_LINE_5);
     HAL_EXTI_IRQHandler(EXTI_LINE_6);
     HAL_EXTI_IRQHandler(EXTI_LINE_7);
@@ -730,7 +729,7 @@ void EXTI9_5_IRQHandler(void)
 void EXTI15_10_IRQHandler(void)
 {
     rt_interrupt_enter();
-    uint32_t pdr = EXTI->PDR;  /* 在 HAL 清除前捕获 PDR 状态 */
+    uint32_t pdr = EXTI->PDR;  /* capture PDR state before HAL clears it */
     HAL_EXTI_IRQHandler(EXTI_LINE_10);
     HAL_EXTI_IRQHandler(EXTI_LINE_11);
     HAL_EXTI_IRQHandler(EXTI_LINE_12);

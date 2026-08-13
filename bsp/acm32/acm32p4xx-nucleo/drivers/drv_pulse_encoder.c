@@ -118,11 +118,11 @@ static rt_err_t pulse_encoder_init(struct rt_pulse_encoder_device *pulse_encoder
         return -RT_ERROR;
     }
 
-    /* 配置编码器模式 CC1S=01(CCMR1 bit0=1,bit1=0), CC2S=01(bit8=1,bit9=0)
-     * 即通道1和通道2均配置为输入，TI1FP1/TI2FP2 作为编码器输入 */
+    /* Configure encoder mode CC1S=01(CCMR1 bit0=1,bit1=0), CC2S=01(bit8=1,bit9=0)
+     * i.e. both channels are configured as inputs, TI1FP1/TI2FP2 used as encoder inputs */
     dev->tim_handle.Instance->CCMR1 = (dev->tim_handle.Instance->CCMR1 & ~((uint32_t)(BIT0 | BIT1 | BIT8 | BIT9))) | (BIT0 | BIT8);
 
-    /* 清除极性位(CCER bit1/3/5/7)：所有通道上升沿捕获，极性不反相 */
+    /* Clear polarity bits (CCER bit1/3/5/7): capture on rising edge for all channels, no polarity inversion */
     dev->tim_handle.Instance->CCER &= ~(BIT1 | BIT3 | BIT5 | BIT7);
 
     HAL_TIMER_Base_Start(dev->tim_handle.Instance);

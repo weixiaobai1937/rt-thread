@@ -6,7 +6,7 @@
  * Change Logs:
  * Date           Author       Notes
  * 2026-06-04     AisinoChip   ACM32P4xx UART config
- *                              USART1-8 + LPUART1/2
+ *                              USART1-4 + LPUART1/2
  * 2026-07-06     AisinoChip   add DMA fields, refactor for V2 driver
  * 2026-07-15     AisinoChip   UART DMA unit/channel from Kconfig
  * 2026-07-23     AisinoChip   pin groups + DMA map presets (like SPI)
@@ -541,49 +541,29 @@ struct acm32_uart_config
 #ifdef BSP_USING_LPUART1
 
 /* --- LPUART1 TX --- */
-#if defined(BSP_LPUART1_TX_PA2)
-  #define LPUART1_TX_PORT   GPIOA
-  #define LPUART1_TX_PIN    GPIO_PIN_2
-  #define LPUART1_TX_AF     GPIO_FUNCTION_3
-  #define LPUART1_TX_HINT   "PA2"
-#elif defined(BSP_LPUART1_TX_PA9)
+#if defined(BSP_LPUART1_TX_PA9)
   #define LPUART1_TX_PORT   GPIOA
   #define LPUART1_TX_PIN    GPIO_PIN_9
   #define LPUART1_TX_AF     GPIO_FUNCTION_0
   #define LPUART1_TX_HINT   "PA9"
-#elif defined(BSP_LPUART1_TX_PB6)
+#else /* BSP_LPUART1_TX_PB6 */
   #define LPUART1_TX_PORT   GPIOB
   #define LPUART1_TX_PIN    GPIO_PIN_6
   #define LPUART1_TX_AF     GPIO_FUNCTION_0
   #define LPUART1_TX_HINT   "PB6"
-#else
-  #define LPUART1_TX_PORT   GPIOA
-  #define LPUART1_TX_PIN    GPIO_PIN_2
-  #define LPUART1_TX_AF     GPIO_FUNCTION_3
-  #define LPUART1_TX_HINT   "PA2"
 #endif
 
 /* --- LPUART1 RX --- */
-#if defined(BSP_LPUART1_RX_PA3)
-  #define LPUART1_RX_PORT   GPIOA
-  #define LPUART1_RX_PIN    GPIO_PIN_3
-  #define LPUART1_RX_AF     GPIO_FUNCTION_3
-  #define LPUART1_RX_HINT   "PA3"
-#elif defined(BSP_LPUART1_RX_PA10)
+#if defined(BSP_LPUART1_RX_PA10)
   #define LPUART1_RX_PORT   GPIOA
   #define LPUART1_RX_PIN    GPIO_PIN_10
   #define LPUART1_RX_AF     GPIO_FUNCTION_0
   #define LPUART1_RX_HINT   "PA10"
-#elif defined(BSP_LPUART1_RX_PB7)
+#else /* BSP_LPUART1_RX_PB7 */
   #define LPUART1_RX_PORT   GPIOB
   #define LPUART1_RX_PIN    GPIO_PIN_7
   #define LPUART1_RX_AF     GPIO_FUNCTION_0
   #define LPUART1_RX_HINT   "PB7"
-#else
-  #define LPUART1_RX_PORT   GPIOA
-  #define LPUART1_RX_PIN    GPIO_PIN_3
-  #define LPUART1_RX_AF     GPIO_FUNCTION_3
-  #define LPUART1_RX_HINT   "PA3"
 #endif
 
 #define LPUART1_PINS_HINT LPUART1_TX_HINT "/TX " LPUART1_RX_HINT "/RX"
@@ -599,49 +579,29 @@ struct acm32_uart_config
 #ifdef BSP_USING_LPUART2
 
 /* --- LPUART2 TX --- */
-#if defined(BSP_LPUART2_TX_PB10)
-  #define LPUART2_TX_PORT   GPIOB
-  #define LPUART2_TX_PIN    GPIO_PIN_10
-  #define LPUART2_TX_AF     GPIO_FUNCTION_3
-  #define LPUART2_TX_HINT   "PB10"
-#elif defined(BSP_LPUART2_TX_PC0)
+#if defined(BSP_LPUART2_TX_PC0)
   #define LPUART2_TX_PORT   GPIOC
   #define LPUART2_TX_PIN    GPIO_PIN_0
   #define LPUART2_TX_AF     GPIO_FUNCTION_0
   #define LPUART2_TX_HINT   "PC0"
-#elif defined(BSP_LPUART2_TX_PE3)
+#else /* BSP_LPUART2_TX_PE3 */
   #define LPUART2_TX_PORT   GPIOE
   #define LPUART2_TX_PIN    GPIO_PIN_3
   #define LPUART2_TX_AF     GPIO_FUNCTION_0
   #define LPUART2_TX_HINT   "PE3"
-#else
-  #define LPUART2_TX_PORT   GPIOB
-  #define LPUART2_TX_PIN    GPIO_PIN_10
-  #define LPUART2_TX_AF     GPIO_FUNCTION_3
-  #define LPUART2_TX_HINT   "PB10"
 #endif
 
 /* --- LPUART2 RX --- */
-#if defined(BSP_LPUART2_RX_PB11)
-  #define LPUART2_RX_PORT   GPIOB
-  #define LPUART2_RX_PIN    GPIO_PIN_11
-  #define LPUART2_RX_AF     GPIO_FUNCTION_3
-  #define LPUART2_RX_HINT   "PB11"
-#elif defined(BSP_LPUART2_RX_PC1)
+#if defined(BSP_LPUART2_RX_PC1)
   #define LPUART2_RX_PORT   GPIOC
   #define LPUART2_RX_PIN    GPIO_PIN_1
   #define LPUART2_RX_AF     GPIO_FUNCTION_0
   #define LPUART2_RX_HINT   "PC1"
-#elif defined(BSP_LPUART2_RX_PE4)
+#else /* BSP_LPUART2_RX_PE4 */
   #define LPUART2_RX_PORT   GPIOE
   #define LPUART2_RX_PIN    GPIO_PIN_4
   #define LPUART2_RX_AF     GPIO_FUNCTION_0
   #define LPUART2_RX_HINT   "PE4"
-#else
-  #define LPUART2_RX_PORT   GPIOB
-  #define LPUART2_RX_PIN    GPIO_PIN_11
-  #define LPUART2_RX_AF     GPIO_FUNCTION_3
-  #define LPUART2_RX_HINT   "PB11"
 #endif
 
 #define LPUART2_PINS_HINT LPUART2_TX_HINT "/TX " LPUART2_RX_HINT "/RX"

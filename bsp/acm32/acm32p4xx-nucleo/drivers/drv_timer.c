@@ -20,7 +20,7 @@
 #include "tim_config.h"
 
 /*
- * HAL_TIMER_MSP_Init 位于 drv_tim_utils.c，供 timer/capture/encoder/PWM 共享。
+ * HAL_TIMER_MSP_Init is in drv_tim_utils.c, shared by timer/capture/encoder/PWM drivers.
  */
 
 enum
@@ -88,7 +88,7 @@ static void timer_init(struct rt_clock_timer_device *timer, rt_uint32_t state)
         timer->freq = 1000000; /* default 1MHz count frequency */
     }
 
-    /* 防止 freq > timer_clock 导致 Prescaler 下溢为 0xFFFFFFFF */
+    /* Prevent Prescaler underflow to 0xFFFFFFFF when freq > timer_clock */
     if ((rt_uint32_t)timer->freq > timer_clock)
     {
         timer->freq = (rt_int32_t)timer_clock;
@@ -170,6 +170,7 @@ static rt_err_t timer_ctrl(rt_clock_timer_t *timer, rt_uint32_t cmd, void *arg)
         }
 
         psc = timer_clock / freq;
+        tim->Init.Prescaler = psc - 1;      /* keep Init in sync for re-init */
         tim->Instance->PSC = psc - 1;
         tim->Instance->EGR |= TIM_EVENTSOURCE_UPDATE;
         timer->freq = (rt_int32_t)(timer_clock / psc);

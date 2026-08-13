@@ -22,7 +22,7 @@ ENTRY(Reset_Handler)
 _estack = ORIGIN(DTCM) + LENGTH(DTCM);    /* top of DTCM — MSP grows down */
 
 /* Link-time check: enough DTCM left for MSP after .data/.bss */
-_Min_Stack_Size = 0x400;
+_Min_Stack_Size = 0x1000;
 
 /* Memories definition */
 MEMORY

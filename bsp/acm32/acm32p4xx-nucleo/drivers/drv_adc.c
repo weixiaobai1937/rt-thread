@@ -55,7 +55,7 @@ struct acm32_adc
 {
     ADC_HandleTypeDef    handle;
     struct rt_adc_device acm32_adc_device;
-    struct rt_mutex      lock;   /* 保护通道使能/读取序列，防止并发重初始化打断转换 */
+    struct rt_mutex      lock;   /* protects channel enable/read sequence, prevents concurrent re-init from interrupting conversions */
 };
 
 static struct acm32_adc acm32_adc_obj = {0};
@@ -149,8 +149,7 @@ void HAL_ADC_MspInit(ADC_HandleTypeDef *hadc)
     }
 
     __HAL_RCC_ADC_CLK_ENABLE();
-    NVIC_ClearPendingIRQ(ADC_IRQn);
-    NVIC_EnableIRQ(ADC_IRQn);
+    /* Polling mode only: ADC IRQ is not used (no ADC_IRQHandler defined) */
 }
 
 static rt_err_t _adc_enabled(struct rt_adc_device *device, rt_int8_t channel, rt_bool_t enabled)
@@ -188,7 +187,7 @@ static rt_err_t _adc_enabled(struct rt_adc_device *device, rt_int8_t channel, rt
             rt_mutex_release(&adcObj->lock);
             return -RT_ERROR;
         }
-        /* 使用临界区保护 ChannelNum 的原子操作 */
+        /* Use a critical section to protect the atomic ChannelNum operation */
         rt_enter_critical();
         adcObj->handle.ChannelNum++;
         rt_exit_critical();
@@ -205,9 +204,9 @@ static rt_err_t _adc_enabled(struct rt_adc_device *device, rt_int8_t channel, rt
         rt_mutex_take(&adcObj->lock, RT_WAITING_FOREVER);
 
         adcObj->handle.Init.ChannelEn &= ~(1U << ch);
-        /* 同步硬件：调用 HAL_ADC_Init 更新通道使能配置 */
+        /* Sync hardware: call HAL_ADC_Init to update the channel enable config */
         rt_err_t disable_rc = (HAL_ADC_Init(&adcObj->handle) == HAL_OK) ? RT_EOK : -RT_ERROR;
-        /* 使用临界区保护 ChannelNum 的原子操作 */
+        /* Use a critical section to protect the atomic ChannelNum operation */
         rt_enter_critical();
         if (adcObj->handle.ChannelNum > 0)
         {
@@ -241,11 +240,6 @@ static rt_err_t _get_adc_value(struct rt_adc_device *device, rt_int8_t channel, 
     *value = 0;
     adcObj = rt_container_of(device, struct acm32_adc, acm32_adc_device);
 
-    if (0 == (adcObj->handle.Init.ChannelEn & (1U << ch)))
-    {
-        return -RT_ERROR;
-    }
-
     channelConf.Channel = (uint32_t)ch;
     channelConf.Sq = ADC_SEQUENCE_SQ1;
     channelConf.Smp = ADC_SMP_CLOCK_320;
@@ -260,6 +254,13 @@ static rt_err_t _get_adc_value(struct rt_adc_device *device, rt_int8_t channel, 
     channelConf.Offsetsign = 0;
 
     rt_mutex_take(&adcObj->lock, RT_WAITING_FOREVER);
+
+    /* Channel check inside the lock: enable/disable may run concurrently */
+    if (0 == (adcObj->handle.Init.ChannelEn & (1U << ch)))
+    {
+        rt_mutex_release(&adcObj->lock);
+        return -RT_ERROR;
+    }
 
     if (HAL_ADC_ConfigChannel(&adcObj->handle, &channelConf) != HAL_OK)
     {

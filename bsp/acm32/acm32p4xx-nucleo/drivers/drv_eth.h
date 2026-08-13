@@ -96,8 +96,11 @@ enum acm32_phy_link_state
  * ETH DMA cannot access DTCM (0x20000000-0x2000FFFF); it can access SRAM1
  * and OSPI external memory. Other DMA masters may access DTCM.
  *
- * All ETH DMA memory (descriptors, TX bounce, RX pool) is allocated
- * from the psram memheap at runtime.
+ * Hybrid DMA layout (allocated at runtime in rt_acm32_eth_init):
+ *   - descriptors + TX bounce: SRAM1 system heap (rt_malloc)
+ *   - RX pool + bitmap:        psram memheap (rt_memheap_alloc)
+ * Both are manually 32B-aligned (heap only guarantees 8B). PSRAM-only TX
+ * bounce measured ~0.9 Mbps; SRAM1 bounce is required for throughput.
  * Requires DATA_IN_ExtSRAM + System_OSPI_PSRAM_Reclock() before eth init.
  */
 

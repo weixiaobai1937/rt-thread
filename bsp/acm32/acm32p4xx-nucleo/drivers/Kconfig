@@ -550,6 +550,19 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
             bool "PE4 AF0"
     endchoice
 
+    config BSP_UART_RX_BUFSZ
+        int "UART RX ring buffer size (bytes)"
+        default 1024
+        help
+          V2 serial RX ring buffer size. Applied to UARTs with DMA RX enabled.
+
+    config BSP_UART_DMA_PING_BUFSZ
+        int "UART DMA RX ping-pong buffer size (bytes)"
+        default 512
+        help
+          Circular DMA RX buffer size. Tail data is reported on half-transfer,
+          transfer-complete and UART IDLE interrupts.
+
     config BSP_USING_SPI1
         bool "Enable SPI1"
         select RT_USING_SPI
@@ -1121,14 +1134,22 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
             bool "Enable Timer1 (clock timer)"
             select RT_USING_CLOCK_TIME
             default n
+            help
+              Conflicts with PWM1: PWM side already depends on !BSP_USING_TIM1.
         config BSP_USING_TIM2
             bool "Enable Timer2 (clock timer, 32-bit)"
             select RT_USING_CLOCK_TIME
             default n
+            help
+              Conflicts with PWM2/CAPTURE2/PULSE_ENCODER2: those already depend
+              on !BSP_USING_TIM2.
         config BSP_USING_TIM3
             bool "Enable Timer3 (clock timer)"
             select RT_USING_CLOCK_TIME
             default n
+            help
+              Conflicts with PWM3/CAPTURE3/PULSE_ENCODER3: those already depend
+              on !BSP_USING_TIM3.
         config BSP_USING_TIM6
             bool "Enable Timer6 (clock timer, basic)"
             select RT_USING_CLOCK_TIME
@@ -1137,6 +1158,8 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
             bool "Enable Timer10 (clock timer)"
             select RT_USING_CLOCK_TIME
             default n
+            help
+              Conflicts with PWM10: PWM10 already depends on !BSP_USING_TIM10.
     endmenu
 
     menu "Hardware PWM"
@@ -1382,20 +1405,22 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         config BSP_USING_CAPTURE2
             bool "Enable Input Capture2 (TIM2 CH1: PA0)"
             select RT_USING_INPUT_CAPTURE
-            depends on !BSP_USING_TIM2 && !BSP_USING_PWM2 && !BSP_USING_PULSE_ENCODER2
+            depends on !BSP_USING_TIM2 && !BSP_USING_PWM2
             default n
             help
               Input capture via TIM2 CH1 on PA0(AF2).
-              Conflicts with TIM2 clock timer, PWM2 and pulse encoder 2.
+              Conflicts with TIM2 clock timer, PWM2 and pulse encoder 2
+              (encoder side already depends on !BSP_USING_CAPTURE2).
 
         config BSP_USING_CAPTURE3
             bool "Enable Input Capture3 (TIM3 CH1: PA6)"
             select RT_USING_INPUT_CAPTURE
-            depends on !BSP_USING_TIM3 && !BSP_USING_PWM3 && !BSP_USING_PULSE_ENCODER3
+            depends on !BSP_USING_TIM3 && !BSP_USING_PWM3
             default n
             help
               Input capture via TIM3 CH1 on PA6(AF1).
-              Conflicts with TIM3 clock timer, PWM3 and pulse encoder 3.
+              Conflicts with TIM3 clock timer, PWM3 and pulse encoder 3
+              (encoder side already depends on !BSP_USING_CAPTURE3).
     endmenu
 
     config BSP_USING_LPTIMER
@@ -1698,12 +1723,12 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
     config BSP_USING_SDMMC1
         bool "Enable SDMMC1 (SD card via SDIO)"
         select RT_USING_SDIO
-        depends on !BSP_USING_I2S1
         default n
         help
             Enable SD/MMC driver for SD card slot.
             Pins: PC8=DAT0, PC9=DAT1, PC10=DAT2, PC11=DAT3, PC12=CLK, PD2=CMD (all AF12).
-            Mutually exclusive with I2S1 (default I2S SDO also wants PC12).
+            Mutually exclusive with I2S1 (default I2S SDO also wants PC12);
+            I2S side already depends on !BSP_USING_SDMMC1.
             Uses HAL SDMMC FIFO mode (polling) for D-Cache safety.
 
 endmenu

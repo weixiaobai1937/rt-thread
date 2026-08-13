@@ -23,6 +23,7 @@ struct acm32_dac
 {
     DAC_HandleTypeDef    handle;
     struct rt_dac_device dac_device;
+    struct rt_mutex      lock;
     rt_uint8_t           ch_enabled;
 };
 
@@ -46,7 +47,7 @@ void HAL_DAC_MspInit(DAC_HandleTypeDef *hdac)
         return;
     }
 
-    /* HAL SDK DAC MspInit: PA4=OUT1, PA5=OUT2，按需配置避免冲突 */
+    /* HAL SDK DAC MspInit: PA4=OUT1, PA5=OUT2, configure on demand to avoid conflicts */
     __HAL_RCC_DAC1_CLK_ENABLE();
     __HAL_RCC_GPIOA_CLK_ENABLE();
 
@@ -80,6 +81,8 @@ static rt_err_t _dac_enabled(struct rt_dac_device *device, rt_uint32_t channel)
         return -RT_EINVAL;
     }
 
+    rt_mutex_take(&dacObj->lock, RT_WAITING_FOREVER);
+
     dacObj->ch_enabled |= (1U << channel);
 
     if (dacObj->handle.Instance == RT_NULL)
@@ -88,15 +91,17 @@ static rt_err_t _dac_enabled(struct rt_dac_device *device, rt_uint32_t channel)
         if (HAL_DAC_Init(&dacObj->handle) != HAL_OK)
         {
             dacObj->ch_enabled &= ~(1U << channel);
+            rt_mutex_release(&dacObj->lock);
             return -RT_ERROR;
         }
     }
     else
     {
-        /* 重新调用 MspInit 配置新通道的 GPIO 引脚 */
+        /* Re-call MspInit to configure the GPIO pins of the new channel */
         if (HAL_DAC_Init(&dacObj->handle) != HAL_OK)
         {
             dacObj->ch_enabled &= ~(1U << channel);
+            rt_mutex_release(&dacObj->lock);
             return -RT_ERROR;
         }
     }
@@ -115,13 +120,16 @@ static rt_err_t _dac_enabled(struct rt_dac_device *device, rt_uint32_t channel)
     if (HAL_DAC_ConfigChannel(&dacObj->handle, &sConfig, hal_ch) != HAL_OK)
     {
         dacObj->ch_enabled &= ~(1U << channel);
+        rt_mutex_release(&dacObj->lock);
         return -RT_ERROR;
     }
     if (HAL_DAC_Start(&dacObj->handle, hal_ch) != HAL_OK)
     {
         dacObj->ch_enabled &= ~(1U << channel);
+        rt_mutex_release(&dacObj->lock);
         return -RT_ERROR;
     }
+    rt_mutex_release(&dacObj->lock);
     return RT_EOK;
 }
 
@@ -138,14 +146,18 @@ static rt_err_t _dac_disabled(struct rt_dac_device *device, rt_uint32_t channel)
         return -RT_EINVAL;
     }
 
-    /* 检查通道是否已启用 */
+    rt_mutex_take(&dacObj->lock, RT_WAITING_FOREVER);
+
+    /* Check whether the channel is already enabled */
     if (0 == (dacObj->ch_enabled & (1U << channel)))
     {
+        rt_mutex_release(&dacObj->lock);
         return RT_EOK;
     }
 
     HAL_DAC_Stop(&dacObj->handle, hal_ch);
     dacObj->ch_enabled &= ~(1U << channel);
+    rt_mutex_release(&dacObj->lock);
     return RT_EOK;
 }
 
@@ -164,16 +176,21 @@ static rt_err_t _dac_convert(struct rt_dac_device *device, rt_uint32_t channel, 
         return -RT_EINVAL;
     }
 
+    rt_mutex_take(&dacObj->lock, RT_WAITING_FOREVER);
+
     if (0 == (dacObj->ch_enabled & (1U << channel)))
     {
+        rt_mutex_release(&dacObj->lock);
         return -RT_ERROR;
     }
 
     if (HAL_DAC_SetValue(&dacObj->handle, hal_ch, DAC_ALIGN_12B_R, (*value) & 0xFFFU) != HAL_OK)
     {
+        rt_mutex_release(&dacObj->lock);
         return -RT_ERROR;
     }
 
+    rt_mutex_release(&dacObj->lock);
     return RT_EOK;
 }
 
@@ -193,6 +210,7 @@ static const struct rt_dac_ops acm_dac_ops =
 
 static int rt_hw_dac_init(void)
 {
+    rt_mutex_init(&acm32_dac_obj.lock, "dac", RT_IPC_FLAG_FIFO);
     return rt_hw_dac_register(&acm32_dac_obj.dac_device,
                               DAC_NAME,
                               &acm_dac_ops,

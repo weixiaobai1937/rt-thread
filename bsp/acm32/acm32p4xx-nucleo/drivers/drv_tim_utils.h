@@ -5,7 +5,7 @@
  *
  * Change Logs:
  * Date           Author       Notes
- * 2026-07-27     AisinoChip   共享定时器时钟获取函数声明
+ * 2026-07-27     AisinoChip   Declaration of the shared timer clock get function
  */
 
 #ifndef __DRV_TIM_UTILS_H__
@@ -14,13 +14,14 @@
 #include "board.h"
 
 /**
- * @brief 获取 TIM 外设的输入时钟频率
+ * @brief Get the input clock frequency of the TIM peripheral
  *
- * 根据 TIM 实例地址判断 APB1/APB2 总线，再检查 HCLK!=PCLK 时倍频。
- * 适用于 PWM、Timer、InputCapture 等所有使用 TIM 外设的驱动。
+ * Determines the APB1/APB2 bus from the TIM instance address, then doubles
+ * the clock when HCLK!=PCLK. Applies to all drivers using the TIM peripheral,
+ * such as PWM, Timer and InputCapture.
  *
- * @param instance TIM 外设实例指针（如 TIM1、TIM2、TIM3、TIM6、TIM10）
- * @return 定时器输入时钟频率（Hz）
+ * @param instance TIM peripheral instance pointer (e.g. TIM1, TIM2, TIM3, TIM6, TIM10)
+ * @return Timer input clock frequency (Hz)
  */
 rt_uint32_t acm32_tim_clock_get(TIM_TypeDef *instance);
 

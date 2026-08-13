@@ -108,7 +108,11 @@ static rt_err_t capture_init(struct rt_inputcapture_device *inputcapture)
 
     dev->tim_clock_hz = acm32_tim_clock_get(dev->tim_handle.Instance);
 
-    dev->tim_handle.Init.Prescaler = (dev->tim_clock_hz / 1000000) - 1;
+    /* Clamp so the prescaler never underflows below 1MHz clock */
+    {
+        rt_uint32_t psc = dev->tim_clock_hz / 1000000;
+        dev->tim_handle.Init.Prescaler = (psc > 0) ? (psc - 1) : 0;
+    }
     dev->tim_handle.Init.Period = (dev->tim_handle.Instance == TIM2) ? 0xFFFFFFFF : 0xFFFF;
     dev->tim_handle.Init.CounterMode = TIM_COUNTERMODE_UP;
     dev->tim_handle.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -141,11 +145,20 @@ static rt_err_t capture_open(struct rt_inputcapture_device *inputcapture)
     ic_cfg.ICPrescaler = TIM_IC1_PRESCALER_1;
     ic_cfg.TIFilter = 0;
 
-    HAL_TIMER_Capture_Config(dev->tim_handle.Instance, &ic_cfg, TIM_CHANNEL_1);
+    if (HAL_TIMER_Capture_Config(dev->tim_handle.Instance, &ic_cfg, TIM_CHANNEL_1) != 0)
+    {
+        LOG_E("%s capture config failed", dev->name);
+        return -RT_ERROR;
+    }
 
     HAL_TIM_ENABLE_IT(&dev->tim_handle, TIM_IT_CC1);
 
-    HAL_TIM_Capture_Start(dev->tim_handle.Instance, TIM_CHANNEL_1);
+    if (HAL_TIM_Capture_Start(dev->tim_handle.Instance, TIM_CHANNEL_1) != 0)
+    {
+        LOG_E("%s capture start failed", dev->name);
+        HAL_TIM_DISABLE_IT(&dev->tim_handle, TIM_IT_CC1);
+        return -RT_ERROR;
+    }
     HAL_TIMER_Base_Start(dev->tim_handle.Instance);
 
     return RT_EOK;
@@ -201,8 +214,9 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
     captured = HAL_TIMER_ReadCapturedValue(htim, TIM_CHANNEL_1);
 
     /*
-     * 双边沿捕获时 CC1P 是配置位(BOTH=BIT1|BIT3)，不能用来判电平。
-     * 捕获后读 GPIO：脚已为低 → 刚完成高脉宽；脚已为高 → 刚完成低脉宽。
+     * In dual-edge capture CC1P is a configuration bit (BOTH=BIT1|BIT3),
+     * so it cannot be used to judge the level. Read GPIO after capture:
+     * pin low -> a high pulse just finished; pin high -> a low pulse just finished.
      */
     if (HAL_GPIO_ReadPin(dev->gpio_port, dev->gpio_pin) == GPIO_PIN_RESET)
         level = RT_TRUE;   /* high pulse just finished */
@@ -217,14 +231,18 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
         return; /* first edge: only arm timestamp */
     }
 
-    /* Timer counts up at 1MHz; unsigned wrap handles overflow. */
+    /*
+     * Timer counts up at 1MHz; unsigned wrap handles overflow only when the
+     * counter wraps at most once between two edges. TIM3 is 16-bit: pulses
+     * longer than 65.535ms measure incorrectly (hardware limit).
+     */
     dev->pulsewidth_us = captured - dev->prev_capture;
     dev->prev_capture = captured;
 
     rt_hw_inputcapture_isr(&dev->parent, level);
 }
 
-#if defined(BSP_USING_CAPTURE2) && !defined(BSP_USING_TIM2) && !defined(BSP_USING_PWM2)
+#if defined(BSP_USING_CAPTURE2) && !defined(BSP_USING_TIM2) && !defined(BSP_USING_PWM2) && !defined(BSP_USING_PULSE_ENCODER2)
 void TIM2_IRQHandler(void)
 {
     rt_interrupt_enter();
@@ -233,7 +251,7 @@ void TIM2_IRQHandler(void)
 }
 #endif
 
-#if defined(BSP_USING_CAPTURE3) && !defined(BSP_USING_TIM3) && !defined(BSP_USING_PWM3)
+#if defined(BSP_USING_CAPTURE3) && !defined(BSP_USING_TIM3) && !defined(BSP_USING_PWM3) && !defined(BSP_USING_PULSE_ENCODER3)
 void TIM3_IRQHandler(void)
 {
     rt_interrupt_enter();

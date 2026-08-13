@@ -5,7 +5,7 @@
  *
  * Change Logs:
  * Date           Author       Notes
- * 2026-07-27     AisinoChip   提取共享定时器时钟获取函数
+ * 2026-07-27     AisinoChip   Extract the shared timer clock get function
  * 2026-08-01     AisinoChip   move common TIM MspInit here (PWM independent)
  */
 
@@ -190,7 +190,7 @@ static void pwm_config_gpio(TIM_TypeDef *instance, rt_uint32_t channel)
 #elif defined(BSP_PWM10_CH1_PA4)
             pwm_init_pin(GPIOA, GPIO_PIN_4,  GPIO_FUNCTION_1);
 #elif defined(BSP_PWM10_CH1_PB8)
-            pwm_init_pin(GPIOB, GPIO_PIN_8,  GPIO_FUNCTION_1);
+            pwm_init_pin(GPIOB, GPIO_PIN_8,  GPIO_FUNCTION_0);
 #elif defined(BSP_PWM10_CH1_PE3)
             pwm_init_pin(GPIOE, GPIO_PIN_3,  GPIO_FUNCTION_1);
 #endif
@@ -253,7 +253,7 @@ uint32_t HAL_TIMER_MSP_Init(TIM_HandleTypeDef *htim)
     return HAL_OK;
 }
 
-/* 根据 TIM 实例判断 APB1/APB2 总线时钟，HCLK!=PCLK 时自动倍频 */
+/* Determine APB1/APB2 bus clock from the TIM instance; auto-double when HCLK!=PCLK */
 rt_uint32_t acm32_tim_clock_get(TIM_TypeDef *instance)
 {
     rt_uint32_t pclk;
@@ -261,12 +261,12 @@ rt_uint32_t acm32_tim_clock_get(TIM_TypeDef *instance)
 
     switch (base)
     {
-    /* APB2 总线定时器 */
+    /* APB2 bus timer */
     case TIM1_BASE_ADDR:
     case TIM10_BASE_ADDR:
         pclk = HAL_RCC_GetPCLK2Freq();
         break;
-    /* APB1 总线定时器 */
+    /* APB1 bus timer */
     case TIM2_BASE_ADDR:
     case TIM3_BASE_ADDR:
     case TIM6_BASE_ADDR:
@@ -275,7 +275,7 @@ rt_uint32_t acm32_tim_clock_get(TIM_TypeDef *instance)
         break;
     }
 
-    /* 当 HCLK != PCLK 时，定时器时钟自动倍频（Cortex-M 手册规定） */
+    /* When HCLK != PCLK, the timer clock is auto-doubled (per Cortex-M manual) */
     if (HAL_RCC_GetHCLKFreq() != pclk)
     {
         pclk <<= 1;

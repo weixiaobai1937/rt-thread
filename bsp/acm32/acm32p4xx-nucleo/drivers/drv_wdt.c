@@ -176,7 +176,7 @@ static rt_err_t wdt_init(rt_watchdog_t *wdt)
     RT_ASSERT(wdt != RT_NULL);
     obj = rt_container_of(wdt, struct acm32_wdt_obj, watchdog);
 
-    /* 初始化看门狗硬件配置 */
+    /* Initialize the watchdog hardware configuration */
     if (obj->type == TYPE_WDT)
     {
         obj->handle.wdt.Instance = WDT;
@@ -336,7 +336,7 @@ static rt_err_t wdt_control(rt_watchdog_t *wdt, int cmd, void *arg)
         }
         else
         {
-            /* IWDT 一旦启动无法停止，返回错误并保持 is_start 不变 */
+            /* IWDT cannot be stopped once started; return error and keep is_start unchanged */
             LOG_W("IWDT cannot be stopped once started");
             return -RT_EPERM;
         }

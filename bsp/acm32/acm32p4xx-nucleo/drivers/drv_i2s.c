@@ -90,10 +90,10 @@ struct acm32_i2s
     struct rt_audio_device    audio_dev;
     struct rt_audio_configure config;
     rt_align(32) rt_uint8_t   tx_buf[I2S_TX_DMA_BLK_COUNT][I2S_TX_DMA_BLK_SIZE];
-    rt_uint8_t                tx_idx;       /* 当前 DMA 传输的缓冲区索引 */
-    rt_uint8_t                tx_next_idx;  /* 下一个待填充的缓冲区索引 */
+    rt_uint8_t                tx_idx;       /* buffer index currently under DMA transfer */
+    rt_uint8_t                tx_next_idx;  /* index of the next buffer to be filled */
     rt_uint8_t                running;
-    rt_uint8_t                hal_inited;   /* HAL + DMA 已初始化，下次 start 跳过 */
+    rt_uint8_t                hal_inited;   /* HAL + DMA initialized, skip on next start */
     rt_uint32_t               last_samplerate;
 };
 
@@ -334,6 +334,7 @@ static rt_ssize_t acm32_i2s_transmit(struct rt_audio_device *audio,
                                       rt_size_t size)
 {
     struct acm32_i2s *i2s_dev;
+    rt_base_t level;
 
     RT_ASSERT(audio != RT_NULL);
 
@@ -345,10 +346,20 @@ static rt_ssize_t acm32_i2s_transmit(struct rt_audio_device *audio,
     if (size > I2S_TX_DMA_BLK_SIZE)
         size = I2S_TX_DMA_BLK_SIZE;
 
+    /*
+     * Race with HAL_I2S_DMATxCpltCallback: the callback may switch tx_idx /
+     * tx_next_idx while we fill a slot, and the DMA would then read a buffer
+     * we are still writing. Disable interrupts around slot select + fill +
+     * commit (a 2KB SRAM copy is ~2us) so the DMA never reads a half-filled
+     * slot and the callback never frees a slot mid-fill.
+     */
+    level = rt_hw_interrupt_disable();
+
     /* Free slot is the one not currently under DMA */
     if (i2s_dev->tx_next_idx == i2s_dev->tx_idx)
     {
         /* Both slots busy: app filled the free one before DMA advanced */
+        rt_hw_interrupt_enable(level);
         return 0;
     }
 
@@ -363,6 +374,8 @@ static rt_ssize_t acm32_i2s_transmit(struct rt_audio_device *audio,
 
     /* Mark this slot filled; next free becomes the other index only after DMA advances */
     i2s_dev->tx_next_idx = i2s_dev->tx_idx;
+
+    rt_hw_interrupt_enable(level);
 
     return (rt_ssize_t)size;
 }

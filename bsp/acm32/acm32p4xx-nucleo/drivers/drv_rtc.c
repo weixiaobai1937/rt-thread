@@ -56,7 +56,7 @@ static time_t get_rtc_timestamp(void)
     if (ts == (time_t)-1)
     {
         LOG_E("RTC: timegm failed, BCD values may be invalid");
-        return 0;
+        return (time_t)-1;
     }
     return ts;
 }
@@ -70,7 +70,7 @@ static rt_err_t set_rtc_time_stamp(time_t time_stamp)
     gmtime_r(&time_stamp, &now);
     if (now.tm_year < 100 || now.tm_year > 199)
     {
-        return -RT_ERROR;  /* RTC 仅支持 2000-2099 年 */
+        return -RT_ERROR;  /* RTC only supports years 2000-2099 */
     }
 
     t.Second = dec2bcd((rt_uint8_t)now.tm_sec);
@@ -110,8 +110,15 @@ static rt_err_t _rtc_init(void)
 
 static rt_err_t _rtc_get_secs(time_t *sec)
 {
+    time_t ts;
+
     RT_ASSERT(sec != RT_NULL);
-    *sec = get_rtc_timestamp();
+    ts = get_rtc_timestamp();
+    if (ts == (time_t)-1)
+    {
+        return -RT_ERROR;
+    }
+    *sec = ts;
     return RT_EOK;
 }
 

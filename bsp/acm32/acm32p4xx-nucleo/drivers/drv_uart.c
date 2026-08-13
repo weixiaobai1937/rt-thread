@@ -6,7 +6,7 @@
  * Change Logs:
  * Date           Author       Notes
  * 2026-06-04     AisinoChip   ACM32P4xx UART V2 driver
- *                              Support USART1-8 + LPUART1/2
+ *                              Support USART1-4 + LPUART1/2
  * 2026-07-06     AisinoChip   rewrite: HAL init + custom ISR, FIFO,
  *                              interrupt TX/RX, DMA RX with IDLE,
  *                              DMA TX, V2 ringbuffer integration
@@ -23,40 +23,40 @@
 
 #ifdef RT_USING_SERIAL_V2
 
-/* ==================== 常量 ==================== */
+/* ==================== Constants ==================== */
 
 #define UART_FIFO_DEPTH         16
 #define UART_MAX_COUNT          6       /* USART1-4 + LPUART1-2 */
 
-/* UART 类型 */
+/* UART type */
 enum { UART_TYPE_USART = 0, UART_TYPE_LPUART };
 
-/* ==================== 运行时结构体 ==================== */
+/* ==================== Runtime structure ==================== */
 
 struct acm32_uart
 {
     struct acm32_uart_config    *config;
     struct rt_serial_device     serial;
 
-    /* HAL handle（仅用于 HAL_UART_Init 初始化，不用于 ISR） */
+    /* HAL handle (used only for HAL_UART_Init, not in ISR) */
     union {
         UART_HandleTypeDef      usart;
         LPUART_HandleTypeDef    lpuart;
     } handle;
 
-    /* 中断发送状态 */
+    /* Interrupt TX state */
     volatile const rt_uint8_t  *tx_buf;
     rt_size_t                   tx_size;
     rt_size_t                   tx_pos;
     volatile rt_bool_t          tx_done;
 
-    /* 当前使能的中断掩码 */
+    /* Currently enabled interrupt mask */
     rt_uint32_t                 int_mask;
 
-    /* DMA 能力标志（注册时设置，control 中映射 BLOCKING→DMA/INT） */
+    /* DMA capability flags (set at registration; control maps BLOCKING to DMA/INT) */
     rt_uint16_t                 uart_dma_flag;
 
-    /* DMA 接收缓冲区 */
+    /* DMA RX buffer */
     rt_uint8_t                  *rx_dma_ping_buf;
     rt_uint16_t                 rx_dma_bufsz;
     volatile rt_uint16_t        rx_dma_last_pos;
@@ -71,7 +71,7 @@ struct acm32_uart
 
 #define raw_to_uart(raw) rt_container_of(raw, struct acm32_uart, serial)
 
-/* ==================== DMA RX 回调前向声明 ==================== */
+/* ==================== DMA RX callback forward declarations ==================== */
 
 #ifdef HAL_DMA_MODULE_ENABLED
 static void _dma_rx_half_cplt(DMA_HandleTypeDef *hdma);
@@ -80,7 +80,7 @@ static void _dma_rx_err(DMA_HandleTypeDef *hdma);
 static void _dma_tx_cplt(DMA_HandleTypeDef *hdma);
 #endif
 
-/* ==================== 全局查找表（ISR 反向映射、DMA 缓冲区索引） ==================== */
+/* ==================== Global lookup table (ISR reverse mapping, DMA buffer index) ==================== */
 
 static struct acm32_uart *g_uart_instances[UART_MAX_COUNT] = {NULL};
 
@@ -95,7 +95,7 @@ static struct acm32_uart *uart_find(void *instance)
     return NULL;
 }
 
-/* ==================== 寄存器辅助（内联函数） ==================== */
+/* ==================== Register helpers (inline functions) ==================== */
 
 rt_inline rt_uint32_t uart_reg_fr(void *inst, int type)
 {
@@ -153,7 +153,7 @@ rt_inline rt_uint32_t uart_reg_isr(void *inst, int type)
         return ((LPUART_TypeDef *)inst)->SR;
 }
 
-/* USART 标志/中断/ISR 位 */
+/* USART flag/interrupt/ISR bits */
 #define U_FR_TXFF    USART_FR_TXFF
 #define U_FR_RXFE    USART_FR_RXFE
 
@@ -168,10 +168,10 @@ rt_inline rt_uint32_t uart_reg_isr(void *inst, int type)
 #define U_ISR_IDLEI  USART_ISR_IDLEI
 
 /*
- * LPUART 使用官方位定义（勿用手写 magic number）。
- * 注意 FR 语义与 USART 极性相反：
- *   USART TXFF=1 满 / RXFE=1 空
- *   LPUART TXE=1 可写 / RXF=1 有数据
+ * LPUART uses the official bit definitions (do not use hand-written magic numbers).
+ * Note that the FR semantics are opposite to USART polarity:
+ *   USART TXFF=1 full / RXFE=1 empty
+ *   LPUART TXE=1 writable / RXF=1 data available
  */
 #define L_IE_RXI     LPUART_IE_RXIE
 #define L_IE_TXI     LPUART_IE_TXEIE
@@ -183,20 +183,20 @@ rt_inline rt_uint32_t uart_reg_isr(void *inst, int type)
 #define L_ISR_TCI    LPUART_SR_TCIF
 #define L_ISR_IDLEI  LPUART_SR_IDLEIF
 
-/* 按类型选择位（仅用于 IE/ISR 等同极性位） */
+/* Select bit by type (only for same-polarity bits such as IE/ISR) */
 #define _BIT(type, usart_bit, lpuart_bit) \
     ((type) == UART_TYPE_USART ? (usart_bit) : (lpuart_bit))
 
-/* 错误位掩码（USART ISR / LPUART SR） */
+/* Error bit mask (USART ISR / LPUART SR) */
 #define U_ERR_MASK   (USART_ISR_OEI | USART_ISR_BEI | USART_ISR_PEI | USART_ISR_FEI)
 #define L_ERR_MASK   (LPUART_SR_RXOVIF | LPUART_SR_FEIF | LPUART_SR_PEIF)
 
-/* FR 语义辅助：USART 与 LPUART 极性不同，不可共用 bit mask */
+/* FR semantics helper: USART and LPUART have opposite polarity, bit mask cannot be shared */
 rt_inline rt_bool_t uart_tx_full(void *inst, int type)
 {
     if (type == UART_TYPE_USART)
         return (uart_reg_fr(inst, type) & U_FR_TXFF) ? RT_TRUE : RT_FALSE;
-    /* LPUART: TXE=1 表示可写 */
+    /* LPUART: TXE=1 means writable */
     return (uart_reg_fr(inst, type) & LPUART_SR_TXE) ? RT_FALSE : RT_TRUE;
 }
 
@@ -204,11 +204,11 @@ rt_inline rt_bool_t uart_rx_empty(void *inst, int type)
 {
     if (type == UART_TYPE_USART)
         return (uart_reg_fr(inst, type) & U_FR_RXFE) ? RT_TRUE : RT_FALSE;
-    /* LPUART: RXF=1 表示有数据 */
+    /* LPUART: RXF=1 means data available */
     return (uart_reg_fr(inst, type) & LPUART_SR_RXF) ? RT_FALSE : RT_TRUE;
 }
 
-/* ==================== 引脚 / 时钟（来自 uart_config Kconfig 组） ==================== */
+/* ==================== Pins / clocks (from uart_config Kconfig group) ==================== */
 
 static void acm32_uart_gpio_clk_enable(GPIO_TypeDef *port)
 {
@@ -273,7 +273,7 @@ static void acm32_uart_msp_pins(struct acm32_uart_config *c)
     }
 }
 
-/* ==================== MspInit（HAL 回调：GPIO + 时钟 + NVIC） ==================== */
+/* ==================== MspInit (HAL callback: GPIO + clock + NVIC) ==================== */
 
 void HAL_UART_MspInit(UART_HandleTypeDef *huart)
 {
@@ -295,7 +295,7 @@ void HAL_LPUART_MspInit(LPUART_HandleTypeDef *hlpuart)
     acm32_uart_msp_pins(uart->config);
 }
 
-/* ==================== DMA 启停（V2: control CONFIG 时启动） ==================== */
+/* ==================== DMA start/stop (V2: started at control CONFIG) ==================== */
 
 #ifdef HAL_DMA_MODULE_ENABLED
 static void _dma_clk_enable(DMA_Channel_TypeDef *ch)
@@ -306,7 +306,7 @@ static void _dma_clk_enable(DMA_Channel_TypeDef *ch)
         __HAL_RCC_DMA2_CLK_ENABLE();
 }
 
-/* HTC/TC/IDLE 共用：按 HW 当前位置上报 RX_DMADONE（必须原子，防双上报） */
+/* Shared by HTC/TC/IDLE: report RX_DMADONE by HW current position (must be atomic to prevent double reporting) */
 static void _dma_rx_report_tail(struct acm32_uart *uart)
 {
     rt_uint16_t cur_pos;
@@ -352,7 +352,7 @@ static void _uart_dma_rx_stop(struct acm32_uart *uart)
     if (uart->dma_rx.Instance == NULL)
         return;
 
-    /* 停前先上报剩余 tail，避免丢尾部数据 */
+    /* Report the remaining tail before stopping to avoid losing trailing data */
     _dma_rx_report_tail(uart);
 
     uart_reg_ie_set(inst, type,
@@ -362,7 +362,7 @@ static void _uart_dma_rx_stop(struct acm32_uart *uart)
     if (type == UART_TYPE_USART)
         CLEAR_BIT(((USART_TypeDef *)inst)->CR1, USART_CR1_RXDMAE);
     else if (!uart->dma_tx_busy)
-        /* LPUART DMA_EN 共享：TX 在途时不关 */
+        /* LPUART DMA_EN is shared: do not clear while TX is in flight */
         CLEAR_BIT(((LPUART_TypeDef *)inst)->CR, LPUART_CR_DMA_EN);
 
     NVIC_DisableIRQ(c->rx_dma_irq);
@@ -385,7 +385,7 @@ static void _uart_dma_tx_stop(struct acm32_uart *uart)
 
     if (type == UART_TYPE_USART)
         CLEAR_BIT(((USART_TypeDef *)inst)->CR1, USART_CR1_TXDMAE);
-    /* LPUART DMA_EN 共享，仅在 RX 也停时由 _uart_dma_rx_stop / CLOSE 清除 */
+    /* LPUART DMA_EN is shared; cleared by _uart_dma_rx_stop / CLOSE only when RX is also stopped */
 
     if (c->tx_dma_instance != UART_DMA_NONE)
         NVIC_DisableIRQ(c->tx_dma_irq);
@@ -473,7 +473,7 @@ static rt_err_t _uart_dma_rx_start(struct acm32_uart *uart)
     NVIC_SetPriority(c->rx_dma_irq, 2);
     NVIC_EnableIRQ(c->rx_dma_irq);
 
-    /* 关闭逐字节 RXI，改用 IDLE 尾处理 */
+    /* Disable byte-by-byte RXI, switch to IDLE tail processing */
     uart_reg_ie_set(inst, type,
         uart_reg_ie(inst, type) & ~_BIT(type, U_IE_RXI, L_IE_RXI));
     uart->int_mask &= ~_BIT(type, U_IE_RXI, L_IE_RXI);
@@ -512,6 +512,7 @@ static rt_err_t _uart_dma_tx_prepare(struct acm32_uart *uart)
     uart->dma_tx.Init.SrcMaster   = DMA_SRCMASTER_1;
     uart->dma_tx.Init.DestMaster  = DMA_DESTMASTER_1;
     uart->dma_tx.Init.Lock        = 0;
+    uart->dma_tx.Init.NextMaster  = 0;
     if (HAL_DMA_Init(&uart->dma_tx) != HAL_OK)
     {
         uart->dma_tx.Instance = NULL;
@@ -542,14 +543,14 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
 #endif
 
 #ifdef HAL_DMA_MODULE_ENABLED
-    /* 运行期重配：先停 DMA，HAL 重置外设后再按原模式恢复 */
+    /* Runtime reconfigure: stop DMA first, then restore the previous mode after HAL resets the peripheral */
     if (dma_rx_was_active)
         _uart_dma_rx_stop(uart);
     if (dma_tx_was_ready)
         _uart_dma_tx_stop(uart);
 #endif
 
-    /* 仅做硬件参数初始化；DMA 在 control(CONFIG) 且 serial_rx 就绪后启动 */
+    /* Only hardware parameter init; DMA is started at control(CONFIG) once serial_rx is ready */
     if (type == UART_TYPE_USART)
     {
         uart->handle.usart.Instance          = (USART_TypeDef *)inst;
@@ -598,14 +599,14 @@ static rt_err_t _uart_configure(struct rt_serial_device *serial,
 #ifdef HAL_DMA_MODULE_ENABLED
     if (dma_rx_was_active)
     {
-        /* 恢复 DMA RX（不强制 RXI，避免与 DMA 双路径） */
+        /* Restore DMA RX (no forced RXI, to avoid a dual path with DMA) */
         if (_uart_dma_rx_start(uart) != RT_EOK)
             return -RT_ERROR;
     }
     else
 #endif
     {
-        /* INT RX：仅在设备已 open（serial_rx 存在）时使能 RXI */
+        /* INT RX: enable RXI only when the device is open (serial_rx exists) */
         if (serial->serial_rx != RT_NULL)
         {
             uart->int_mask = _BIT(type, U_IE_RXI, L_IE_RXI);
@@ -642,7 +643,7 @@ static rt_err_t _uart_control(struct rt_serial_device *serial,
     int type = c->uart_type;
     rt_ubase_t ctrl_arg = (rt_ubase_t)arg;
 
-    /* V2: BLOCKING/NON_BLOCKING → DMA 或 INT（按注册能力） */
+    /* V2: BLOCKING/NON_BLOCKING -> DMA or INT (per registered capability) */
     if (ctrl_arg & (RT_DEVICE_FLAG_RX_BLOCKING | RT_DEVICE_FLAG_RX_NON_BLOCKING))
     {
         if (uart->uart_dma_flag & RT_DEVICE_FLAG_DMA_RX)
@@ -687,22 +688,28 @@ static rt_err_t _uart_control(struct rt_serial_device *serial,
         break;
 
     case RT_DEVICE_CTRL_SET_INT:
-        NVIC_SetPriority(c->irq_type, 2);
-        NVIC_EnableIRQ(c->irq_type);
         if (ctrl_arg == RT_DEVICE_FLAG_INT_RX)
         {
+            NVIC_SetPriority(c->irq_type, 2);
+            NVIC_EnableIRQ(c->irq_type);
             uart_reg_ie_set(inst, type,
                 uart_reg_ie(inst, type) | _BIT(type, U_IE_RXI, L_IE_RXI));
             uart->int_mask |= _BIT(type, U_IE_RXI, L_IE_RXI);
         }
         else if (ctrl_arg == RT_DEVICE_FLAG_INT_TX)
         {
+            NVIC_SetPriority(c->irq_type, 2);
+            NVIC_EnableIRQ(c->irq_type);
             uart_reg_ie_set(inst, type,
                 uart_reg_ie(inst, type)
                 | _BIT(type, U_IE_TXI, L_IE_TXI)
                 | _BIT(type, U_IE_TCI, L_IE_TCI));
             uart->int_mask |= _BIT(type, U_IE_TXI, L_IE_TXI)
                            |  _BIT(type, U_IE_TCI, L_IE_TCI);
+        }
+        else
+        {
+            return -RT_EINVAL;
         }
         break;
 
@@ -768,7 +775,7 @@ static int _uart_getc(struct rt_serial_device *serial)
     return -RT_EEMPTY;
 }
 
-/* ==================== OPS: transmit（中断 + DMA） ==================== */
+/* ==================== OPS: transmit (interrupt + DMA) ==================== */
 
 static rt_ssize_t _uart_transmit(struct rt_serial_device *serial,
                                   rt_uint8_t *buf, rt_size_t size,
@@ -782,7 +789,7 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial,
     if (size == 0) return 0;
 
 #ifdef HAL_DMA_MODULE_ENABLED
-    /* DMA TX：能力由 uart_dma_flag 决定，NVIC 在 CONFIG 时已使能 */
+    /* DMA TX: capability determined by uart_dma_flag; NVIC enabled at CONFIG time */
     if ((uart->uart_dma_flag & RT_DEVICE_FLAG_DMA_TX) &&
         c->tx_dma_instance != UART_DMA_NONE)
     {
@@ -792,7 +799,7 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial,
         if (_uart_dma_tx_prepare(uart) != RT_EOK)
             return -RT_EIO;
 
-        /* 通道若仍 EN，先 abort 再启动，防止打断半包 */
+        /* If the channel is still EN, abort before starting to avoid cutting a partial packet */
         if (uart->dma_tx.Instance &&
             (uart->dma_tx.Instance->CXCONFIG & DMA_CXCONFIG_EN))
         {
@@ -821,7 +828,7 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial,
     }
 #endif
 
-    /* 中断 TX 模式 */
+    /* Interrupt TX mode */
     if (uart->tx_buf != RT_NULL && !uart->tx_done)
         return -RT_EBUSY;
 
@@ -830,7 +837,7 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial,
     uart->tx_pos  = 0;
     uart->tx_done = RT_FALSE;
 
-    /* 预填充 FIFO */
+    /* Prefill the FIFO */
     while (uart->tx_pos < uart->tx_size)
     {
         if (uart_tx_full(inst, type))
@@ -838,7 +845,7 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial,
         uart_reg_dr_write(inst, type, buf[uart->tx_pos++]);
     }
 
-    /* 使能 TXI + TCI */
+    /* Enable TXI + TCI */
     uart->int_mask |= _BIT(type, U_IE_TXI, L_IE_TXI)
                    |  _BIT(type, U_IE_TCI, L_IE_TCI);
     uart_reg_ie_set(inst, type,
@@ -849,7 +856,7 @@ static rt_ssize_t _uart_transmit(struct rt_serial_device *serial,
     return size;
 }
 
-/* ==================== OPS 表 ==================== */
+/* ==================== OPS table ==================== */
 
 static const struct rt_uart_ops acm32_uart_ops =
 {
@@ -860,7 +867,7 @@ static const struct rt_uart_ops acm32_uart_ops =
     .transmit     = _uart_transmit,
 };
 
-/* ==================== 统一 ISR ==================== */
+/* ==================== Unified ISR ==================== */
 
 static void uart_isr(struct acm32_uart *uart)
 {
@@ -870,14 +877,14 @@ static void uart_isr(struct acm32_uart *uart)
     rt_uint32_t isr = uart_reg_isr(inst, type);
     rt_uint32_t ie  = uart_reg_ie(inst, type);
 
-    /* ---- 清除错误标志（溢出/帧/奇偶 等），防止持续中断 ---- */
+    /* ---- Clear error flags (overrun/frame/parity, etc.) to prevent continuous interrupts ---- */
     rt_uint32_t err_mask = _BIT(type, U_ERR_MASK, L_ERR_MASK);
     if (isr & err_mask)
     {
         uart_reg_isr_clear(inst, type, isr & err_mask);
     }
 
-    /* ---- RXI: 将硬件 FIFO 数据喂入 V2 ringbuffer ---- */
+    /* ---- RXI: feed hardware FIFO data into the V2 ringbuffer ---- */
     if ((ie & _BIT(type, U_IE_RXI, L_IE_RXI)) &&
         (isr & _BIT(type, U_ISR_RXI, L_ISR_RXI)))
     {
@@ -891,7 +898,7 @@ static void uart_isr(struct acm32_uart *uart)
         rt_hw_serial_isr(&uart->serial, RT_SERIAL_EVENT_RX_IND);
     }
 
-    /* ---- TXI: 填充 TX FIFO ---- */
+    /* ---- TXI: fill the TX FIFO ---- */
     if ((ie & _BIT(type, U_IE_TXI, L_IE_TXI)) &&
         (isr & _BIT(type, U_ISR_TXI, L_ISR_TXI)))
     {
@@ -904,7 +911,7 @@ static void uart_isr(struct acm32_uart *uart)
             uart_reg_dr_write(inst, type, uart->tx_buf[uart->tx_pos++]);
         }
 
-        /* 全部填充完毕：禁用 TXI */
+        /* All data filled: disable TXI */
         if (uart->tx_pos >= uart->tx_size)
         {
             uart_reg_ie_set(inst, type,
@@ -914,7 +921,7 @@ static void uart_isr(struct acm32_uart *uart)
         }
     }
 
-    /* ---- TCI: 发送完成 ---- */
+    /* ---- TCI: transmission complete ---- */
     if ((ie & _BIT(type, U_IE_TCI, L_IE_TCI)) &&
         (isr & _BIT(type, U_ISR_TCI, L_ISR_TCI)))
     {
@@ -929,20 +936,20 @@ static void uart_isr(struct acm32_uart *uart)
         rt_hw_serial_isr(&uart->serial, RT_SERIAL_EVENT_TX_DONE);
     }
 
-    /* ---- IDLEI: DMA RX 帧尾处理 ---- */
+    /* ---- IDLEI: DMA RX frame-tail processing ---- */
     if ((ie & _BIT(type, U_IE_IDLEI, L_IE_IDLEI)) &&
         (isr & _BIT(type, U_ISR_IDLEI, L_ISR_IDLEI)))
     {
         uart_reg_isr_clear(inst, type, _BIT(type, U_ISR_IDLEI, L_ISR_IDLEI));
 
 #ifdef HAL_DMA_MODULE_ENABLED
-        /* circular DMA：只按 HW 位置上报 tail，禁止 CPU 写 ping buffer */
+        /* circular DMA: report tail by HW position only; CPU must not write the ping buffer */
         _dma_rx_report_tail(uart);
 #endif
     }
 }
 
-/* ==================== DMA RX 回调 ==================== */
+/* ==================== DMA RX callbacks ==================== */
 
 #ifdef HAL_DMA_MODULE_ENABLED
 static void _dma_rx_half_cplt(DMA_HandleTypeDef *hdma)
@@ -967,7 +974,7 @@ static void _dma_rx_err(DMA_HandleTypeDef *hdma)
     if (uart->rx_dma_ping_buf == NULL || uart->rx_dma_bufsz == 0)
         return;
 
-    /* abort 前先上报已写入但未消费的 tail */
+    /* Report the written-but-unconsumed tail before aborting */
     _dma_rx_report_tail(uart);
 
     ping_buf = uart->rx_dma_ping_buf;
@@ -1000,14 +1007,14 @@ static void _dma_tx_cplt(DMA_HandleTypeDef *hdma)
 
     if (type == UART_TYPE_USART)
         CLEAR_BIT(((USART_TypeDef *)inst)->CR1, USART_CR1_TXDMAE);
-    /* LPUART: DMA_EN 是共享位（TX+RX），TX 完成时不关闭 */
+    /* LPUART: DMA_EN is a shared bit (TX+RX), not cleared on TX completion */
 
     uart->dma_tx_busy = RT_FALSE;
     rt_hw_serial_isr(&uart->serial, RT_SERIAL_EVENT_TX_DMADONE);
 }
 #endif
 
-/* ==================== ISR 入口 ==================== */
+/* ==================== ISR entry ==================== */
 
 #define UART_IRQ_HANDLER(irq_name, uart_obj_ptr)     \
     void irq_name##_IRQHandler(void)                 \
@@ -1017,7 +1024,7 @@ static void _dma_tx_cplt(DMA_HandleTypeDef *hdma)
         rt_interrupt_leave();                        \
     }
 
-/* ==================== 设备索引枚举 ==================== */
+/* ==================== Device index enumeration ==================== */
 
 enum {
 #ifdef BSP_USING_UART1
@@ -1041,7 +1048,7 @@ enum {
     UART_MAX_INDEX,
 };
 
-/* ==================== 配置表 ==================== */
+/* ==================== Config table ==================== */
 
 static struct acm32_uart_config uart_config[] = {
 #ifdef BSP_USING_UART1
@@ -1066,7 +1073,7 @@ static struct acm32_uart_config uart_config[] = {
 
 static struct acm32_uart uart_obj[UART_MAX_INDEX] = {0};
 
-/* ==================== 初始化 ==================== */
+/* ==================== Initialization ==================== */
 
 rt_err_t rt_hw_uart_init(void)
 {
@@ -1085,8 +1092,16 @@ rt_err_t rt_hw_uart_init(void)
         {
             flags |= RT_DEVICE_FLAG_DMA_RX;
             uart_obj[i].uart_dma_flag |= RT_DEVICE_FLAG_DMA_RX;
+#ifdef BSP_UART_RX_BUFSZ
+            uart_obj[i].serial.config.rx_bufsz = BSP_UART_RX_BUFSZ;
+#else
             uart_obj[i].serial.config.rx_bufsz = 1024;
+#endif
+#ifdef BSP_UART_DMA_PING_BUFSZ
+            uart_obj[i].serial.config.dma_ping_bufsz = BSP_UART_DMA_PING_BUFSZ;
+#else
             uart_obj[i].serial.config.dma_ping_bufsz = 512;
+#endif
         }
         if (uart_obj[i].config->tx_dma_instance != UART_DMA_NONE)
         {
@@ -1103,7 +1118,7 @@ rt_err_t rt_hw_uart_init(void)
     return RT_EOK;
 }
 
-/* ==================== ISR 实例化 ==================== */
+/* ==================== ISR instantiation ==================== */
 
 #ifdef BSP_USING_UART1
 UART_IRQ_HANDLER(USART1, &uart_obj[UART1_INDEX])
@@ -1124,13 +1139,13 @@ UART_IRQ_HANDLER(LPUART1, &uart_obj[LPUART1_INDEX])
 UART_IRQ_HANDLER(LPUART2, &uart_obj[LPUART2_INDEX])
 #endif
 
-/* ==================== DMA IRQ 实例化（全通道覆盖，兼容任意 Kconfig 预设） ==================== */
+/* ==================== DMA IRQ instantiation (all channels covered, compatible with any Kconfig preset) ==================== */
 
 #ifdef HAL_DMA_MODULE_ENABLED
 /*
- * 每个 DMA 通道 IRQ 处理器搜索所有 uart_obj，
- * 匹配 RX 或 TX DMA 实例后调用 HAL_DMA_IRQHandler。
- * 这样不论 Kconfig 选择哪个 DMA 预设，正确的 IRQ 处理器都已定义。
+ * Each DMA channel IRQ handler searches all uart_obj entries,
+ * and calls HAL_DMA_IRQHandler once the RX or TX DMA instance matches.
+ * Thus the correct IRQ handler is always defined regardless of the Kconfig DMA preset.
  */
 #define ACM32_DMA_IRQ_HANDLER(irq_name)                              \
     void irq_name##_IRQHandler(void)                                 \
@@ -1154,14 +1169,14 @@ UART_IRQ_HANDLER(LPUART2, &uart_obj[LPUART2_INDEX])
         rt_interrupt_leave();                                        \
     }
 
-/* DMA1 通道 0-3 */
+/* DMA1 channels 0-3 */
 #ifndef BSP_USING_I2S1
 ACM32_DMA_IRQ_HANDLER(DMA1_CH0)
 #endif
 ACM32_DMA_IRQ_HANDLER(DMA1_CH1)
 ACM32_DMA_IRQ_HANDLER(DMA1_CH2)
 ACM32_DMA_IRQ_HANDLER(DMA1_CH3)
-/* DMA2 通道 0-3 */
+/* DMA2 channels 0-3 */
 ACM32_DMA_IRQ_HANDLER(DMA2_CH0)
 ACM32_DMA_IRQ_HANDLER(DMA2_CH1)
 ACM32_DMA_IRQ_HANDLER(DMA2_CH2)

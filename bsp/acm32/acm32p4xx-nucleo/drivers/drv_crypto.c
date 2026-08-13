@@ -35,13 +35,18 @@ static rt_err_t _crypto_create(struct rt_hwcrypto_ctx *ctx)
     switch (ctx->type & HWCRYPTO_MAIN_TYPE_MASK)
     {
     case HWCRYPTO_TYPE_RNG:
+    {
+        /* ref count may be touched from multiple threads; keep it atomic */
+        rt_base_t level = rt_hw_interrupt_disable();
         if (rng_ref_count == 0)
             HAL_HRNG_Init();
         rng_ref_count++;
+        rt_hw_interrupt_enable(level);
         ctx->contex = RT_NULL;
         ((struct hwcrypto_rng *)ctx)->ops = &rng_ops;
         LOG_D("HRNG created");
         break;
+    }
 
     default:
         LOG_E("unsupported crypto type: %08x", ctx->type);
@@ -56,12 +61,16 @@ static void _crypto_destroy(struct rt_hwcrypto_ctx *ctx)
     switch (ctx->type & HWCRYPTO_MAIN_TYPE_MASK)
     {
     case HWCRYPTO_TYPE_RNG:
+    {
+        rt_base_t level = rt_hw_interrupt_disable();
         if (rng_ref_count > 0)
             rng_ref_count--;
         if (rng_ref_count == 0)
             HAL_HRNG_DeInit();
+        rt_hw_interrupt_enable(level);
         LOG_D("HRNG destroyed");
         break;
+    }
 
     default:
         break;
@@ -70,7 +79,7 @@ static void _crypto_destroy(struct rt_hwcrypto_ctx *ctx)
 
 static rt_err_t _crypto_copy(struct rt_hwcrypto_ctx *des, const struct rt_hwcrypto_ctx *src)
 {
-    /* RNG 无状态，无需复制上下文。若扩展 hash/symmetric 需实现 */
+    /* RNG is stateless, no context copy needed. Implement if hash/symmetric is extended */
     RT_UNUSED(des);
     RT_UNUSED(src);
     return RT_EOK;
@@ -89,7 +98,7 @@ static const struct rt_hwcrypto_ops _ops =
     .reset   = _crypto_reset,
 };
 
-static int acm32_hw_crypto_init(void)
+static int rt_hw_crypto_init(void)
 {
     static struct rt_hwcrypto_device _crypto_dev;
 
@@ -106,6 +115,6 @@ static int acm32_hw_crypto_init(void)
     LOG_D("hwcrypto initialized");
     return RT_EOK;
 }
-INIT_DEVICE_EXPORT(acm32_hw_crypto_init);
+INIT_DEVICE_EXPORT(rt_hw_crypto_init);
 
 #endif /* RT_USING_HWCRYPTO && BSP_USING_HWCRYPTO */

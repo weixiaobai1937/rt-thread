@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2006-2024, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -237,6 +237,9 @@ static rt_uint32_t acm32_spi_get_src_clk(void)
 
 static rt_uint32_t acm32_spi_baud_prescaler(rt_uint32_t max_hz)
 {
+    /* 254 is the HAL's largest prescaler (SPI_BAUDRATE_PRESCALER_254), so the
+     * minimum achievable SCLK is src/254; if max_hz is below that, the last
+     * entry is returned and the actual rate exceeds the requested one. */
     static const rt_uint32_t table[] = {2, 4, 6, 8, 16, 32, 64, 128, 254};
     rt_uint32_t src = acm32_spi_get_src_clk();
     rt_size_t i;
@@ -288,18 +291,16 @@ static void acm32_spi_dma_fill(DMA_HandleTypeDef *hdma,
 
 static rt_err_t acm32_spi_dma_init(struct acm32_spi *spi_drv)
 {
-    if (spi_drv->dma_tx_cfg == RT_NULL || spi_drv->dma_rx_cfg == RT_NULL)
+    if (spi_drv->dma_tx_cfg == RT_NULL)
         return RT_EOK; /* bus without DMA */
 
-    if (spi_drv->spi_dma_flag & (SPI_USING_TX_DMA_FLAG | SPI_USING_RX_DMA_FLAG))
+    if (spi_drv->spi_dma_flag & SPI_USING_TX_DMA_FLAG)
         return RT_EOK;
 
-    /* Enable clocks for TX/RX units (may differ when Kconfig picks mixed DMA) */
-    if ((rt_uint32_t)spi_drv->dma_tx_cfg->Instance < (rt_uint32_t)DMA2_Channel0 ||
-        (rt_uint32_t)spi_drv->dma_rx_cfg->Instance < (rt_uint32_t)DMA2_Channel0)
+    /* Enable clock for the TX DMA unit */
+    if ((rt_uint32_t)spi_drv->dma_tx_cfg->Instance < (rt_uint32_t)DMA2_Channel0)
         __HAL_RCC_DMA1_CLK_ENABLE();
-    if ((rt_uint32_t)spi_drv->dma_tx_cfg->Instance >= (rt_uint32_t)DMA2_Channel0 ||
-        (rt_uint32_t)spi_drv->dma_rx_cfg->Instance >= (rt_uint32_t)DMA2_Channel0)
+    else
         __HAL_RCC_DMA2_CLK_ENABLE();
 
     /* Use cfg->data_width to select DMA width (default 8-bit) */
@@ -309,13 +310,16 @@ static rt_err_t acm32_spi_dma_init(struct acm32_spi *spi_drv)
     if (HAL_DMA_Init(&spi_drv->dma_tx) != HAL_OK)
         return -RT_EIO;
 
-    acm32_spi_dma_fill(&spi_drv->dma_rx, spi_drv->dma_rx_cfg, DMA_DATAFLOW_P2M, dw);
-    if (HAL_DMA_Init(&spi_drv->dma_rx) != HAL_OK)
-        return -RT_EIO;
-
+    /*
+     * RX DMA channel is intentionally NOT initialized: master RX cannot use
+     * HAL_SPI_Receive_DMA (it does not generate SCK), so rx-only transfers
+     * use chunked polled TransmitReceive with 0xFF dummy. The RX channel map
+     * from Kconfig is still accounted by the rtconfig.py resource check so
+     * no other peripheral reuses it by mistake.
+     */
     spi_drv->handle.HDMA_Tx = &spi_drv->dma_tx;
-    spi_drv->handle.HDMA_Rx = &spi_drv->dma_rx;
-    spi_drv->spi_dma_flag = SPI_USING_TX_DMA_FLAG | SPI_USING_RX_DMA_FLAG;
+    spi_drv->handle.HDMA_Rx = RT_NULL;
+    spi_drv->spi_dma_flag = SPI_USING_TX_DMA_FLAG;
 
     /* SPI batch-done IRQ required for HAL DMA completion path */
     NVIC_SetPriority(spi_drv->config->irq_type, 2);
@@ -347,22 +351,6 @@ static void acm32_spi_dma_tx_abort(struct acm32_spi *spi_drv)
     hspi->TxState = SPI_TX_STATE_IDLE;
 }
 
-static void acm32_spi_dma_rx_abort(struct acm32_spi *spi_drv)
-{
-    SPI_HandleTypeDef *hspi = &spi_drv->handle;
-
-    if (hspi->HDMA_Rx != RT_NULL)
-        (void)HAL_DMA_Abort(hspi->HDMA_Rx);
-
-    CLEAR_BIT(hspi->Instance->RX_CTL, SPI_RX_CTL_DMA_REQ_EN);
-    CLEAR_BIT(hspi->Instance->RX_CTL, SPI_RX_CTL_EN);
-    CLEAR_BIT(hspi->Instance->IE,
-              SPI_IE_RX_BATCH_DONE_EN | SPI_IE_RX_FIFO_NOT_EMPTY_EN);
-    __SPI_CLEAR_FLAG(hspi->Instance, SPI_STATUS_BATCH_DONE);
-    __SPI_RXFIFO_RESET(hspi->Instance);
-    hspi->RxState = SPI_RX_STATE_IDLE;
-}
-
 static HAL_StatusTypeDef acm32_spi_dma_tx(struct acm32_spi *spi_drv,
                                           const rt_uint8_t *buf, rt_size_t len)
 {
@@ -383,39 +371,6 @@ static HAL_StatusTypeDef acm32_spi_dma_tx(struct acm32_spi *spi_drv,
         acm32_spi_dma_tx_abort(spi_drv);
 
     return st;
-}
-
-/*
- * Master RX must clock SCK. HAL_SPI_Receive_DMA only arms RX DMA and does not
- * push dummy TX bytes, so large RX-only transfers hang. Use TX DMA (0xFF dummy)
- * + RX DMA together when both channels are available; otherwise poll.
- */
-static HAL_StatusTypeDef acm32_spi_dma_rx(struct acm32_spi *spi_drv,
-                                          rt_uint8_t *buf, rt_size_t len)
-{
-    SPI_HandleTypeDef *hspi = &spi_drv->handle;
-    HAL_StatusTypeDef st;
-    rt_size_t off = 0;
-    rt_uint8_t dummy_chunk[32];
-
-    /*
-     * Master RX must generate SCK. HAL_SPI_Receive_DMA does not push dummy TX
-     * bytes, so use chunked TransmitReceive (0xFF dummy) instead.
-     */
-    RT_UNUSED(spi_drv);
-    rt_memset(dummy_chunk, 0xFF, sizeof(dummy_chunk));
-    while (off < len)
-    {
-        rt_size_t chunk = len - off;
-        if (chunk > sizeof(dummy_chunk))
-            chunk = sizeof(dummy_chunk);
-        st = HAL_SPI_TransmitReceive(hspi, dummy_chunk, buf + off,
-                                     (uint32_t)chunk, SPI_POLL_TIMEOUT(chunk));
-        if (st != HAL_OK)
-            return st;
-        off += chunk;
-    }
-    return HAL_OK;
 }
 #endif
 
@@ -519,11 +474,6 @@ static rt_ssize_t spixfer(struct rt_spi_device *device, struct rt_spi_message *m
             send_buf && !recv_buf && message->length >= SPI_DMA_MIN_SIZE)
         {
             state = acm32_spi_dma_tx(spi_drv, send_buf, message->length);
-        }
-        else if ((spi_drv->spi_dma_flag & SPI_USING_RX_DMA_FLAG) &&
-                 recv_buf && !send_buf && message->length >= SPI_DMA_MIN_SIZE)
-        {
-            state = acm32_spi_dma_rx(spi_drv, recv_buf, message->length);
         }
         else
 #endif

@@ -79,7 +79,7 @@ elif PLATFORM == 'armclang':
 
     AFLAGS = ' --cpu=Cortex-M33 --fpu=FPv5-SP --li --pd "__MICROLIB SETA 1" --pd "__UVISION_VERSION SETA 531" --pd "ARMCM33_DSP_FP SETA 1"'
 
-    LFLAGS = ' --cpu=Cortex-M33 --info sizes --info totals --info unused --info veneers --list ./build/acm32p4xx.map --scatter ./build/acm32p4xx.sct'
+    LFLAGS = ' --cpu=Cortex-M33 --info sizes --info totals --info unused --info veneers --list ./build/acm32p4xx.map --scatter drivers/linker_scripts/acm32p4xx.sct'
 
     CXXFLAGS = CFLAGS
 
