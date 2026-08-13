@@ -78,7 +78,10 @@ int main(void)
     rt_kprintf("USB FS device enabled: run 'list_device' to see 'vcom' (CDC)\n");
 #endif
 #ifdef BSP_USING_ONCHIP_FLASH
-    rt_kprintf("Run 'fs_mkfs' / 'fs_mount' to use on-chip elmfat ('flash_info' for FAL)\n");
+    rt_kprintf("Run 'fs_mkfs' / 'fs_mount' / 'fs_test' for on-chip elmfat ('flash_info' for FAL)\n");
+#endif
+#ifdef BSP_USING_HWCRYPTO
+    rt_kprintf("Run 'crypto_test' for HW AES/SHA1/SHA256/CRC/RNG self test\n");
 #endif
 
     rt_pin_mode(LED_PIN_NUM, PIN_MODE_OUTPUT);

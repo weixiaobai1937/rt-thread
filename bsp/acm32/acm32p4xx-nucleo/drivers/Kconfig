@@ -1563,11 +1563,16 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
     config BSP_USING_HWCRYPTO
         bool "Enable HW crypto (RNG/AES/SHA1/SHA256/CRC)"
         select RT_USING_HWCRYPTO
-        select RT_USING_HWCRYPTO_RNG
+        select RT_HWCRYPTO_USING_RNG
         select RT_HWCRYPTO_USING_AES
+        select RT_HWCRYPTO_USING_AES_ECB
+        select RT_HWCRYPTO_USING_AES_CBC
+        select RT_HWCRYPTO_USING_AES_CTR
         select RT_HWCRYPTO_USING_SHA1
         select RT_HWCRYPTO_USING_SHA2
+        select RT_HWCRYPTO_USING_SHA2_256
         select RT_HWCRYPTO_USING_CRC
+        select RT_HWCRYPTO_USING_CRC_04C11DB7
         default n
         help
             Hardware crypto via hwcrypto: RNG (HRNG), AES (ECB/CBC/CFB/CTR/OFB),

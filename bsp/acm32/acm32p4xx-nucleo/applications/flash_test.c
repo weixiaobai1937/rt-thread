@@ -10,6 +10,7 @@
 
 #include <rtthread.h>
 #include <rtdevice.h>
+#include <dfs.h>
 #include <dfs_fs.h>
 
 #ifdef BSP_USING_ONCHIP_FLASH
@@ -51,3 +52,50 @@ static void fs_mount(void)
 MSH_CMD_EXPORT(fs_mount, mount filesystem partition to /);
 
 #endif /* BSP_USING_ONCHIP_FLASH */
+/* write/read-back check on the mounted filesystem (requires fs_mount first) */
+static void fs_test(void)
+{
+    int fd, i, ok = 1;
+    char wbuf[128];
+    char rbuf[128];
+    rt_size_t off = 0;
+
+    for (i = 0; i < (int)sizeof(wbuf); i++)
+        wbuf[i] = (char)(i & 0x7F);
+
+    fd = dfs_file_open("/test.bin", O_WRONLY | O_CREAT | O_TRUNC);
+    if (fd < 0)
+    {
+        rt_kprintf("fs_test: open for write FAIL (is the FS mounted?)\n");
+        return;
+    }
+    while (off < sizeof(wbuf))
+    {
+        int n = dfs_file_write(fd, wbuf + off, sizeof(wbuf) - off);
+        if (n <= 0) { ok = 0; break; }
+        off += n;
+    }
+    dfs_file_close(fd);
+
+    fd = dfs_file_open("/test.bin", O_RDONLY);
+    if (fd < 0)
+    {
+        rt_kprintf("fs_test: open for read FAIL\n");
+        return;
+    }
+    off = 0;
+    while (off < sizeof(rbuf))
+    {
+        int n = dfs_file_read(fd, rbuf + off, sizeof(rbuf) - off);
+        if (n <= 0) { ok = 0; break; }
+        off += n;
+    }
+    dfs_file_close(fd);
+
+    if (ok && rt_memcmp(wbuf, rbuf, sizeof(wbuf)) == 0)
+        rt_kprintf("fs_test PASS (%d bytes written/read back)\n", (int)sizeof(wbuf));
+    else
+        rt_kprintf("fs_test FAIL (data mismatch)\n");
+}
+MSH_CMD_EXPORT(fs_test, write/read-back check on mounted filesystem);
+
