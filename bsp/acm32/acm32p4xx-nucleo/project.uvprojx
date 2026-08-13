@@ -335,9 +335,9 @@
             <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls />
-              <Define>MEMP_NUM_TCPIP_MSG_INPKT=16, RT_USING_LIBC, MEM_LIBC_MALLOC=1, __CLK_TCK=RT_TICK_PER_SECOND, __STDC_LIMIT_MACROS, RT_USING_ARMLIBC, __RTTHREAD__</Define>
+              <Define>RT_USING_ARMLIBC, __STDC_LIMIT_MACROS, __CLK_TCK=RT_TICK_PER_SECOND, __RTTHREAD__, MEM_LIBC_MALLOC=1, MEMP_NUM_TCPIP_MSG_INPKT=16, RT_USING_LIBC</Define>
               <Undefine />
-              <IncludePath>libraries\CMSIS;..\..\..\libcpu\arm\common;..\..\..\components\finsh;..\..\..\components\dfs\dfs_v1\include;..\..\..\components\net\utest;..\..\..\components\net\netdev\include;..\..\..\components\drivers\spi;..\..\..\components\drivers\smp_call;..\..\..\components\drivers\phy;..\..\..\components\net\lwip\lwip-2.1.2\src\include\compat\posix;applications;..\..\..\components\dfs\dfs_v1\filesystems\devfs;.;..\..\..\components\libc\compilers\common\extension\fcntl\octal;..\..\..\components\libc\posix\ipc;..\..\..\components\drivers\include;..\..\..\components\libc\compilers\common\include;..\..\..\components\net\lwip\port;..\..\..\components\drivers\include;..\..\..\components\libc\posix\io\eventfd;libraries\Device;..\..\..\components\libc\posix\io\poll;drivers;..\..\..\components\drivers\include;..\..\..\components\drivers\include;..\..\..\components\net\lwip\lwip-2.1.2\src\include;..\..\..\components\net\lwip\port;libraries\HAL_Driver\Inc;..\..\..\components\libc\posix\io\epoll;..\..\..\components\drivers\include;..\..\..\components\drivers\include;..\..\..\components\drivers\include;..\..\..\include;..\..\..\components\net\lwip\lwip-2.1.2\src\include;..\..\..\components\libc\compilers\common\extension;..\..\..\libcpu\arm\cortex-m33;..\..\..\components\net\lwip\lwip-2.1.2\src\include\netif</IncludePath>
+              <IncludePath>..\..\..\components\drivers\spi;..\..\..\components\libc\compilers\common\extension\fcntl\octal;applications;..\..\..\components\drivers\include;..\..\..\components\net\lwip\lwip-2.1.2\src\include;..\..\..\components\libc\posix\ipc;..\..\..\components\drivers\phy;..\..\..\components\finsh;..\..\..\components\dfs\dfs_v1\filesystems\devfs;..\..\..\components\drivers\include;..\..\..\components\net\lwip\lwip-2.1.2\src\include\netif;..\..\..\components\drivers\include;..\..\..\components\net\lwip\port;..\..\..\components\legacy\usb\usbdevice;libraries\Device;..\..\..\components\libc\compilers\common\extension;..\..\..\components\net\lwip\lwip-2.1.2\src\include\compat\posix;..\..\..\components\libc\posix\io\eventfd;..\..\..\components\drivers\include;..\..\..\components\libc\compilers\common\include;..\..\..\components\net\lwip\port;drivers;.;..\..\..\components\drivers\hwcrypto;..\..\..\components\fal\inc;..\..\..\components\net\netdev\include;..\..\..\components\drivers\include;libraries\CMSIS;..\..\..\components\libc\posix\io\poll;..\..\..\components\drivers\include;..\..\..\components\dfs\dfs_v1\filesystems\elmfat;..\..\..\components\drivers\include;..\..\..\components\net\utest;..\..\..\components\drivers\smp_call;..\..\..\components\libc\posix\io\epoll;libraries\HAL_Driver\Inc;..\..\..\include;..\..\..\components\dfs\dfs_v1\include;..\..\..\libcpu\arm\cortex-m33;..\..\..\components\drivers\include;..\..\..\components\net\lwip\lwip-2.1.2\src\include;..\..\..\libcpu\arm\common</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -569,6 +569,48 @@
           </Files>
           <Files>
             <File>
+              <FileName>hal_fsusb.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>libraries\HAL_Driver\Src\hal_fsusb.c</FilePath>
+            </File>
+          </Files>
+          <Files>
+            <File>
+              <FileName>hal_norflash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>libraries\HAL_Driver\Src\hal_norflash.c</FilePath>
+            </File>
+          </Files>
+          <Files>
+            <File>
+              <FileName>Src_hal_aes_20230713.lib</FileName>
+              <FileType>4</FileType>
+              <FilePath>libraries\HAL_Driver\Src\hal_aes_20230713.lib</FilePath>
+            </File>
+          </Files>
+          <Files>
+            <File>
+              <FileName>Src_hal_sha1_20250120.lib</FileName>
+              <FileType>4</FileType>
+              <FilePath>libraries\HAL_Driver\Src\hal_sha1_20250120.lib</FilePath>
+            </File>
+          </Files>
+          <Files>
+            <File>
+              <FileName>Src_hal_sha256_20230713.lib</FileName>
+              <FileType>4</FileType>
+              <FilePath>libraries\HAL_Driver\Src\hal_sha256_20230713.lib</FilePath>
+            </File>
+          </Files>
+          <Files>
+            <File>
+              <FileName>hal_crc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>libraries\HAL_Driver\Src\hal_crc.c</FilePath>
+            </File>
+          </Files>
+          <Files>
+            <File>
               <FileName>startup_acm32p4xx.s</FileName>
               <FileType>2</FileType>
               <FilePath>libraries\Device\ARM\startup_acm32p4xx.s</FilePath>
@@ -617,6 +659,13 @@
               <FileName>eth_test.c</FileName>
               <FileType>1</FileType>
               <FilePath>applications\eth_test.c</FilePath>
+            </File>
+          </Files>
+          <Files>
+            <File>
+              <FileName>flash_test.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>applications\flash_test.c</FilePath>
             </File>
           </Files>
           <Files>
@@ -749,6 +798,82 @@
               <FileName>device.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\..\components\drivers\core\device.c</FilePath>
+              <FileOption>
+                <FileArmAds>
+                  <Cads>
+                    <VariousControls>
+                      <MiscControls> </MiscControls>
+                      <Define>__RT_IPC_SOURCE__</Define>
+                      <Undefine> </Undefine>
+                      <IncludePath> </IncludePath>
+                    </VariousControls>
+                  </Cads>
+                </FileArmAds>
+              </FileOption>
+            </File>
+          </Files>
+          <Files>
+            <File>
+              <FileName>hw_crc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\components\drivers\hwcrypto\hw_crc.c</FilePath>
+              <FileOption>
+                <FileArmAds>
+                  <Cads>
+                    <VariousControls>
+                      <MiscControls> </MiscControls>
+                      <Define>__RT_IPC_SOURCE__</Define>
+                      <Undefine> </Undefine>
+                      <IncludePath> </IncludePath>
+                    </VariousControls>
+                  </Cads>
+                </FileArmAds>
+              </FileOption>
+            </File>
+          </Files>
+          <Files>
+            <File>
+              <FileName>hw_hash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\components\drivers\hwcrypto\hw_hash.c</FilePath>
+              <FileOption>
+                <FileArmAds>
+                  <Cads>
+                    <VariousControls>
+                      <MiscControls> </MiscControls>
+                      <Define>__RT_IPC_SOURCE__</Define>
+                      <Undefine> </Undefine>
+                      <IncludePath> </IncludePath>
+                    </VariousControls>
+                  </Cads>
+                </FileArmAds>
+              </FileOption>
+            </File>
+          </Files>
+          <Files>
+            <File>
+              <FileName>hw_symmetric.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\components\drivers\hwcrypto\hw_symmetric.c</FilePath>
+              <FileOption>
+                <FileArmAds>
+                  <Cads>
+                    <VariousControls>
+                      <MiscControls> </MiscControls>
+                      <Define>__RT_IPC_SOURCE__</Define>
+                      <Undefine> </Undefine>
+                      <IncludePath> </IncludePath>
+                    </VariousControls>
+                  </Cads>
+                </FileArmAds>
+              </FileOption>
+            </File>
+          </Files>
+          <Files>
+            <File>
+              <FileName>hwcrypto.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\components\drivers\hwcrypto\hwcrypto.c</FilePath>
               <FileOption>
                 <FileArmAds>
                   <Cads>
@@ -1057,6 +1182,13 @@
           </Files>
           <Files>
             <File>
+              <FileName>drv_flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>drivers\drv_flash.c</FilePath>
+            </File>
+          </Files>
+          <Files>
+            <File>
               <FileName>drv_gpio.c</FileName>
               <FileType>1</FileType>
               <FilePath>drivers\drv_gpio.c</FilePath>
@@ -1162,12 +1294,100 @@
           </Files>
         </Group>
         <Group>
+          <GroupName>Fal</GroupName>
+          <Files>
+            <File>
+              <FileName>fal.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\components\fal\src\fal.c</FilePath>
+            </File>
+          </Files>
+          <Files>
+            <File>
+              <FileName>fal_flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\components\fal\src\fal_flash.c</FilePath>
+            </File>
+          </Files>
+          <Files>
+            <File>
+              <FileName>fal_partition.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\components\fal\src\fal_partition.c</FilePath>
+            </File>
+          </Files>
+          <Files>
+            <File>
+              <FileName>fal_rtt.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\components\fal\src\fal_rtt.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
           <GroupName>Filesystem</GroupName>
           <Files>
             <File>
               <FileName>devfs.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\..\components\dfs\dfs_v1\filesystems\devfs\devfs.c</FilePath>
+              <FileOption>
+                <FileArmAds>
+                  <Cads>
+                    <VariousControls>
+                      <MiscControls>  -std=c99</MiscControls>
+                      <Define> </Define>
+                      <Undefine> </Undefine>
+                      <IncludePath> </IncludePath>
+                    </VariousControls>
+                  </Cads>
+                </FileArmAds>
+              </FileOption>
+            </File>
+          </Files>
+          <Files>
+            <File>
+              <FileName>dfs_elm.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\components\dfs\dfs_v1\filesystems\elmfat\dfs_elm.c</FilePath>
+              <FileOption>
+                <FileArmAds>
+                  <Cads>
+                    <VariousControls>
+                      <MiscControls>  -std=c99</MiscControls>
+                      <Define> </Define>
+                      <Undefine> </Undefine>
+                      <IncludePath> </IncludePath>
+                    </VariousControls>
+                  </Cads>
+                </FileArmAds>
+              </FileOption>
+            </File>
+          </Files>
+          <Files>
+            <File>
+              <FileName>ff.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\components\dfs\dfs_v1\filesystems\elmfat\ff.c</FilePath>
+              <FileOption>
+                <FileArmAds>
+                  <Cads>
+                    <VariousControls>
+                      <MiscControls>  -std=c99</MiscControls>
+                      <Define> </Define>
+                      <Undefine> </Undefine>
+                      <IncludePath> </IncludePath>
+                    </VariousControls>
+                  </Cads>
+                </FileArmAds>
+              </FileOption>
+            </File>
+          </Files>
+          <Files>
+            <File>
+              <FileName>ffunicode.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\components\dfs\dfs_v1\filesystems\elmfat\ffunicode.c</FilePath>
               <FileOption>
                 <FileArmAds>
                   <Cads>
@@ -1992,6 +2212,30 @@
               <FileName>sys_arch.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\..\components\net\lwip\port\sys_arch.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>rt_usbd</GroupName>
+          <Files>
+            <File>
+              <FileName>usbdevice_core.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\components\legacy\usb\usbdevice\core\usbdevice_core.c</FilePath>
+            </File>
+          </Files>
+          <Files>
+            <File>
+              <FileName>usbdevice.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\components\legacy\usb\usbdevice\core\usbdevice.c</FilePath>
+            </File>
+          </Files>
+          <Files>
+            <File>
+              <FileName>cdc_vcom.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\components\legacy\usb\usbdevice\class\cdc_vcom.c</FilePath>
             </File>
           </Files>
         </Group>

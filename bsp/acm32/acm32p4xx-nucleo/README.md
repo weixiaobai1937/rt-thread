@@ -24,6 +24,8 @@ This BSP targets the **ACM32P4xx-Nucleo** board (AisinoChip Cortex-M33).
 | lwIP | Static IP default `192.168.16.50` (see menuconfig) |
 | PSRAM | First 2 MB = `psram` memheap (ETH DMA); rest free for tests |
 | FSUSB (opt-in) | PA11/PA12 USB 2.0 FS device, CDC VCOM `vcom` (`BSP_USING_FSUSB`) |
+| On-chip Flash (opt-in) | 1MB Flash + FAL + elmfat (`BSP_USING_ONCHIP_FLASH`); `fs_mkfs` / `fs_mount` |
+| HW crypto (opt-in) | RNG/AES/SHA1/SHA256/CRC (`BSP_USING_HWCRYPTO`) |
 
 Other drivers (I2C, TIM/PWM, CAN, ADC/DAC, RTC, WDT, SDMMC, I2S, …) are available via **menuconfig**.
 
@@ -94,6 +96,7 @@ Vector table / app base: **`0x08002000`**.
 | `eth_ifconfig` / `eth_test` / `dping` | Ethernet |
 | `psram_info` / `psram_test` / `psram_speed` | OSPI PSRAM |
 | `list_device` | Registered devices |
+| `fs_mkfs` / `fs_mount` | Format / mount elmfat on the `filesystem` FAL partition (Flash opt-in) |
 
 When more peripherals are enabled: `i2c_test`, `can_test`, `adc_test`, `pwm_test`, `timer_test`, `wdt_test`, etc. (prompts also print from `main`).
 
