@@ -5,7 +5,8 @@
  * version     : V1.1
  * Modify date : 2021-09-10  
  ***********************************************************************/
-#include "hal.h"  
+#include "hal.h"
+#include "hal_fsusb.h"
 
 static uint16_t ep1_stall[2]= {0};    // EP1 stall×´Ì¬
 static uint16_t ep2_stall[2]= {0};    // EP2 stall×´Ì¬
@@ -496,7 +497,7 @@ uint32_t HAL_FSUSB_Receive_Data(uint8_t *buffer,uint32_t length,uint8_t ep_index
 } 
 
 
-//ep_index±íÊ¾¶Ëµã±àºÅ
+//ep_indexï¿½ï¿½Ê¾ï¿½Ëµï¿½ï¿½ï¿½
 void HAL_FSUSB_EP0_Send_Empty_Packet(void)
 {
 	HAL_FSUSB_Start_EP_Transfer(0,USB_EP0);    
