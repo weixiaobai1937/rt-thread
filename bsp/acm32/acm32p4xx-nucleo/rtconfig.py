@@ -262,7 +262,8 @@ def _bsp_check_timers(cfg):
 
 
 # Per-signal pin macro suffix → pin name for conflict detection.
-# Order: specific choices first, fallback default last.
+# Order: Kconfig default is the FIRST entry; if no choice macro is defined the
+# LAST entry is used as fallback (only reachable on broken configs).
 _BSP_UART_TX_PINS = {
     1: ['PB6', 'PA14', 'PA9'],
     2: ['PA2', 'PC2', 'PD5'],
@@ -502,6 +503,11 @@ def _bsp_check_pins(cfg):
     if _bsp_enabled(cfg, 'BSP_USING_SDMMC1'):
         add('SDMMC1', _BSP_SDMMC_PINS)
         info_lines.append('    SDMMC1   %s' % ' '.join(_BSP_SDMMC_PINS))
+
+    # FSUSB fixed pins (PA11=DM, PA12=DP) — conflicts with FDCAN1/SPI4/PWM1/UART1-CTS-RTS options
+    if _bsp_enabled(cfg, 'BSP_USING_FSUSB'):
+        add('FSUSB', ['PA11', 'PA12'])
+        info_lines.append('    FSUSB    PA11 PA12')
 
     # Check conflicts
     for pin, owners in sorted(pin_map.items()):

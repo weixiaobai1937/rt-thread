@@ -1502,6 +1502,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
                 bool "PB9 AF4"
             config BSP_FDCAN1_TX_PA12
                 bool "PA12 AF4 (USB_DP)"
+                depends on !BSP_USING_FSUSB
         endchoice
 
         choice
@@ -1514,6 +1515,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
                 bool "PB8 AF4"
             config BSP_FDCAN1_RX_PA11
                 bool "PA11 AF4 (USB_DM)"
+                depends on !BSP_USING_FSUSB
         endchoice
 
         config BSP_USING_FDCAN2
@@ -1553,6 +1555,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
 
     config BSP_USING_ONCHIP_FLASH
         bool "Enable on-chip Flash (FAL + elmfat filesystem)"
+        select RT_USING_DFS
         select RT_USING_FAL
         select RT_USING_DFS_ELMFAT
         default n
@@ -1575,7 +1578,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         select RT_HWCRYPTO_USING_CRC_04C11DB7
         default n
         help
-            Hardware crypto via hwcrypto: RNG (HRNG), AES (ECB/CBC/CFB/CTR/OFB),
+            Hardware crypto via hwcrypto: RNG (HRNG), AES (ECB/CBC/CTR),
             SHA1, SHA256, CRC. Device registered as "hwcrypto".
 
     config BSP_USING_I2S1
@@ -1647,6 +1650,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
         bool "Enable Ethernet (LAN8720A, RMII)"
         select RT_USING_ETH
         select RT_USING_LWIP
+        select RT_USING_LWIP212
         select RT_USING_MEMHEAP
         default n
         help
@@ -1654,7 +1658,7 @@ menu "ACM32P4xx Onboard Peripheral Drivers"
             IP mode: see "Use static IP" below (default static). Enable
             RT_LWIP_DHCP in the Network menu if you need DHCP instead.
             PHY: LAN8720A, Interface: RMII, Pins: all AF6.
-            Enables lwIP protocol stack with DHCP.
+            Requires lwIP 2.1.2 (selected automatically).
 
     config BSP_ETH_PHY_RST_PIN
         int "ETH PHY nRST pin index"

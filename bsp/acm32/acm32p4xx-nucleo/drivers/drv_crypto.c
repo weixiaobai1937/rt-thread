@@ -55,7 +55,8 @@ static rt_err_t _aes_crypt(struct hwcrypto_symmetric *ctx,
     default:  return -RT_EINVAL;
     }
 
-    sub = (uint8_t)(ctx->parent.type & 0xFF);
+    /* hwcrypto AES subtypes live in bits 8-15 (HWCRYPTO_TYPE_AES_ECB = AES | (0x01<<8)) */
+    sub = (uint8_t)((ctx->parent.type >> 8) & 0xFF);
     switch (sub)
     {
     case 0x01: mode = AES_ECB_MODE; break;
