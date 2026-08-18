@@ -53,7 +53,7 @@ static void _aes_test(hwcrypto_type type, const rt_uint8_t *expect, const char *
     rt_uint8_t iv[16];
 
     rt_memcpy(iv, _aes_key, 16);   /* SP 800-38A uses 000102..0F as IV/counter */
-    ctx = rt_hwcrypto_symmetric_create(RT_NULL, type);
+    ctx = rt_hwcrypto_symmetric_create(rt_hwcrypto_dev_default(), type);
     if (ctx == RT_NULL)
     {
         rt_kprintf("  %-28s FAIL (create)\n", name);
@@ -97,7 +97,7 @@ static void _hash_test(hwcrypto_type type, const rt_uint8_t *expect, rt_size_t l
     struct rt_hwcrypto_ctx *ctx;
     rt_uint8_t out[32];
 
-    ctx = rt_hwcrypto_hash_create(RT_NULL, type);
+    ctx = rt_hwcrypto_hash_create(rt_hwcrypto_dev_default(), type);
     if (ctx == RT_NULL)
     {
         rt_kprintf("  %-28s FAIL (create)\n", name);
@@ -127,7 +127,7 @@ static void _crc_test(void)
     cfg.xorout   = 0xFFFFFFFF;
     cfg.flags    = CRC_FLAG_REFIN | CRC_FLAG_REFOUT;
 
-    ctx = rt_hwcrypto_crc_create(RT_NULL, HWCRYPTO_CRC_CUSTOM);
+    ctx = rt_hwcrypto_crc_create(rt_hwcrypto_dev_default(), HWCRYPTO_CRC_CUSTOM);
     if (ctx == RT_NULL)
     {
         rt_kprintf("  %-28s FAIL (create)\n", "CRC32");
@@ -148,7 +148,7 @@ static void _rng_test(void)
     rt_uint32_t a, b, i;
     rt_bool_t varied = RT_FALSE;
 
-    ctx = rt_hwcrypto_rng_create(RT_NULL);
+    ctx = rt_hwcrypto_rng_create(rt_hwcrypto_dev_default());
     if (ctx == RT_NULL)
     {
         rt_kprintf("  %-28s FAIL (create)\n", "RNG");

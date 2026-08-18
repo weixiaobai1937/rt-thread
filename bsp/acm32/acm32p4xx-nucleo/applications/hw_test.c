@@ -22,6 +22,8 @@
 
 #ifdef BSP_USING_HWCRYPTO
 
+#include "hal_hrng.h"
+
 static int hwrng_test(int argc, char **argv)
 {
     (void)argc; (void)argv;

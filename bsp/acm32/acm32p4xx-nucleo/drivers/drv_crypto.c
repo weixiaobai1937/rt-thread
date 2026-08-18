@@ -89,9 +89,8 @@ static const struct hwcrypto_symmetric_ops _symmetric_ops =
 
 /* ==================== SHA1 / SHA256 hash ==================== */
 
-static SHA1_CTX _sha1_ctx;
-static SHA256_CTX _sha256_ctx;
-
+/* Per-context state is kept in ctx->contex (malloc'd at create) so that
+ * concurrent hash contexts do not corrupt each other. */
 static rt_bool_t _hash_is_sha1(struct hwcrypto_hash *ctx)
 {
     return (ctx->parent.type & HWCRYPTO_MAIN_TYPE_MASK) == HWCRYPTO_TYPE_SHA1;
@@ -100,20 +99,24 @@ static rt_bool_t _hash_is_sha1(struct hwcrypto_hash *ctx)
 static rt_err_t _hash_update(struct hwcrypto_hash *ctx,
                              const rt_uint8_t *input, rt_size_t length)
 {
+    if (ctx->parent.contex == RT_NULL)
+        return -RT_ERROR;
     if (_hash_is_sha1(ctx))
-        HAL_SHA1_Update(&_sha1_ctx, (uint8_t *)input, (uint32_t)length);
+        HAL_SHA1_Update((SHA1_CTX *)ctx->parent.contex, (uint8_t *)input, (uint32_t)length);
     else
-        HAL_SHA256_Update(&_sha256_ctx, (uint8_t *)input, (uint32_t)length);
+        HAL_SHA256_Update((SHA256_CTX *)ctx->parent.contex, (uint8_t *)input, (uint32_t)length);
     return RT_EOK;
 }
 
 static rt_err_t _hash_finish(struct hwcrypto_hash *ctx,
                              rt_uint8_t *output, rt_size_t length)
 {
+    if (ctx->parent.contex == RT_NULL)
+        return -RT_ERROR;
     if (_hash_is_sha1(ctx))
-        HAL_SHA1_Final(output, &_sha1_ctx);
+        HAL_SHA1_Final(output, (SHA1_CTX *)ctx->parent.contex);
     else
-        HAL_SHA256_Final(output, &_sha256_ctx);
+        HAL_SHA256_Final(output, (SHA256_CTX *)ctx->parent.contex);
     return RT_EOK;
 }
 
@@ -134,19 +137,25 @@ static rt_uint32_t _crc_update(struct hwcrypto_crc *ctx,
     rt_memset(&hcrc, 0, sizeof(hcrc));
     hcrc.Instance = CRC;
 
+    /* width selects the poly length; the data stream is always byte-wise so
+     * HAL_CRC_Calculate walks every byte (DataLen==1B) and no tail is dropped */
     switch (ctx->crc_cfg.width)
     {
-    case 8:  hcrc.Init.PolyLen = CRC_POLTY_LEN_8;  hcrc.Init.DataLen = CRC_DATA_LEN_1B; break;
-    case 16: hcrc.Init.PolyLen = CRC_POLTY_LEN_16; hcrc.Init.DataLen = CRC_DATA_LEN_2B; break;
+    case 8:  hcrc.Init.PolyLen = CRC_POLTY_LEN_8;  break;
+    case 16: hcrc.Init.PolyLen = CRC_POLTY_LEN_16; break;
     case 32:
-    default: hcrc.Init.PolyLen = CRC_POLTY_LEN_32; hcrc.Init.DataLen = CRC_DATA_LEN_4B; break;
+    default: hcrc.Init.PolyLen = CRC_POLTY_LEN_32; break;
     }
+    hcrc.Init.DataLen = CRC_DATA_LEN_1B;
 
     hcrc.Init.PolyData  = ctx->crc_cfg.poly;
     hcrc.Init.OutXorData = ctx->crc_cfg.xorout;
     hcrc.Init.InitData  = ctx->crc_cfg.last_val;
-    hcrc.Init.DataRev   = (ctx->crc_cfg.flags & CRC_FLAG_REFIN) ? CRC_POLY_REV_EN : CRC_POLY_REV_DIS;
-    hcrc.Init.OutxorRev = (ctx->crc_cfg.flags & CRC_FLAG_REFOUT) ? CRC_POLY_REV_EN : CRC_POLY_REV_DIS;
+    /* refin -> poly + data (byte) reverse; refout -> result + outxor reverse */
+    hcrc.Init.PolyRev   = (ctx->crc_cfg.flags & CRC_FLAG_REFIN) ? CRC_POLY_REV_EN : CRC_POLY_REV_DIS;
+    hcrc.Init.DataRev   = (ctx->crc_cfg.flags & CRC_FLAG_REFIN) ? CRC_DATA_REV_BY_BYTE : CRC_DATA_REV_DISABLE;
+    hcrc.Init.RsltRev   = (ctx->crc_cfg.flags & CRC_FLAG_REFOUT) ? CRC_RSLT_REV_EN : CRC_RSLT_REV_DIS;
+    hcrc.Init.OutxorRev = (ctx->crc_cfg.flags & CRC_FLAG_REFOUT) ? CRC_OUTXOR_REV_EN : CRC_OUTXOR_REV_DIS;
 
     hcrc.CRC_Data_Buff = (uint8_t *)in;
     hcrc.CRC_Data_Len  = (uint32_t)length;
@@ -191,19 +200,25 @@ static rt_err_t _crypto_create(struct rt_hwcrypto_ctx *ctx)
         break;
 
     case HWCRYPTO_TYPE_SHA1:
-        HAL_SHA1_Init(&_sha1_ctx);
+        ctx->contex = rt_malloc(sizeof(SHA1_CTX));
+        if (ctx->contex == RT_NULL)
+            return -RT_ENOMEM;
+        HAL_SHA1_Init((SHA1_CTX *)ctx->contex);
         ((struct hwcrypto_hash *)ctx)->ops = &_hash_ops;
         LOG_D("SHA1 context created");
         break;
 
     case HWCRYPTO_TYPE_SHA2:
-        /* only SHA256 (subtype 0x02) is wired to the hardware core */
-        if ((ctx->type & 0xFF) != 0x02)
+        /* only SHA256 (subtype 0x02, bits 8-15) is wired to the hardware core */
+        if (((ctx->type >> 8) & 0xFF) != 0x02)
         {
             LOG_E("SHA2 subtype %02x unsupported", ctx->type & 0xFF);
             return -RT_EINVAL;
         }
-        HAL_SHA256_Init(&_sha256_ctx);
+        ctx->contex = rt_malloc(sizeof(SHA256_CTX));
+        if (ctx->contex == RT_NULL)
+            return -RT_ENOMEM;
+        HAL_SHA256_Init((SHA256_CTX *)ctx->contex);
         ((struct hwcrypto_hash *)ctx)->ops = &_hash_ops;
         LOG_D("SHA256 context created");
         break;
@@ -238,11 +253,12 @@ static void _crypto_destroy(struct rt_hwcrypto_ctx *ctx)
     }
 
     case HWCRYPTO_TYPE_SHA1:
-        rt_memset(&_sha1_ctx, 0, sizeof(_sha1_ctx));
-        break;
-
     case HWCRYPTO_TYPE_SHA2:
-        rt_memset(&_sha256_ctx, 0, sizeof(_sha256_ctx));
+        if (ctx->contex != RT_NULL)
+        {
+            rt_free(ctx->contex);
+            ctx->contex = RT_NULL;
+        }
         break;
 
     default:
@@ -260,7 +276,19 @@ static rt_err_t _crypto_copy(struct rt_hwcrypto_ctx *des, const struct rt_hwcryp
 
 static void _crypto_reset(struct rt_hwcrypto_ctx *ctx)
 {
-    RT_UNUSED(ctx);
+    switch (ctx->type & HWCRYPTO_MAIN_TYPE_MASK)
+    {
+    case HWCRYPTO_TYPE_SHA1:
+        if (ctx->contex != RT_NULL)
+            HAL_SHA1_Init((SHA1_CTX *)ctx->contex);
+        break;
+    case HWCRYPTO_TYPE_SHA2:
+        if (ctx->contex != RT_NULL)
+            HAL_SHA256_Init((SHA256_CTX *)ctx->contex);
+        break;
+    default:
+        break;
+    }
 }
 
 static const struct rt_hwcrypto_ops _ops =

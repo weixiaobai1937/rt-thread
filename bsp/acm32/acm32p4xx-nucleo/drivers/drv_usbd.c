@@ -14,6 +14,9 @@
 #include "board.h"
 #include "hal_fsusb.h"
 
+/* hal_fsusb.h lacks a prototype for this function (defined in hal_fsusb.c only) */
+extern void HAL_FSUSB_Write_EP_MEM8(uint8_t *src, uint32_t length, uint32_t fifo_offset, uint8_t ep_index);
+
 #ifdef BSP_USING_FSUSB
 #include <drivers/usb_device.h>
 
@@ -37,6 +40,7 @@ static struct ep_id _ep_pool[] =
     {0x05, USB_EP_ATTR_INT, USB_DIR_OUT, 64, 0},
     {0x86, USB_EP_ATTR_INT, USB_DIR_IN, 64, 0},
     {0x06, USB_EP_ATTR_BULK, USB_DIR_OUT, 64, 0},
+    {0xFF, 0, 0, 0, 0},   /* pool terminator for rt_usbd_ep_assign */
 };
 
 struct acm32_udc
@@ -169,7 +173,10 @@ static rt_ssize_t _ep_write(rt_uint8_t address, void *buffer, rt_size_t size)
 
 static rt_err_t _ep0_send_status(void)
 {
-    HAL_FSUSB_EP0_Send_Empty_Packet();
+    /* Register-level zero-length IN on EP0. Do NOT use HAL_FSUSB_EP0_Send_Empty_Packet:
+     * it blocks in HAL_FSUSB_Start_EP_Transfer (spin on IN token/ACK) which races the ISR. */
+    USBCTRL->EPxSENDBN[0] = 0;
+    USBCTRL->EPxCSR[0] |= (1 << 10);   /* SEND_ENABLE */
     return RT_EOK;
 }
 
@@ -312,8 +319,11 @@ void FSUSB_IRQHandler(void)
                 if (dst && len)
                     HAL_FSUSB_Read_EP_MEM8(dst, len, 0, (uint8_t)ep);
                 udc->rx_len[ep] = len;
+                /* Do NOT re-arm RECEIVE_READY here: the usbd thread re-arms it in
+                 * _ep_read_prepare with the next buffer. Re-arming in the ISR before
+                 * rx_buf[ep] is updated would let a following bulk-OUT overwrite the
+                 * still-unconsumed buffer (data loss / duplication). */
                 rt_usbd_ep_out_handler(&udc->parent, 0x00 | ep, len);
-                USBCTRL->EPxCSR[ep] |= (1 << 11);   /* re-arm RECEIVE_READY */
             }
         }
     }
