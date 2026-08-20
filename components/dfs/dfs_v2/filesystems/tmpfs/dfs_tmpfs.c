@@ -266,6 +266,7 @@ find_subpath:
         {
             if (rt_strcmp(file->name, filename) == 0)
             {
+                /* cppcheck-suppress uninitvar */
                 *size = file->size;
 
                 rt_spin_unlock(&superblock->lock);
@@ -455,7 +456,7 @@ static int dfs_tmpfs_open(struct dfs_file *file)
     RT_ASSERT(file->vnode->ref_count > 0);
     if(file->vnode->ref_count == 1)
     {
-        rt_mutex_init(&file->vnode->lock, file->dentry->pathname, RT_IPC_FLAG_PRIO);
+        dfs_vnode_lock_init(file->vnode, file->dentry);
     }
 
     return 0;
@@ -525,6 +526,7 @@ static int dfs_tmpfs_getdents(struct dfs_file *file,
         if (index >= (rt_size_t)file->fpos)
         {
             d = dirp + count;
+            /* cppcheck-suppress uninitvar */
             if (n_file->type == TMPFS_TYPE_FILE)
             {
                 d->d_type = DT_REG;
@@ -532,6 +534,10 @@ static int dfs_tmpfs_getdents(struct dfs_file *file,
             if (n_file->type == TMPFS_TYPE_DIR)
             {
                 d->d_type = DT_DIR;
+            }
+            if (n_file->type == TMPFS_TYPE_SOCKET)
+            {
+                d->d_type = DT_SOCK;
             }
             d->d_namlen = RT_NAME_MAX;
             d->d_reclen = (rt_uint16_t)sizeof(struct dirent);
@@ -662,6 +668,11 @@ static struct dfs_vnode *_dfs_tmpfs_lookup(struct dfs_dentry *dentry)
                 vnode->mode = S_IFDIR | (S_IRUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
                 vnode->type = FT_DIRECTORY;
             }
+            else if (d_file->type == TMPFS_TYPE_SOCKET)
+            {
+                vnode->mode = S_IFSOCK | (S_IRWXU | S_IRWXG | S_IRWXO);
+                vnode->type = FT_SOCKET;
+            }
             else
             {
                 vnode->mode = S_IFREG | (S_IRWXU | S_IRWXG | S_IRWXO);
@@ -747,6 +758,13 @@ static struct dfs_vnode *dfs_tmpfs_create_vnode(struct dfs_dentry *dentry, int t
             d_file->type = TMPFS_TYPE_DIR;
             vnode->mode = S_IFDIR | (S_IRUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
             vnode->type = FT_DIRECTORY;
+        }
+        else if (type == FT_SOCKET ||
+                 (type == FT_REGULAR && S_ISSOCK(mode)))
+        {
+            d_file->type = TMPFS_TYPE_SOCKET;
+            vnode->mode = S_IFSOCK | (mode & (S_IRWXU | S_IRWXG | S_IRWXO));
+            vnode->type = FT_SOCKET;
         }
         else
         {
