@@ -28,7 +28,8 @@ This BSP targets the **ACM32P4xx-Nucleo** board (AisinoChip Cortex-M33).
 | HW crypto (opt-in) | RNG/AES/SHA1/SHA256/CRC (`BSP_USING_HWCRYPTO`) |
 
 Other drivers (I2C, TIM/PWM, CAN, ADC/DAC, RTC, WDT, SDMMC, I2S, …) are available via **menuconfig**.
-
+The `applications/*_test.c` MSH smoke-test commands are **not built by default**. Enable
+`BSP_USING_TEST_APPS` in menuconfig to compile them (the default image only contains `main.c`).
 ## Memory map
 
 | Region | Address | Use |

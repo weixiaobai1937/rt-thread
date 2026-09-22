@@ -112,6 +112,14 @@
 #define RT_BACKTRACE_LEVEL_MAX_NR 32
 /* end of RT-Thread Kernel */
 
+#define RT_USING_HW_ATOMIC
+#define ARCH_USING_HW_ATOMIC_8
+#define ARCH_USING_HW_ATOMIC_16
+#define RT_USING_CPU_FFS
+#define ARCH_ARM
+#define ARCH_ARM_CORTEX_M
+#define ARCH_ARM_CORTEX_M33
+
 /* RT-Thread Components */
 
 #define RT_USING_COMPONENTS_INIT

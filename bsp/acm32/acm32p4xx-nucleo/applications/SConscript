@@ -5,8 +5,18 @@ import os
 
 cwd = GetCurrentDir()
 src = Glob('*.c')
-CPPPATH = [cwd]
 
+# Keep the default image minimal: only main.c is built unless
+# BSP_USING_TEST_APPS is enabled in menuconfig. Each *_test.c is
+# internally #ifdef-guarded, so this only trims the source list.
+if not GetDepend(['BSP_USING_TEST_APPS']):
+    SrcRemove(src, [
+        'adc_test.c', 'can_test.c', 'cap_test.c', 'crypto_test.c',
+        'dac_test.c', 'enc_test.c', 'eth_test.c', 'flash_test.c',
+        'hw_test.c', 'i2c_test.c', 'lptim_test.c', 'psram_test.c',
+        'pwm_test.c', 'rtc_test.c', 'spi_test.c', 'timer_test.c',
+        'uart_test.c', 'wdt_test.c'])
+CPPPATH = [cwd]
 group = DefineGroup('Applications', src, depend = [''], CPPPATH = CPPPATH)
 
 # lwIP official lwiperf (raw API); not linked by default in components SConscript.

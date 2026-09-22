@@ -19,8 +19,8 @@
 int main(void)
 {
     rt_kprintf("ACM32P4xx-Nucleo BSP boot success!\n");
+#if defined(BSP_USING_TEST_APPS)
 #ifdef BSP_USING_UART1
-    rt_kprintf("Run 'uart_test' / 'uart_test info' / 'uart_test echo uart2'\n");
 #endif
 #if defined(BSP_USING_SPI1) || defined(BSP_USING_SPI2) || \
     defined(BSP_USING_SPI3) || defined(BSP_USING_SPI4)
@@ -83,6 +83,7 @@ int main(void)
 #ifdef BSP_USING_HWCRYPTO
     rt_kprintf("Run 'crypto_test' for HW AES/SHA1/SHA256/CRC/RNG self test\n");
 #endif
+#endif /* BSP_USING_TEST_APPS */
 
     rt_pin_mode(LED_PIN_NUM, PIN_MODE_OUTPUT);
     rt_pin_write(LED_PIN_NUM, PIN_LOW);

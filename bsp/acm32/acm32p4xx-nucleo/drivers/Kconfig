@@ -6,6 +6,7 @@ choice
 
     config SOC_ACM32P40N128CCT
     bool "SOC_ACM32P40N128CCT"
+    select SOC_SERIES_ACM32P4
     select RT_USING_COMPONENTS_INIT
     select RT_USING_USER_MAIN
     help
@@ -40,6 +41,15 @@ menu "ACM32P4xx Chip Configuration"
 endmenu
 
 menu "ACM32P4xx Onboard Peripheral Drivers"
+
+    config BSP_USING_TEST_APPS
+        bool "Build onboard peripheral test commands (*_test.c)"
+        default n
+        help
+            Compile the applications/*_test.c MSH smoke-test commands
+            (uart_test, spi_test, eth_test, ...) into the image.
+            Keep off for a minimal production image; when off only
+            main.c is built.
 
     config BSP_USING_UART1
         bool "Enable UART1"
