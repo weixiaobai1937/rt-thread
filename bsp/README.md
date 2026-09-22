@@ -467,8 +467,7 @@ This document is based on the RT-Thread mainline repository and categorizes the 
 |----------|------|------|-----|-----|-----|-----|
 | [acm32f0x0-nucleo](acm32/acm32f0x0-nucleo) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | [acm32f4xx-nucleo](acm32/acm32f4xx-nucleo) | ✅ | ✅ | - | - | - | - |
-
-#### ⚪ Airm2m
+| [acm32p4xx-nucleo](acm32/acm32p4xx-nucleo) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 | BSP Name | GPIO | UART | ADC | I2C | SPI | WDT |
 |----------|------|------|-----|-----|-----|-----|

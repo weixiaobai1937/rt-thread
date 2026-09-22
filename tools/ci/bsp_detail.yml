@@ -106,6 +106,13 @@ acm32/acm32f4xx-nucleo:
   mdk5: true
   menuconfig: true
   rtconfig.h: true
+acm32/acm32p4xx-nucleo:
+  .config: true
+  README.md: true
+  gcc: arm-none-eabi-gcc
+  mdk5: true
+  menuconfig: true
+  rtconfig.h: true
 airm2m/air105:
   .config: true
   README.md: true
